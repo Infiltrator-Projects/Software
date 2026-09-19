@@ -2,7 +2,7 @@ Source: infiltrator-software
 Section: admin
 Priority: optional
 Maintainer: Shannon Smith <infiltratr@yandex.com>
-Build-Depends: debhelper-compat (= 13), cmake, g++, libgtk-4-dev, pkg-config
+Build-Depends: debhelper (>= 13), cmake, g++, libgtk-4-dev, pkg-config
 Standards-Version: 4.7.0
 Rules-Requires-Root: no
 Homepage: https://github.com/Infiltrator-Projects/Software
