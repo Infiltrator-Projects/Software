@@ -2,6 +2,8 @@
 
 # Infiltrator Software
 
+**Project copyright:** © 2000–2026 Shannon Smith
+
 Infiltrator Software is the software-management application for the Infiltrator project family. It is designed as a greenfield 2026 replacement for the traditional split between a graphical software catalogue and a separate operating-system update manager.
 
 The application presents one authoritative view of software discovery, installation, removal, updates, system components, repositories, release channels, history and repair while keeping privileged package operations isolated behind backend interfaces.
