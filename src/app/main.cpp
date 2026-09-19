@@ -1,12 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+#include "app/theme.hpp"
 #include "backends/apt/apt_backend.hpp"
 #include "core/model.hpp"
 
 #include <gtk/gtk.h>
-#include <infiltratr/design.h>
 
-#include <cstdint>
-#include <iomanip>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -18,59 +16,8 @@ using infiltrator::software::PackageRecord;
 
 struct WindowState {
     GtkStack *stack{};
+    infiltrator::software::ThemeController theme;
 };
-
-std::string colour(const std::uint32_t rgb)
-{
-    std::ostringstream stream;
-    stream << '#' << std::hex << std::setfill('0') << std::setw(6)
-           << (rgb & 0xFFFFFFU);
-    return stream.str();
-}
-
-void install_theme()
-{
-    const InfiltratrThemePalette *palette =
-        infiltratr_theme_resolve(INFILTRATR_THEME_NIGHT, true);
-    const InfiltratrTypography *typography = infiltratr_typography();
-    if (palette == nullptr || typography == nullptr) {
-        return;
-    }
-
-    std::ostringstream css;
-    css
-        << "window { background: " << colour(palette->background_rgb)
-        << "; color: " << colour(palette->text_rgb)
-        << "; font-family: \"" << typography->ui_family << "\"; }"
-        << ".sidebar { background: " << colour(palette->panel_rgb)
-        << "; border-right: 1px solid " << colour(palette->border_rgb) << "; }"
-        << ".nav-row { padding: 10px 14px; border-radius: 8px; }"
-        << ".nav-row:selected { background: "
-        << colour(palette->selection_background_rgb)
-        << "; color: " << colour(palette->selection_foreground_rgb) << "; }"
-        << ".content { padding: 24px; }"
-        << ".section-title { font-family: \"" << typography->brand_family
-        << "\"; font-size: 26px; }"
-        << ".muted { color: " << colour(palette->muted_rgb) << "; }"
-        << ".package-list { background: " << colour(palette->card_rgb) << "; }";
-
-    GtkCssProvider *provider = gtk_css_provider_new();
-    const std::string css_text = css.str();
-#if GTK_CHECK_VERSION(4, 12, 0)
-    gtk_css_provider_load_from_string(provider, css_text.c_str());
-#else
-    gtk_css_provider_load_from_data(
-        provider, css_text.c_str(), static_cast<gssize>(css_text.size()));
-#endif
-
-    GdkDisplay *display = gdk_display_get_default();
-    if (display != nullptr) {
-        gtk_style_context_add_provider_for_display(
-            display, GTK_STYLE_PROVIDER(provider),
-            GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
-    }
-    g_object_unref(provider);
-}
 
 GtkWidget *make_heading(const char *title, const char *description)
 {
@@ -212,6 +159,7 @@ GtkWidget *make_navigation(WindowState *state)
     gtk_list_box_set_selection_mode(GTK_LIST_BOX(list), GTK_SELECTION_SINGLE);
     gtk_widget_set_margin_start(list, 8);
     gtk_widget_set_margin_end(list, 8);
+    gtk_widget_set_vexpand(list, true);
     gtk_box_append(GTK_BOX(outer), list);
 
     for (const char *label_text : labels) {
@@ -230,6 +178,7 @@ GtkWidget *make_navigation(WindowState *state)
         gtk_list_box_get_row_at_index(GTK_LIST_BOX(list), 0);
     gtk_list_box_select_row(GTK_LIST_BOX(list), first);
 
+    gtk_box_append(GTK_BOX(outer), state->theme.create_selector());
     return outer;
 }
 
@@ -240,8 +189,6 @@ void destroy_window_state(gpointer data)
 
 void activate(GtkApplication *application, gpointer)
 {
-    install_theme();
-
     GtkWidget *window = gtk_application_window_new(application);
     gtk_window_set_title(GTK_WINDOW(window), "Infiltrator Software");
     gtk_window_set_default_size(GTK_WINDOW(window), 1120, 720);
@@ -250,6 +197,7 @@ void activate(GtkApplication *application, gpointer)
     gtk_window_set_child(GTK_WINDOW(window), root);
 
     auto *state = new WindowState{};
+    state->theme.initialise();
     g_object_set_data_full(
         G_OBJECT(window), "infiltrator-window-state",
         state, destroy_window_state);

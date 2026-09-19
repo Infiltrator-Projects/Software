@@ -63,15 +63,16 @@ pkg_check_modules(GTK4 REQUIRED IMPORTED_TARGET gtk4>=4.6)
 
 add_library(software-core STATIC src/core/model.cpp)
 target_include_directories(software-core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
-target_link_libraries(software-core PUBLIC InfiltratrCommon::Portable)
 
 add_library(software-apt STATIC src/backends/apt/apt_backend.cpp)
 target_include_directories(software-apt PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_link_libraries(software-apt PUBLIC software-core)
 
-add_executable(infiltrator-software src/app/main.cpp)
+add_executable(infiltrator-software
+    src/app/main.cpp
+    src/app/theme.cpp)
 target_link_libraries(infiltrator-software PRIVATE
-    software-core software-apt PkgConfig::GTK4)
+    software-core software-apt InfiltratrCommon::Common PkgConfig::GTK4)
 
 foreach(target IN ITEMS software-core software-apt infiltrator-software)
     if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")

@@ -78,6 +78,12 @@ The model supports **Stable**, **Beta** and **Alpha** channels as first-class me
 
 Channel policy belongs to the repository/backend layer; the UI exposes the resulting policy coherently at system and package level.
 
+## Appearance
+
+Software uses the Common 1.19.8 appearance contract directly. The user can select **Follow OS**, **Day** or **Night**. Follow OS is the default, resolves through Common's System mode, watches the GTK desktop appearance live and reapplies the Common Day/Night palette when the host theme changes. The selected mode is persisted in the user's configuration using Common's durable atomic-file writer.
+
+Typography, semantic colours and structural metrics come from Common rather than private Software copies.
+
 ## Shared foundation
 
 Infiltrator Software uses Infiltratr Common 1.19.8 for project-family mechanisms that are genuinely generic. Product-specific package semantics remain in this repository.
