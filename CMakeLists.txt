@@ -57,6 +57,52 @@ set(INFILTRATR_COMMON_WARNINGS_AS_ERRORS ON CACHE BOOL
     "Treat Common warnings as errors" FORCE)
 add_subdirectory("${INFILTRATR_COMMON_DIR}"
     "${CMAKE_CURRENT_BINARY_DIR}/infiltratr-common" EXCLUDE_FROM_ALL)
+include(
+    "${INFILTRATR_COMMON_DIR}/cmake/InfiltratrTypographyAssets.cmake")
+
+set(SOFTWARE_FONT_ARCHIVE
+    "${CMAKE_CURRENT_BINARY_DIR}/software-mb-corpo-fonts.tar.xz")
+file(DOWNLOAD
+    "${INFILTRATR_MB_CORPO_ARCHIVE_URL}"
+    "${SOFTWARE_FONT_ARCHIVE}"
+    EXPECTED_HASH "SHA256=${INFILTRATR_MB_CORPO_ARCHIVE_SHA256}"
+    TLS_VERIFY ON
+    STATUS SOFTWARE_FONT_DOWNLOAD_STATUS)
+list(GET SOFTWARE_FONT_DOWNLOAD_STATUS 0 SOFTWARE_FONT_DOWNLOAD_CODE)
+if(NOT SOFTWARE_FONT_DOWNLOAD_CODE EQUAL 0)
+    list(GET SOFTWARE_FONT_DOWNLOAD_STATUS 1 SOFTWARE_FONT_DOWNLOAD_MESSAGE)
+    message(FATAL_ERROR
+        "Unable to obtain canonical Software font archive: "
+        "${SOFTWARE_FONT_DOWNLOAD_MESSAGE}")
+endif()
+
+set(SOFTWARE_FONT_DIR "${CMAKE_CURRENT_BINARY_DIR}/software-fonts")
+file(REMOVE_RECURSE "${SOFTWARE_FONT_DIR}")
+file(MAKE_DIRECTORY "${SOFTWARE_FONT_DIR}")
+file(ARCHIVE_EXTRACT
+    INPUT "${SOFTWARE_FONT_ARCHIVE}"
+    DESTINATION "${SOFTWARE_FONT_DIR}")
+
+set(SOFTWARE_FONT_FILES
+    "${SOFTWARE_FONT_DIR}/${INFILTRATR_MB_CORPO_BRAND_REGULAR_FILE}"
+    "${SOFTWARE_FONT_DIR}/${INFILTRATR_MB_CORPO_UI_BOLD_FILE}"
+    "${SOFTWARE_FONT_DIR}/${INFILTRATR_MB_CORPO_UI_REGULAR_FILE}")
+set(SOFTWARE_FONT_EXPECTED_SHA256
+    "${INFILTRATR_MB_CORPO_BRAND_REGULAR_SHA256}"
+    "${INFILTRATR_MB_CORPO_UI_BOLD_SHA256}"
+    "${INFILTRATR_MB_CORPO_UI_REGULAR_SHA256}")
+foreach(SOFTWARE_FONT_INDEX RANGE 0 2)
+    list(GET SOFTWARE_FONT_FILES
+         ${SOFTWARE_FONT_INDEX} SOFTWARE_FONT_FILE)
+    list(GET SOFTWARE_FONT_EXPECTED_SHA256
+         ${SOFTWARE_FONT_INDEX} SOFTWARE_FONT_SHA256_EXPECTED)
+    file(SHA256 "${SOFTWARE_FONT_FILE}" SOFTWARE_FONT_SHA256_ACTUAL)
+    if(NOT SOFTWARE_FONT_SHA256_ACTUAL
+       STREQUAL SOFTWARE_FONT_SHA256_EXPECTED)
+        message(FATAL_ERROR
+            "Software font hash mismatch: ${SOFTWARE_FONT_FILE}")
+    endif()
+endforeach()
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GTK4 REQUIRED IMPORTED_TARGET gtk4>=4.6)
@@ -73,6 +119,11 @@ add_executable(infiltrator-software
     src/app/theme.cpp)
 target_link_libraries(infiltrator-software PRIVATE
     software-core software-apt InfiltratrCommon::Common PkgConfig::GTK4)
+
+install(TARGETS infiltrator-software RUNTIME DESTINATION bin)
+install(FILES ${SOFTWARE_FONT_FILES}
+    DESTINATION share/fonts/truetype/infiltrator-software)
+install(FILES LICENSE DESTINATION share/doc/infiltrator-software)
 
 foreach(target IN ITEMS software-core software-apt infiltrator-software)
     if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")

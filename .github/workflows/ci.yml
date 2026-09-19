@@ -49,3 +49,30 @@ jobs:
 
       - name: Test
         run: ctest --test-dir build --output-on-failure
+
+      - name: Validate AppStream metadata
+        run: appstreamcli validate debian/infiltrator-software.metainfo.xml
+
+      - name: Verify Debian package
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x debian/rules
+          dpkg-buildpackage -us -uc -b
+          package="../infiltrator-software_$(tr -d '[:space:]' < VERSION)_amd64.deb"
+          test -f "$package"
+          test "$(dpkg-deb -f "$package" Package)" = "infiltrator-software"
+          dpkg-deb --fsys-tarfile "$package" | tar -tf - > package-files.txt
+          grep -qx './usr/bin/infiltrator-software' package-files.txt
+          grep -qx './usr/share/applications/infiltrator-software.desktop' package-files.txt
+          grep -qx './usr/share/icons/hicolor/scalable/apps/infiltrator-software.svg' package-files.txt
+          grep -qx './usr/share/app-install/icons/infiltrator-software.svg' package-files.txt
+          grep -qx './usr/share/metainfo/infiltrator-software.metainfo.xml' package-files.txt
+          grep -qx './usr/share/fonts/truetype/infiltrator-software/mb_corpo_a_cond_regular.ttf' package-files.txt
+          grep -qx './usr/share/fonts/truetype/infiltrator-software/mb_corpo_s_bold.ttf' package-files.txt
+          grep -qx './usr/share/fonts/truetype/infiltrator-software/mb_corpo_s_regular.ttf' package-files.txt
+          if grep -Eq '^\./usr/include/infiltratr/|^\./usr/lib/.*/libinfiltratr|/cmake/InfiltratrCommon/' package-files.txt; then
+            echo "::error::Software package leaked Common development/runtime payloads."
+            cat package-files.txt
+            exit 1
+          fi

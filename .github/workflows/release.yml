@@ -1,0 +1,172 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: Publish release
+
+on:
+  workflow_run:
+    workflows: ["Verify"]
+    types: [completed]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-release-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      startsWith(github.event.workflow_run.head_commit.message, 'Release ')
+    permissions:
+      contents: write
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      EXPECTED_SHA: ${{ github.event.workflow_run.head_sha }}
+
+    steps:
+      - name: Check out exact tested main commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Verify release identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main --tags
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          test "$(git rev-parse origin/main)" = "$EXPECTED_SHA"
+          VERSION="$(tr -d '[:space:]' < VERSION)"
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          SUBJECT="$(git log -1 --format=%s HEAD)"
+          if [[ "$SUBJECT" != "Release $VERSION" && "$SUBJECT" != "Release $VERSION:"* ]]; then
+            echo "::error::Release commit subject must begin with Release $VERSION."
+            exit 1
+          fi
+          test "$VERSION" = "$(dpkg-parsechangelog -S Version)"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      - name: Install build dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends             appstream build-essential cmake debhelper-compat dpkg-dev             git libgtk-4-dev pkg-config rsync
+
+      - name: Configure, build and test
+        run: |
+          set -euo pipefail
+          cmake -S . -B build-release -DCMAKE_BUILD_TYPE=Release
+          cmake --build build-release --parallel 2
+          ctest --test-dir build-release --output-on-failure
+
+      - name: Validate AppStream metadata
+        run: appstreamcli validate debian/infiltrator-software.metainfo.xml
+
+      - name: Build and verify Debian package
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x debian/rules
+          dpkg-buildpackage -us -uc -b
+          mkdir -p dist
+          SOURCE_DEB="../infiltrator-software_${VERSION}_amd64.deb"
+          DEB="dist/software_${VERSION}_amd64.deb"
+          test -f "$SOURCE_DEB"
+          cp "$SOURCE_DEB" "$DEB"
+          test "$(dpkg-deb -f "$DEB" Package)" = "infiltrator-software"
+          test "$(dpkg-deb -f "$DEB" Version)" = "$VERSION"
+          test "$(dpkg-deb -f "$DEB" Architecture)" = "amd64"
+          dpkg-deb --fsys-tarfile "$DEB" | tar -tf - > package-files.txt
+          grep -qx './usr/bin/infiltrator-software' package-files.txt
+          grep -qx './usr/share/applications/infiltrator-software.desktop' package-files.txt
+          grep -qx './usr/share/icons/hicolor/scalable/apps/infiltrator-software.svg' package-files.txt
+          grep -qx './usr/share/app-install/icons/infiltrator-software.svg' package-files.txt
+          grep -qx './usr/share/metainfo/infiltrator-software.metainfo.xml' package-files.txt
+          grep -qx './usr/share/fonts/truetype/infiltrator-software/mb_corpo_a_cond_regular.ttf' package-files.txt
+          grep -qx './usr/share/fonts/truetype/infiltrator-software/mb_corpo_s_bold.ttf' package-files.txt
+          grep -qx './usr/share/fonts/truetype/infiltrator-software/mb_corpo_s_regular.ttf' package-files.txt
+          if grep -Eq '^\./usr/include/infiltratr/|^\./usr/lib/.*/libinfiltratr|/cmake/InfiltratrCommon/' package-files.txt; then
+            echo "::error::Software package leaked Common development/runtime payloads."
+            cat package-files.txt
+            exit 1
+          fi
+
+      - name: Build deterministic source bundle and checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT="$RUNNER_TEMP/software-source/Software-${VERSION}"
+          rm -rf "$RUNNER_TEMP/software-source"
+          mkdir -p "$ROOT" dist/source
+          rsync -a             --exclude='.git'             --exclude='build-*'             --exclude='build'             --exclude='dist'             ./ "$ROOT/"
+          EPOCH="$(git show -s --format=%ct "$EXPECTED_SHA")"
+          find "$ROOT" -exec touch -h -d "@$EPOCH" {} +
+          tar --sort=name             --mtime="@$EPOCH"             --owner=0 --group=0 --numeric-owner             -C "$(dirname "$ROOT")"             -cf - "$(basename "$ROOT")"             | gzip -n > "dist/source/software_${VERSION}_source.tar.gz"
+          cp LICENSE dist/LICENSE.txt
+          sha256sum             "dist/software_${VERSION}_amd64.deb"             "dist/source/software_${VERSION}_source.tar.gz"             dist/LICENSE.txt > dist/SHA256SUMS.txt
+
+      - name: Publish immutable GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="v${VERSION}"
+          EXPECTED_ASSETS="$(printf '%s\n'             "LICENSE.txt"             "SHA256SUMS.txt"             "software_${VERSION}_amd64.deb"             "software_${VERSION}_source.tar.gz" | sort)"
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            ACTUAL_ASSETS="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY"               --json assets --jq '.assets[].name' | sort)"
+            if [[ "$ACTUAL_ASSETS" != "$EXPECTED_ASSETS" ]]; then
+              echo "::error::Existing immutable release $TAG has an unexpected asset set."
+              exit 1
+            fi
+            echo "Release $TAG already exists with the expected immutable asset set."
+            exit 0
+          fi
+
+          gh release create "$TAG"             "dist/software_${VERSION}_amd64.deb"             "dist/source/software_${VERSION}_source.tar.gz"             "dist/LICENSE.txt"             "dist/SHA256SUMS.txt"             --repo "$GITHUB_REPOSITORY"             --target "$EXPECTED_SHA"             --title "Software ${VERSION}"             --generate-notes             --latest
+
+  apt-publication:
+    needs: publish
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
+
+    steps:
+      - name: Refresh and verify Infiltrator Package Repository
+        env:
+          DISPATCH_TOKEN: ${{ secrets.APT_REPOSITORY_DISPATCH_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="$(curl -fsSL "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${RELEASE_SHA}/VERSION" | tr -d '[:space:]')"
+          test -n "$VERSION"
+          payload="$(jq -nc --arg repository "$GITHUB_REPOSITORY" --arg sha "$RELEASE_SHA"             '{event_type:"application-release",client_payload:{repository:$repository,sha:$sha}}')"
+
+          if [[ -n "${DISPATCH_TOKEN:-}" ]]; then
+            if ! curl --fail-with-body --silent --show-error               --request POST               --header "Authorization: Bearer $DISPATCH_TOKEN"               --header "Accept: application/vnd.github+json"               --header "X-GitHub-Api-Version: 2022-11-28"               --data "$payload"               https://api.github.com/repos/Infiltrator-Projects/Infiltrator-Repository/dispatches; then
+              echo "::warning::Immediate APT dispatch failed; waiting for repository safety refresh."
+            fi
+          else
+            echo "::warning::APT dispatch token unavailable; waiting for repository safety refresh."
+          fi
+
+          CATALOGUE='https://infiltrator-projects.github.io/Infiltrator-Repository/catalogue/apps.json'
+          for attempt in $(seq 1 120); do
+            if curl -fsS --retry 2 --retry-delay 1 "$CATALOGUE?release=$RELEASE_SHA&attempt=$attempt"               | jq -e --arg id "software" --arg version "$VERSION"                 '.[] | select(.id == $id and .version == $version)' >/dev/null; then
+              echo "APT repository advertises Software $VERSION."
+              exit 0
+            fi
+            echo "Waiting for APT publication of Software $VERSION ($attempt/120)..."
+            sleep 10
+          done
+
+          echo "::error::The central APT repository did not advertise Software $VERSION within 20 minutes."
+          exit 1

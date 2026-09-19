@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.infiltratorprojects.Software</id>
+  <name>Software</name>
+  <summary>Unified software manager and updater</summary>
+
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+
+  <description>
+    <p>
+      Infiltrator Software provides one coherent surface for discovering,
+      installing, updating and repairing software while keeping package-system
+      mechanics isolated behind replaceable backend contracts.
+    </p>
+    <p>
+      The initial Linux implementation uses APT/.deb and presents Discover,
+      Installed, Updates, System, Repositories, History and Repair in one
+      application.
+    </p>
+  </description>
+
+  <launchable type="desktop-id">infiltrator-software.desktop</launchable>
+  <provides>
+    <binary>infiltrator-software</binary>
+  </provides>
+  <icon type="stock">infiltrator-software</icon>
+
+  <categories>
+    <category>System</category>
+  </categories>
+
+  <url type="homepage">https://github.com/Infiltrator-Projects/Software</url>
+
+  <releases>
+    <release version="0.1.0" date="2026-09-20">
+      <description>
+        <p>Initial read-only foundation with Common 1.19.8 theming, APT inventory and verified Debian packaging.</p>
+      </description>
+    </release>
+  </releases>
+
+  <content_rating type="oars-1.1"/>
+</component>

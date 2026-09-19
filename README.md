@@ -132,7 +132,7 @@ Write operations are not enabled until transaction planning, error propagation a
 
 The first supported development target is Linux. The desktop shell uses GTK4 through its C API from C++17, avoiding an additional gtkmm runtime/development layer.
 
-The repository pins the exact reviewed Common 1.19.8 release/commit and uses CMake/CTest. Packaging and immutable release automation will be added after the first functional read-only milestone is green.
+The repository pins the exact reviewed Common 1.19.8 release/commit and uses CMake/CTest. Linux releases publish a verified Debian package, deterministic source bundle, licence and checksums from the exact tested main commit; release publication is immutable.
 
 ## Repository policy
 

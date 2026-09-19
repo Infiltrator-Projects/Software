@@ -1,0 +1,10 @@
+infiltrator-software (0.1.0) unstable; urgency=medium
+
+  * Establish the greenfield Infiltrator Software Manager architecture.
+  * Add Discover, Installed, Updates, System, Repositories, History and Repair.
+  * Add a read-only APT/.deb backend and backend-neutral transaction model.
+  * Add persistent Common 1.19.8 Follow OS, Day and Night appearance modes.
+  * Package the canonical MB Corpo font set, desktop integration and AppStream metadata.
+  * Add verified Debian packaging and immutable GitHub release automation.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Sun, 20 Sep 2026 01:20:00 +1000

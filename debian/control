@@ -1,0 +1,17 @@
+Source: infiltrator-software
+Section: admin
+Priority: optional
+Maintainer: Shannon Smith <infiltratr@yandex.com>
+Build-Depends: debhelper-compat (= 13), cmake, g++, libgtk-4-dev, pkg-config
+Standards-Version: 4.7.0
+Rules-Requires-Root: no
+Homepage: https://github.com/Infiltrator-Projects/Software
+
+Package: infiltrator-software
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: unified Infiltrator software manager and updater
+ Infiltrator Software provides one graphical surface for software discovery,
+ installed applications, updates, system components, repositories, history
+ and repair. The first backend targets APT/.deb while keeping the application
+ architecture package-manager-neutral.

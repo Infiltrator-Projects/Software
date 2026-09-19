@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Software
+Comment=Discover, install and update software
+Exec=infiltrator-software
+Icon=infiltrator-software
+Terminal=false
+Categories=System;PackageManager;GTK;
+StartupNotify=true

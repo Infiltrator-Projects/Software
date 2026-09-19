@@ -1,0 +1,3 @@
+debian/infiltrator-software.desktop usr/share/applications
+debian/infiltrator-software.svg usr/share/icons/hicolor/scalable/apps
+debian/infiltrator-software.metainfo.xml usr/share/metainfo
