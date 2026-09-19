@@ -1,0 +1,8 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+/build/
+/build-*/
+/cmake-build-*/
+/compile_commands.json
+*.o
+*.a
+*.so
