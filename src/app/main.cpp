@@ -56,8 +56,12 @@ void install_theme()
 
     GtkCssProvider *provider = gtk_css_provider_new();
     const std::string css_text = css.str();
+#if GTK_CHECK_VERSION(4, 12, 0)
+    gtk_css_provider_load_from_string(provider, css_text.c_str());
+#else
     gtk_css_provider_load_from_data(
         provider, css_text.c_str(), static_cast<gssize>(css_text.size()));
+#endif
 
     GdkDisplay *display = gdk_display_get_default();
     if (display != nullptr) {
@@ -100,7 +104,7 @@ void list_item_setup(GtkSignalListItemFactory *, GtkListItem *item, gpointer)
 
 void list_item_bind(GtkSignalListItemFactory *, GtkListItem *item, gpointer)
 {
-    GObject *object = gtk_list_item_get_item(item);
+    GObject *object = G_OBJECT(gtk_list_item_get_item(item));
     GtkWidget *label = gtk_list_item_get_child(item);
     if (object == nullptr || label == nullptr) {
         return;
