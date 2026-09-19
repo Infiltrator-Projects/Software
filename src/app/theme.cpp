@@ -164,6 +164,16 @@ InfiltratrThemeMode ThemeController::mode() const noexcept
     return mode_;
 }
 
+const char *ThemeController::mode_name() const noexcept
+{
+    return infiltratr_theme_mode_name(mode_);
+}
+
+void ThemeController::cycle_mode()
+{
+    set_mode(infiltratr_theme_mode_next(mode_), true);
+}
+
 void ThemeController::on_system_theme_changed(
     GtkSettings *, GParamSpec *, gpointer user_data)
 {
@@ -258,46 +268,104 @@ void ThemeController::apply()
     css
         << "* { font-family: \"" << typography->ui_family
         << "\"; color: " << colour(palette->text_rgb) << "; }"
+
         << "window, .background { background-color: "
         << colour(palette->background_rgb) << "; }"
+
+        << ".infiltrator-titlebar { background-image: none; background-color: "
+        << colour(palette->titlebar_rgb)
+        << "; border-bottom: 1px solid " << colour(palette->border_rgb)
+        << "; min-height: 38px; padding: 0 6px; }"
+        << ".titlebar-title { font-family: \"" << typography->brand_family
+        << "\"; font-weight: " << typography->brand_weight
+        << "; font-size: 15px; color: " << colour(palette->title_rgb) << "; }"
+        << ".titlebar-subtitle { font-size: 10px; color: "
+        << colour(palette->summary_rgb) << "; }"
+        << ".titlebar-button { margin: 3px 2px; min-height: 28px; }"
+
         << ".sidebar { background-color: " << colour(palette->panel_rgb)
-        << "; border-right: 1px solid " << colour(palette->border_rgb)
-        << "; }"
-        << ".nav-row { padding: " << metrics->compact_spacing << "px "
-        << metrics->control_spacing << "px; border-radius: "
-        << metrics->control_radius << "px; }"
+        << "; border-right: 1px solid " << colour(palette->border_rgb) << "; }"
+        << ".sidebar-title { font-size: 10px; font-weight: "
+        << typography->ui_bold_weight << "; color: "
+        << colour(palette->kicker_rgb) << "; letter-spacing: 0.08em; }"
+        << ".nav-list { background-color: transparent; }"
+        << ".nav-row { margin: 2px 0; padding: 10px 12px; border-radius: "
+        << metrics->control_radius << "px; border-left: 3px solid transparent; }"
+        << ".nav-row:hover { background-color: "
+        << colour(palette->surface_hover_rgb) << "; }"
         << ".nav-row:selected { background-color: "
         << colour(palette->selection_background_rgb)
-        << "; color: " << colour(palette->selection_foreground_rgb)
-        << "; }"
-        << ".content { padding: " << metrics->content_padding << "px; }"
-        << ".section-title { font-family: \"" << typography->brand_family
+        << "; border-left-color: " << colour(palette->info_rgb) << "; }"
+        << ".nav-row:selected .nav-label { color: "
+        << colour(palette->selection_foreground_rgb) << "; }"
+        << ".nav-label { font-weight: " << typography->ui_bold_weight << "; }"
+        << ".sidebar-footer { padding: 12px 16px; border-top: 1px dashed "
+        << colour(palette->border_rgb) << "; }"
+        << ".sidebar-note { font-size: 10px; color: "
+        << colour(palette->subtle_rgb) << "; }"
+
+        << ".content { padding: " << metrics->content_padding
+        << "px; background-color: " << colour(palette->background_rgb) << "; }"
+        << ".page-hero { margin-bottom: 2px; }"
+        << ".page-icon { min-width: 42px; min-height: 42px; border-radius: "
+        << metrics->control_radius << "px; background-color: "
+        << colour(palette->surface_rgb) << "; border: 1px solid "
+        << colour(palette->border_rgb) << "; }"
+        << ".hero-title { font-family: \"" << typography->brand_family
         << "\"; font-weight: " << typography->brand_weight
-        << "; font-size: 26px; color: " << colour(palette->title_rgb)
-        << "; }"
-        << ".appearance-title { font-weight: "
+        << "; font-size: 24px; color: " << colour(palette->heading_rgb) << "; }"
+        << ".hero-subtitle { font-size: 11px; color: "
+        << colour(palette->summary_rgb) << "; }"
+
+        << ".stat-card { padding: 13px 15px; border-radius: "
+        << metrics->card_radius << "px; background-color: "
+        << colour(palette->card_rgb) << "; border: 1px solid "
+        << colour(palette->border_rgb) << "; }"
+        << ".stat-caption, .kicker { font-size: 9px; font-weight: "
+        << typography->ui_bold_weight << "; color: "
+        << colour(palette->kicker_rgb) << "; }"
+        << ".stat-value { font-size: 16px; font-weight: "
         << typography->ui_bold_weight << "; color: "
         << colour(palette->title_rgb) << "; }"
-        << ".muted { color: " << colour(palette->muted_rgb) << "; }"
+
+        << ".card { padding: 16px; border-radius: "
+        << metrics->card_radius << "px; background-color: "
+        << colour(palette->card_rgb) << "; border: 1px solid "
+        << colour(palette->border_rgb) << "; }"
+        << ".card-title { font-family: \"" << typography->brand_family
+        << "\"; font-size: 16px; font-weight: " << typography->brand_weight
+        << "; color: " << colour(palette->heading_rgb) << "; }"
+        << ".card-copy { font-size: 11px; color: "
+        << colour(palette->note_rgb) << "; }"
+
         << ".package-list, listview, scrolledwindow { background-color: "
         << colour(palette->card_rgb) << "; }"
+        << ".package-list { border: 1px solid " << colour(palette->border_rgb)
+        << "; border-radius: " << metrics->control_radius << "px; }"
+        << ".package-row { padding: 8px 10px; }"
+        << "listview row { border-bottom: 1px solid "
+        << colour(palette->border_rgb) << "; }"
+        << "listview row:selected { background-color: "
+        << colour(palette->selection_background_rgb)
+        << "; color: " << colour(palette->selection_foreground_rgb) << "; }"
+
+        << ".statusbar { min-height: 24px; padding: 0 10px; background-color: "
+        << colour(palette->titlebar_rgb) << "; border-top: 1px solid "
+        << colour(palette->border_rgb) << "; }"
+        << ".statusbar-text { font-size: 9px; color: "
+        << colour(palette->subtle_rgb) << "; }"
+
         << "button, entry, checkbutton { color: "
-        << colour(palette->text_rgb) << "; }"
+        << colour(palette->button_foreground_rgb) << "; }"
         << "button { background-image: none; background-color: "
         << colour(palette->button_background_rgb)
-        << "; color: " << colour(palette->button_foreground_rgb)
         << "; border: 1px solid " << colour(palette->border_rgb)
         << "; border-radius: " << metrics->control_radius << "px; }"
         << "button:hover { background-color: "
         << colour(palette->card_hover_rgb) << "; }"
-        << "listview row:selected { background-color: "
-        << colour(palette->selection_background_rgb)
-        << "; color: " << colour(palette->selection_foreground_rgb)
-        << "; }"
         << "selection { background-color: "
         << colour(palette->selection_background_rgb)
-        << "; color: " << colour(palette->selection_foreground_rgb)
-        << "; }";
+        << "; color: " << colour(palette->selection_foreground_rgb) << "; }";
 
     const std::string css_text = css.str();
 #if GTK_CHECK_VERSION(4, 12, 0)

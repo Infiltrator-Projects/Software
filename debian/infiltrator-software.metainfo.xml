@@ -33,6 +33,11 @@
   <url type="homepage">https://github.com/Infiltrator-Projects/Software</url>
 
   <releases>
+    <release version="0.1.1" date="2026-09-20">
+      <description>
+        <p>InfiltratorFS-aligned native shell with integrated Common theme controls and refined application chrome.</p>
+      </description>
+    </release>
     <release version="0.1.0" date="2026-09-20">
       <description>
         <p>Initial read-only foundation with Common 1.19.8 theming, APT inventory and verified Debian packaging.</p>

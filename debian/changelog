@@ -1,3 +1,13 @@
+infiltrator-software (0.1.1) unstable; urgency=medium
+
+  * Align the native application shell with the InfiltratorFS design language.
+  * Add centered title/subtitle header bar with info, theme and refresh controls.
+  * Move System/Day/Night theme cycling into the title bar while retaining Common 1.19.8.
+  * Add Infiltrator-style sidebar, cards, package summary panels and status bar.
+  * Preserve the existing read-only APT backend and package-management boundaries.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Sun, 20 Sep 2026 01:52:00 +1000
+
 infiltrator-software (0.1.0) unstable; urgency=medium
 
   * Establish the greenfield Infiltrator Software Manager architecture.

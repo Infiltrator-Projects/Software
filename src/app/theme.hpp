@@ -21,6 +21,8 @@ public:
     void initialise();
     [[nodiscard]] GtkWidget *create_selector();
     [[nodiscard]] InfiltratrThemeMode mode() const noexcept;
+    [[nodiscard]] const char *mode_name() const noexcept;
+    void cycle_mode();
 
 private:
     static void on_system_theme_changed(

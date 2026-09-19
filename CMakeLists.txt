@@ -120,6 +120,9 @@ add_executable(infiltrator-software
 target_link_libraries(infiltrator-software PRIVATE
     software-core software-apt InfiltratrCommon::Common PkgConfig::GTK4)
 
+target_compile_definitions(infiltrator-software PRIVATE
+    INFILTRATOR_SOFTWARE_VERSION="${PROJECT_VERSION}")
+
 install(TARGETS infiltrator-software RUNTIME DESTINATION bin)
 install(FILES ${SOFTWARE_FONT_FILES}
     DESTINATION share/fonts/truetype/infiltrator-software)
