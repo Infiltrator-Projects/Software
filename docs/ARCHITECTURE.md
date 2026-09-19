@@ -12,7 +12,7 @@ The core owns package/application identity, classification, channels, installed/
 
 A backend translates one native package ecosystem into the core model. Capabilities are explicit so the UI never assumes that a backend supports mutation merely because it can inventory packages.
 
-APT/.deb is the first backend. Version 0.1 begins with read-only installed-package inventory. Catalogue search, update calculation and transaction planning are added before any write path.
+APT/.deb is the first package backend. Installed-package inventory remains read-only. Discover is deliberately separate: a catalogue-source contract reads authoritative application records from Infiltrator-Repository, verifies icon digests, caches metadata atomically for offline use and merges local installation state by canonical package identity. Update calculation and transaction planning remain required before any write path.
 
 Common 1.19.10 owns reusable project-family facilities such as semantic theme design and other product-neutral mechanisms. Software's appearance controller consumes Common's System/Day/Night mode policy, semantic palettes, typography roles and structural metrics. Follow OS listens for GTK desktop-theme changes and resolves System dynamically. The selected mode is stored atomically through Common's POSIX durability API. Package semantics remain local to Software.
 
@@ -20,9 +20,9 @@ Common 1.19.10 owns reusable project-family facilities such as semantic theme de
 
 ```text
 native shell
-    |
-    v
-product core
+    |                 |
+    v                 v
+product core      catalogue source <---- Infiltrator Repository
     |
     v
 backend contract <---- APT implementation
@@ -42,7 +42,7 @@ The privileged component will accept a validated transaction description rather 
 
 ## Concurrency
 
-Repository/network operations must not block the GTK main loop. The 0.1 shell performs only the fast local installed-package inventory during activation; subsequent catalogue/update work moves to worker execution with cancellation and generation-based result publication.
+Repository/network operations must not block the GTK main loop. Discover refresh runs through GTask worker execution and publishes only the newest generation back to GTK. Live HTTPS metadata is atomically cached; a network failure can fall back to the last valid cached document without converting cache data into an authoritative source.
 
 ## Failure model
 

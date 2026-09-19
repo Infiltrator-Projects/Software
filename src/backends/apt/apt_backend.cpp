@@ -183,6 +183,7 @@ std::vector<PackageRecord> AptBackend::list_installed(std::string &error)
             PackageRecord package;
             package.id.assign(fields[0]);
             package.name = package.id;
+            package.package_name = package.id;
             package.installed_version.assign(fields[1]);
             package.available_version = package.installed_version;
             package.installed_size_bytes = kib_to_bytes(fields[2]);
@@ -211,20 +212,20 @@ std::vector<PackageRecord> AptBackend::list_installed(std::string &error)
 std::vector<PackageRecord> AptBackend::search(
     const std::string_view, std::string &error)
 {
-    error = "APT catalogue search is not enabled in the 0.1.0 read-only milestone.";
+    error = "APT catalogue search is provided by the repository catalogue layer.";
     return {};
 }
 
 std::vector<PackageRecord> AptBackend::list_updates(std::string &error)
 {
-    error = "APT update inventory is not enabled in the 0.1.0 read-only milestone.";
+    error = "APT update inventory is not enabled yet.";
     return {};
 }
 
 std::optional<TransactionPlan> AptBackend::plan(
     const TransactionRequest &, std::string &error)
 {
-    error = "APT transaction planning is not enabled in the 0.1.0 read-only milestone.";
+    error = "APT transaction planning is not enabled yet.";
     return std::nullopt;
 }
 

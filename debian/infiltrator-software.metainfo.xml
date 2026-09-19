@@ -33,6 +33,11 @@
   <url type="homepage">https://github.com/Infiltrator-Projects/Software</url>
 
   <releases>
+    <release version="0.2.0" date="2026-09-20">
+      <description>
+        <p>Real Discover catalogue with verified repository metadata, search, categories, icon caching and application details.</p>
+      </description>
+    </release>
     <release version="0.1.2" date="2026-09-20">
       <description>
         <p>Common 1.19.10 semantic palette, InfiltratorFS typography scale and corrected title-bar contrast.</p>

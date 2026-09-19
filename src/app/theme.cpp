@@ -429,6 +429,40 @@ void ThemeController::apply()
         << "listview row:selected label, listview row:selected image { color: "
         << select_fg << "; }"
 
+        << ".discover-controls { padding: 10px 12px; border: 1px solid "
+        << status_border << "; border-radius: " << metrics->control_radius
+        << "px; background: " << surface << "; }"
+        << ".discover-controls entry, .discover-controls dropdown { min-height: 34px; }"
+        << ".discover-status { font-size: 11px; color: " << summary << "; }"
+        << ".discover-card { padding: 16px; background: " << card
+        << "; border: 1px solid " << border << "; border-radius: "
+        << metrics->card_radius << "px; }"
+        << ".discover-card:hover { background: " << card_hover
+        << "; border-color: " << info << "; }"
+        << ".discover-app-icon { color: " << operation << "; }"
+        << ".discover-name { font-family: \"" << typography->brand_family
+        << "\"; font-size: 18px; font-weight: " << typography->brand_weight
+        << "; color: " << heading << "; }"
+        << ".discover-meta { font-size: 11px; font-weight: "
+        << typography->ui_bold_weight << "; color: " << kicker << "; }"
+        << ".discover-description { font-size: 12px; color: " << note << "; }"
+        << ".state-installed, .state-available { padding: 4px 9px; border-radius: 999px; "
+        << "font-size: 11px; font-weight: " << typography->ui_bold_weight << "; }"
+        << ".state-installed { color: " << success << "; border: 1px solid "
+        << success_border << "; background: " << surface << "; }"
+        << ".state-available { color: " << info << "; border: 1px solid "
+        << info << "; background: " << surface << "; }"
+        << ".discover-details { min-height: 30px; }"
+        << ".detail-page { background: " << background << "; }"
+        << ".detail-hero { padding-bottom: 4px; }"
+        << ".detail-label { min-width: 130px; font-size: 11px; color: "
+        << detail_label << "; }"
+        << ".detail-value { font-size: 12px; font-weight: "
+        << typography->ui_bold_weight << "; color: " << text << "; }"
+        << ".detail-note { padding: 10px 12px; border-left: 3px solid "
+        << warning << "; background: " << surface << "; color: "
+        << warning_muted << "; font-size: 11px; }"
+
         << ".statusbar { padding: 8px 12px; border-top: 1px solid "
         << connection_border << "; background: " << connection << "; }"
         << ".statusbar-text { font-size: 11px; color: " << summary << "; }"

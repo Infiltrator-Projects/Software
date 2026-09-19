@@ -106,6 +106,8 @@ endforeach()
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GTK4 REQUIRED IMPORTED_TARGET gtk4>=4.6)
+pkg_check_modules(CURL REQUIRED IMPORTED_TARGET libcurl)
+pkg_check_modules(JSON_GLIB REQUIRED IMPORTED_TARGET json-glib-1.0)
 
 add_library(software-core STATIC src/core/model.cpp)
 target_include_directories(software-core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
@@ -114,11 +116,20 @@ add_library(software-apt STATIC src/backends/apt/apt_backend.cpp)
 target_include_directories(software-apt PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_link_libraries(software-apt PUBLIC software-core)
 
+add_library(software-catalogue STATIC
+    src/catalogue/repository_catalogue.cpp)
+target_include_directories(software-catalogue PUBLIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_link_libraries(software-catalogue PUBLIC
+    software-core InfiltratrCommon::Common
+    PkgConfig::CURL PkgConfig::JSON_GLIB)
+
 add_executable(infiltrator-software
     src/app/main.cpp
     src/app/theme.cpp)
 target_link_libraries(infiltrator-software PRIVATE
-    software-core software-apt InfiltratrCommon::Common PkgConfig::GTK4)
+    software-core software-apt software-catalogue
+    InfiltratrCommon::Common PkgConfig::GTK4)
 
 target_compile_definitions(infiltrator-software PRIVATE
     INFILTRATOR_SOFTWARE_VERSION="${PROJECT_VERSION}")
@@ -128,7 +139,8 @@ install(FILES ${SOFTWARE_FONT_FILES}
     DESTINATION share/fonts/truetype/infiltrator-software)
 install(FILES LICENSE DESTINATION share/doc/infiltrator-software)
 
-foreach(target IN ITEMS software-core software-apt infiltrator-software)
+foreach(target IN ITEMS
+        software-core software-apt software-catalogue infiltrator-software)
     if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
         target_compile_options(${target} PRIVATE
             -Wall -Wextra -Wpedantic -Wshadow -Wconversion -Wsign-conversion)
@@ -143,4 +155,8 @@ if(BUILD_TESTING)
     add_executable(software-apt-test tests/apt_backend_test.cpp)
     target_link_libraries(software-apt-test PRIVATE software-apt)
     add_test(NAME software-apt-test COMMAND software-apt-test)
+
+    add_executable(software-catalogue-test tests/catalogue_test.cpp)
+    target_link_libraries(software-catalogue-test PRIVATE software-catalogue)
+    add_test(NAME software-catalogue-test COMMAND software-catalogue-test)
 endif()

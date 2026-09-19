@@ -1,3 +1,14 @@
+infiltrator-software (0.2.0) unstable; urgency=medium
+
+  * Implement Discover using the published Infiltrator application catalogue.
+  * Add asynchronous HTTPS catalogue refresh with atomic offline cache fallback.
+  * Verify repository-provided application icons by SHA-256 before caching.
+  * Add live search, category filtering, application cards and provenance details.
+  * Merge catalogue identities with local dpkg inventory to show Installed/Available state.
+  * Keep installation disabled until complete transaction planning and authorization are implemented.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Sun, 20 Sep 2026 02:28:00 +1000
+
 infiltrator-software (0.1.2) unstable; urgency=medium
 
   * Move Software to the exact Common 1.19.10 contract used by InfiltratorFS.

@@ -6,9 +6,11 @@
 
 One shell with Discover, Installed, Updates, System, Repositories, History and Repair; exact Common 1.19.10 pin; backend-neutral models; explicit capabilities; real read-only dpkg installed inventory; virtualized GTK4 list; tests and main-branch CI.
 
-## 0.2 — Catalogue and authoritative identity
+## 0.2 — Discover and authoritative first-party identity
 
-Repository refresh, Infiltrator application-record validation, canonical icon digest/cache pipeline, first-party metadata from Infiltrator-Repository, third-party normalization, search, categories, detail pages and transitional-package suppression.
+Implemented: asynchronous Infiltrator-Repository refresh, first-party application-record validation, canonical icon digest/cache pipeline, offline metadata fallback, search, categories, application details, installed-state merging and transitional-package suppression at the repository catalogue layer.
+
+Still deliberately deferred from this milestone: third-party AppStream/package normalization and all install/remove mutation. Those must not dilute first-party identity correctness or bypass transaction planning.
 
 ## 0.3 — Update inventory and read-only planning
 
