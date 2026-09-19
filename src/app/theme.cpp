@@ -273,21 +273,21 @@ void ThemeController::apply()
         << colour(palette->background_rgb) << "; }"
 
         << ".infiltrator-titlebar { background-image: none; background-color: "
-        << colour(palette->titlebar_rgb)
+        << colour(palette->panel_rgb)
         << "; border-bottom: 1px solid " << colour(palette->border_rgb)
         << "; min-height: 38px; padding: 0 6px; }"
         << ".titlebar-title { font-family: \"" << typography->brand_family
         << "\"; font-weight: " << typography->brand_weight
         << "; font-size: 15px; color: " << colour(palette->title_rgb) << "; }"
         << ".titlebar-subtitle { font-size: 10px; color: "
-        << colour(palette->summary_rgb) << "; }"
+        << colour(palette->muted_rgb) << "; }"
         << ".titlebar-button { margin: 3px 2px; min-height: 28px; }"
 
         << ".sidebar { background-color: " << colour(palette->panel_rgb)
         << "; border-right: 1px solid " << colour(palette->border_rgb) << "; }"
         << ".sidebar-title { font-size: 10px; font-weight: "
         << typography->ui_bold_weight << "; color: "
-        << colour(palette->kicker_rgb) << "; letter-spacing: 0.08em; }"
+        << colour(palette->info_rgb) << "; letter-spacing: 0.08em; }"
         << ".nav-list { background-color: transparent; }"
         << ".nav-row { margin: 2px 0; padding: 10px 12px; border-radius: "
         << metrics->control_radius << "px; border-left: 3px solid transparent; }"
@@ -313,9 +313,9 @@ void ThemeController::apply()
         << colour(palette->border_rgb) << "; }"
         << ".hero-title { font-family: \"" << typography->brand_family
         << "\"; font-weight: " << typography->brand_weight
-        << "; font-size: 24px; color: " << colour(palette->heading_rgb) << "; }"
+        << "; font-size: 24px; color: " << colour(palette->title_rgb) << "; }"
         << ".hero-subtitle { font-size: 11px; color: "
-        << colour(palette->summary_rgb) << "; }"
+        << colour(palette->muted_rgb) << "; }"
 
         << ".stat-card { padding: 13px 15px; border-radius: "
         << metrics->card_radius << "px; background-color: "
@@ -323,7 +323,7 @@ void ThemeController::apply()
         << colour(palette->border_rgb) << "; }"
         << ".stat-caption, .kicker { font-size: 9px; font-weight: "
         << typography->ui_bold_weight << "; color: "
-        << colour(palette->kicker_rgb) << "; }"
+        << colour(palette->info_rgb) << "; }"
         << ".stat-value { font-size: 16px; font-weight: "
         << typography->ui_bold_weight << "; color: "
         << colour(palette->title_rgb) << "; }"
@@ -334,9 +334,9 @@ void ThemeController::apply()
         << colour(palette->border_rgb) << "; }"
         << ".card-title { font-family: \"" << typography->brand_family
         << "\"; font-size: 16px; font-weight: " << typography->brand_weight
-        << "; color: " << colour(palette->heading_rgb) << "; }"
+        << "; color: " << colour(palette->title_rgb) << "; }"
         << ".card-copy { font-size: 11px; color: "
-        << colour(palette->note_rgb) << "; }"
+        << colour(palette->muted_rgb) << "; }"
 
         << ".package-list, listview, scrolledwindow { background-color: "
         << colour(palette->card_rgb) << "; }"
@@ -350,7 +350,7 @@ void ThemeController::apply()
         << "; color: " << colour(palette->selection_foreground_rgb) << "; }"
 
         << ".statusbar { min-height: 24px; padding: 0 10px; background-color: "
-        << colour(palette->titlebar_rgb) << "; border-top: 1px solid "
+        << colour(palette->panel_rgb) << "; border-top: 1px solid "
         << colour(palette->border_rgb) << "; }"
         << ".statusbar-text { font-size: 9px; color: "
         << colour(palette->subtle_rgb) << "; }"
