@@ -2,7 +2,7 @@
 
 # Infiltrator Software
 
-**Project copyright:** © 2000–2026 Shannon Smith
+**Project copyright:** © 2000-2026 Shannon Smith
 
 Infiltrator Software is the software-management application for the Infiltrator project family. It is designed as a greenfield 2026 replacement for the traditional split between a graphical software catalogue and a separate operating-system update manager.
 
@@ -143,6 +143,6 @@ The repository pins the exact reviewed Common 1.19.10 release/commit and uses CM
 
 ## Licence
 
-Copyright © 2026 Shannon Smith.
+Copyright © 2000-2026 Shannon Smith.
 
 Infiltrator Software is licensed under the GNU General Public License version 3 or, at your option, any later version (`GPL-3.0-or-later`).
