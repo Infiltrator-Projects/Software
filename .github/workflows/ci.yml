@@ -31,8 +31,8 @@ jobs:
           version="$(tr -d '[:space:]' < VERSION)"
           [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
           grep -Fq "**Current source version:** $version" README.md
-          test "$(tr -d '[:space:]' < src/infiltratr-common/VERSION)" = "1.19.8"
-          test "$(git -C src/infiltratr-common rev-parse HEAD)" = "3bfcb6f76ca44ac33bc2fee54fb114caa0eca5f9"
+          test "$(tr -d '[:space:]' < src/infiltratr-common/VERSION)" = "1.19.10"
+          test "$(git -C src/infiltratr-common rev-parse HEAD)" = "33e69c0a462b56d388881d89c4eb49f72fa0b0fe"
 
       - name: Install build dependencies
         env:

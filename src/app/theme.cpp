@@ -264,108 +264,192 @@ void ThemeController::apply()
         return;
     }
 
+    const std::string background = colour(palette->background_rgb);
+    const std::string panel = colour(palette->panel_rgb);
+    const std::string card = colour(palette->card_rgb);
+    const std::string surface = colour(palette->surface_rgb);
+    const std::string border = colour(palette->border_rgb);
+    const std::string text = colour(palette->text_rgb);
+    const std::string title = colour(palette->title_rgb);
+    const std::string button_bg = colour(palette->button_background_rgb);
+    const std::string button_fg = colour(palette->button_foreground_rgb);
+    const std::string select_bg = colour(palette->selection_background_rgb);
+    const std::string select_fg = colour(palette->selection_foreground_rgb);
+    const std::string neutral = colour(palette->neutral_accent_rgb);
+    const std::string success = colour(palette->success_rgb);
+    const std::string warning = colour(palette->warning_rgb);
+    const std::string fault = colour(palette->fault_rgb);
+    const std::string info = colour(palette->info_rgb);
+    const std::string operation = colour(palette->operation_rgb);
+    const std::string card_hover = colour(palette->card_hover_rgb);
+    const std::string operation_hover = colour(palette->operation_hover_rgb);
+    const std::string titlebar = colour(palette->titlebar_rgb);
+    const std::string connection = colour(palette->connection_rgb);
+    const std::string connection_border = colour(palette->connection_border_rgb);
+    const std::string heading = colour(palette->heading_rgb);
+    const std::string summary = colour(palette->summary_rgb);
+    const std::string kicker = colour(palette->kicker_rgb);
+    const std::string detail_label = colour(palette->detail_label_rgb);
+    const std::string note = colour(palette->note_rgb);
+    const std::string status_border = colour(palette->status_border_rgb);
+    const std::string accent_fg = colour(palette->accent_foreground_rgb);
+    const std::string accent_hover = colour(palette->accent_hover_rgb);
+    const std::string selected_summary = colour(palette->selected_summary_rgb);
+    const std::string warning_muted = colour(palette->warning_muted_rgb);
+    const std::string warning_border = colour(palette->warning_border_rgb);
+    const std::string success_border = colour(palette->success_border_rgb);
+
     std::ostringstream css;
     css
         << "* { font-family: \"" << typography->ui_family
-        << "\"; color: " << colour(palette->text_rgb) << "; }"
+        << "\"; font-weight: " << typography->ui_regular_weight << "; }"
+        << "window, .background { background: " << background
+        << "; color: " << text << "; }"
 
-        << "window, .background { background-color: "
-        << colour(palette->background_rgb) << "; }"
-
-        << ".infiltrator-titlebar { background-image: none; background-color: "
-        << colour(palette->panel_rgb)
-        << "; border-bottom: 1px solid " << colour(palette->border_rgb)
-        << "; min-height: 38px; padding: 0 6px; }"
+        << "headerbar.infiltrator-titlebar { min-height: 44px; background: "
+        << titlebar << "; color: " << title
+        << "; border-bottom: 1px solid " << border << "; padding: 0 6px; }"
         << ".titlebar-title { font-family: \"" << typography->brand_family
-        << "\"; font-weight: " << typography->brand_weight
-        << "; font-size: 15px; color: " << colour(palette->title_rgb) << "; }"
-        << ".titlebar-subtitle { font-size: 10px; color: "
-        << colour(palette->muted_rgb) << "; }"
-        << ".titlebar-button { margin: 3px 2px; min-height: 28px; }"
+        << "\"; font-size: 18px; font-weight: " << typography->ui_bold_weight
+        << "; color: " << title << "; }"
+        << ".titlebar-subtitle { color: " << summary
+        << "; font-size: 12px; font-weight: " << typography->ui_bold_weight
+        << "; }"
+        << "headerbar button { min-height: 30px; padding: 0 12px; background: "
+        << button_bg << "; border: 1px solid " << border
+        << "; border-radius: " << metrics->small_radius
+        << "px; font-weight: " << typography->ui_bold_weight << "; }"
+        << "headerbar button, headerbar button label, headerbar button image { color: "
+        << button_fg << "; opacity: 1; }"
+        << "headerbar button:hover { background: " << neutral << "; }"
+        << "headerbar button:hover, headerbar button:hover label, "
+        << "headerbar button:hover image { color: " << button_fg << "; opacity: 1; }"
+        << "headerbar button:active, headerbar button:checked { background: "
+        << select_bg << "; border-color: " << operation << "; }"
+        << "headerbar button:active, headerbar button:active label, "
+        << "headerbar button:active image, headerbar button:checked, "
+        << "headerbar button:checked label, headerbar button:checked image { color: "
+        << select_fg << "; opacity: 1; }"
+        << ".titlebar-button { margin: 3px 2px; }"
 
-        << ".sidebar { background-color: " << colour(palette->panel_rgb)
-        << "; border-right: 1px solid " << colour(palette->border_rgb) << "; }"
-        << ".sidebar-title { font-size: 10px; font-weight: "
-        << typography->ui_bold_weight << "; color: "
-        << colour(palette->info_rgb) << "; letter-spacing: 0.08em; }"
-        << ".nav-list { background-color: transparent; }"
-        << ".nav-row { margin: 2px 0; padding: 10px 12px; border-radius: "
-        << metrics->control_radius << "px; border-left: 3px solid transparent; }"
-        << ".nav-row:hover { background-color: "
-        << colour(palette->surface_hover_rgb) << "; }"
-        << ".nav-row:selected { background-color: "
-        << colour(palette->selection_background_rgb)
-        << "; border-left-color: " << colour(palette->info_rgb) << "; }"
-        << ".nav-row:selected .nav-label { color: "
-        << colour(palette->selection_foreground_rgb) << "; }"
-        << ".nav-label { font-weight: " << typography->ui_bold_weight << "; }"
+        << ".sidebar { background: " << panel
+        << "; border-right: 1px solid " << border << "; }"
+        << ".sidebar-title { font-size: 11px; font-weight: "
+        << typography->ui_bold_weight << "; color: " << kicker << "; }"
+        << ".nav-list { background: transparent; }"
+        << ".nav-row { margin: 3px 8px; padding: 11px 12px; border: 1px solid transparent; "
+        << "border-radius: " << metrics->small_radius << "px; }"
+        << ".nav-row:hover { background: " << card_hover << "; }"
+        << ".nav-row:selected { background: " << select_bg
+        << "; border-color: " << border << "; border-left-width: 3px; "
+        << "border-left-color: " << operation << "; }"
+        << ".nav-label { font-size: 14px; font-weight: "
+        << typography->ui_bold_weight << "; color: " << text << "; }"
+        << ".nav-row:selected .nav-label { color: " << select_fg << "; }"
+        << ".nav-row image { color: " << summary << "; }"
+        << ".nav-discover image { color: " << info << "; }"
+        << ".nav-installed image { color: " << success << "; }"
+        << ".nav-updates image { color: " << warning << "; }"
+        << ".nav-system image { color: " << heading << "; }"
+        << ".nav-repositories image { color: " << operation << "; }"
+        << ".nav-history image { color: " << info << "; }"
+        << ".nav-repair image { color: " << fault << "; }"
+        << ".nav-row:selected image { color: " << select_fg << "; }"
         << ".sidebar-footer { padding: 12px 16px; border-top: 1px dashed "
-        << colour(palette->border_rgb) << "; }"
-        << ".sidebar-note { font-size: 10px; color: "
-        << colour(palette->subtle_rgb) << "; }"
+        << border << "; }"
+        << ".sidebar-note { font-size: 11px; color: " << summary << "; }"
 
-        << ".content { padding: " << metrics->content_padding
-        << "px; background-color: " << colour(palette->background_rgb) << "; }"
+        << ".content { padding: 30px 34px 24px 34px; background: "
+        << background << "; }"
         << ".page-hero { margin-bottom: 2px; }"
-        << ".page-icon { min-width: 42px; min-height: 42px; border-radius: "
-        << metrics->control_radius << "px; background-color: "
-        << colour(palette->surface_rgb) << "; border: 1px solid "
-        << colour(palette->border_rgb) << "; }"
+        << ".page-icon { min-width: 44px; min-height: 44px; border-radius: "
+        << metrics->control_radius << "px; background: " << surface
+        << "; border: 1px solid " << status_border << "; }"
+        << ".page-icon image { color: " << info << "; }"
         << ".hero-title { font-family: \"" << typography->brand_family
-        << "\"; font-weight: " << typography->brand_weight
-        << "; font-size: 24px; color: " << colour(palette->title_rgb) << "; }"
-        << ".hero-subtitle { font-size: 11px; color: "
-        << colour(palette->muted_rgb) << "; }"
+        << "\"; font-size: 27px; font-weight: " << typography->brand_weight
+        << "; color: " << heading << "; }"
+        << ".hero-subtitle { font-size: 12px; color: " << summary << "; }"
 
-        << ".stat-card { padding: 13px 15px; border-radius: "
-        << metrics->card_radius << "px; background-color: "
-        << colour(palette->card_rgb) << "; border: 1px solid "
-        << colour(palette->border_rgb) << "; }"
-        << ".stat-caption, .kicker { font-size: 9px; font-weight: "
-        << typography->ui_bold_weight << "; color: "
-        << colour(palette->info_rgb) << "; }"
-        << ".stat-value { font-size: 16px; font-weight: "
-        << typography->ui_bold_weight << "; color: "
-        << colour(palette->title_rgb) << "; }"
+        << ".page-discover .page-icon, .page-discover .page-icon image, "
+        << ".page-discover .hero-title { color: " << info << "; border-color: " << info << "; }"
+        << ".page-installed .page-icon, .page-installed .page-icon image, "
+        << ".page-installed .hero-title { color: " << success << "; border-color: " << success_border << "; }"
+        << ".page-updates .page-icon, .page-updates .page-icon image, "
+        << ".page-updates .hero-title { color: " << warning << "; border-color: " << warning_border << "; }"
+        << ".page-system .page-icon, .page-system .page-icon image, "
+        << ".page-system .hero-title { color: " << heading << "; border-color: " << status_border << "; }"
+        << ".page-repositories .page-icon, .page-repositories .page-icon image, "
+        << ".page-repositories .hero-title { color: " << operation << "; border-color: " << operation << "; }"
+        << ".page-history .page-icon, .page-history .page-icon image, "
+        << ".page-history .hero-title { color: " << info << "; border-color: " << info << "; }"
+        << ".page-repair .page-icon, .page-repair .page-icon image, "
+        << ".page-repair .hero-title { color: " << fault << "; border-color: " << fault << "; }"
 
-        << ".card { padding: 16px; border-radius: "
-        << metrics->card_radius << "px; background-color: "
-        << colour(palette->card_rgb) << "; border: 1px solid "
-        << colour(palette->border_rgb) << "; }"
+        << ".stat-card { padding: 15px 16px; border-radius: "
+        << metrics->control_radius << "px; background: " << card
+        << "; border: 1px solid " << border << "; }"
+        << ".stat-caption, .kicker { font-size: 10px; font-weight: "
+        << typography->ui_bold_weight << "; color: " << kicker << "; }"
+        << ".stat-value { font-size: 17px; font-weight: "
+        << typography->ui_bold_weight << "; color: " << heading << "; }"
+        << ".stat-info { border-color: " << info << "; }"
+        << ".stat-info .stat-value { color: " << info << "; }"
+        << ".stat-operation { border-color: " << operation << "; }"
+        << ".stat-operation .stat-value { color: " << operation << "; }"
+        << ".stat-success { border-color: " << success_border << "; }"
+        << ".stat-success .stat-value { color: " << success << "; }"
+
+        << ".card { padding: 18px; border-radius: " << metrics->control_radius
+        << "px; background: " << card << "; border: 1px solid " << border << "; }"
+        << ".card-info { border-color: " << info << "; }"
+        << ".page-discover .card { border-color: " << info << "; }"
+        << ".page-updates .card { border-color: " << warning_border << "; }"
+        << ".page-system .card { border-color: " << status_border << "; }"
+        << ".page-repositories .card { border-color: " << operation << "; }"
+        << ".page-history .card { border-color: " << info << "; }"
+        << ".page-repair .card { border-color: " << fault << "; }"
         << ".card-title { font-family: \"" << typography->brand_family
-        << "\"; font-size: 16px; font-weight: " << typography->brand_weight
-        << "; color: " << colour(palette->title_rgb) << "; }"
-        << ".card-copy { font-size: 11px; color: "
-        << colour(palette->muted_rgb) << "; }"
+        << "\"; font-size: 16px; font-weight: " << typography->ui_bold_weight
+        << "; color: " << heading << "; }"
+        << ".card-copy { font-size: 12px; color: " << note << "; }"
+        << ".page-updates .kicker { color: " << warning << "; }"
+        << ".page-repositories .kicker { color: " << operation << "; }"
+        << ".page-repair .kicker { color: " << fault << "; }"
 
-        << ".package-list, listview, scrolledwindow { background-color: "
-        << colour(palette->card_rgb) << "; }"
-        << ".package-list { border: 1px solid " << colour(palette->border_rgb)
+        << ".package-list, listview, scrolledwindow { background: " << card << "; }"
+        << ".package-list { border: 1px solid " << status_border
         << "; border-radius: " << metrics->control_radius << "px; }"
-        << ".package-row { padding: 8px 10px; }"
-        << "listview row { border-bottom: 1px solid "
-        << colour(palette->border_rgb) << "; }"
-        << "listview row:selected { background-color: "
-        << colour(palette->selection_background_rgb)
-        << "; color: " << colour(palette->selection_foreground_rgb) << "; }"
+        << ".package-row { padding: 10px 12px; }"
+        << ".package-row label { font-size: 13px; color: " << text << "; }"
+        << ".package-icon { color: " << operation << "; }"
+        << "listview row { border-bottom: 1px solid " << border << "; }"
+        << "listview row:hover { background: " << card_hover << "; }"
+        << "listview row:selected { background: " << select_bg << "; }"
+        << "listview row:selected label, listview row:selected image { color: "
+        << select_fg << "; }"
 
-        << ".statusbar { min-height: 24px; padding: 0 10px; background-color: "
-        << colour(palette->panel_rgb) << "; border-top: 1px solid "
-        << colour(palette->border_rgb) << "; }"
-        << ".statusbar-text { font-size: 9px; color: "
-        << colour(palette->subtle_rgb) << "; }"
+        << ".statusbar { padding: 8px 12px; border-top: 1px solid "
+        << connection_border << "; background: " << connection << "; }"
+        << ".statusbar-text { font-size: 11px; color: " << summary << "; }"
 
-        << "button, entry, checkbutton { color: "
-        << colour(palette->button_foreground_rgb) << "; }"
-        << "button { background-image: none; background-color: "
-        << colour(palette->button_background_rgb)
-        << "; border: 1px solid " << colour(palette->border_rgb)
-        << "; border-radius: " << metrics->control_radius << "px; }"
-        << "button:hover { background-color: "
-        << colour(palette->card_hover_rgb) << "; }"
-        << "selection { background-color: "
-        << colour(palette->selection_background_rgb)
-        << "; color: " << colour(palette->selection_foreground_rgb) << "; }";
+        << "button { min-height: 30px; padding: 0 12px; background: "
+        << button_bg << "; border: 1px solid " << border
+        << "; border-radius: " << metrics->small_radius
+        << "px; font-weight: " << typography->ui_bold_weight << "; }"
+        << "button, button label, button image { color: " << button_fg << "; }"
+        << "button:hover { background: " << operation_hover << "; }"
+        << "button:hover, button:hover label, button:hover image { color: " << text << "; }"
+        << "button.suggested-action { background: " << operation
+        << "; border-color: " << operation << "; }"
+        << "button.suggested-action, button.suggested-action label, "
+        << "button.suggested-action image { color: " << accent_fg << "; }"
+        << "button.suggested-action:hover { background: " << accent_hover
+        << "; border-color: " << accent_hover << "; }"
+        << "selection { background: " << select_bg << "; color: " << select_fg << "; }"
+        << ".selected-summary { color: " << selected_summary << "; }"
+        << ".warning-muted { color: " << warning_muted << "; }"
+        << ".detail-label { color: " << detail_label << "; }";
 
     const std::string css_text = css.str();
 #if GTK_CHECK_VERSION(4, 12, 0)

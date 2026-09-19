@@ -14,7 +14,7 @@ A backend translates one native package ecosystem into the core model. Capabilit
 
 APT/.deb is the first backend. Version 0.1 begins with read-only installed-package inventory. Catalogue search, update calculation and transaction planning are added before any write path.
 
-Common 1.19.8 owns reusable project-family facilities such as semantic theme design and other product-neutral mechanisms. Software's appearance controller consumes Common's System/Day/Night mode policy, semantic palettes, typography roles and structural metrics. Follow OS listens for GTK desktop-theme changes and resolves System dynamically. The selected mode is stored atomically through Common's POSIX durability API. Package semantics remain local to Software.
+Common 1.19.10 owns reusable project-family facilities such as semantic theme design and other product-neutral mechanisms. Software's appearance controller consumes Common's System/Day/Night mode policy, semantic palettes, typography roles and structural metrics. Follow OS listens for GTK desktop-theme changes and resolves System dynamically. The selected mode is stored atomically through Common's POSIX durability API. Package semantics remain local to Software.
 
 ## Dependency rule
 

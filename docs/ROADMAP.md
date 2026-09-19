@@ -4,7 +4,7 @@
 
 ## 0.1 — Read-only foundation
 
-One shell with Discover, Installed, Updates, System, Repositories, History and Repair; exact Common 1.19.8 pin; backend-neutral models; explicit capabilities; real read-only dpkg installed inventory; virtualized GTK4 list; tests and main-branch CI.
+One shell with Discover, Installed, Updates, System, Repositories, History and Repair; exact Common 1.19.10 pin; backend-neutral models; explicit capabilities; real read-only dpkg installed inventory; virtualized GTK4 list; tests and main-branch CI.
 
 ## 0.2 — Catalogue and authoritative identity
 

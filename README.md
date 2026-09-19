@@ -6,9 +6,9 @@ Infiltrator Software is the software-management application for the Infiltrator 
 
 The application presents one authoritative view of software discovery, installation, removal, updates, system components, repositories, release channels, history and repair while keeping privileged package operations isolated behind backend interfaces.
 
-**Current source version:** 0.1.1  
+**Current source version:** 0.1.2  
 **Language:** C++17 application/core with native GTK4 Linux shell; C11 Common foundation  
-**Shared foundation:** Common 1.19.8  
+**Shared foundation:** Common 1.19.10  
 **Initial package backend:** APT/.deb  
 **Licence:** GPL-3.0-or-later
 
@@ -80,13 +80,13 @@ Channel policy belongs to the repository/backend layer; the UI exposes the resul
 
 ## Appearance
 
-Software uses the Common 1.19.8 appearance contract directly. The user can select **Follow OS**, **Day** or **Night**. Follow OS is the default, resolves through Common's System mode, watches the GTK desktop appearance live and reapplies the Common Day/Night palette when the host theme changes. The selected mode is persisted in the user's configuration using Common's durable atomic-file writer.
+Software uses the Common 1.19.10 appearance contract directly. The user can select **Follow OS**, **Day** or **Night**. Follow OS is the default, resolves through Common's System mode, watches the GTK desktop appearance live and reapplies the Common Day/Night palette when the host theme changes. The selected mode is persisted in the user's configuration using Common's durable atomic-file writer.
 
 Typography, semantic colours and structural metrics come from Common rather than private Software copies.
 
 ## Shared foundation
 
-Infiltrator Software uses Infiltratr Common 1.19.8 for project-family mechanisms that are genuinely generic. Product-specific package semantics remain in this repository.
+Infiltrator Software uses Infiltratr Common 1.19.10 for project-family mechanisms that are genuinely generic. Product-specific package semantics remain in this repository.
 
 The project follows the same rule as the rest of the family: Common is used when it provides the authoritative generic implementation; functionality is not moved into Common merely to increase reuse.
 
@@ -98,7 +98,7 @@ src/
 ├── core/                Product model and transaction model
 ├── backend/             Backend-neutral package-management contracts
 ├── backends/apt/        Initial APT/.deb implementation
-└── infiltratr-common/   Exact Common 1.19.8 gitlink
+└── infiltratr-common/   Exact Common 1.19.10 gitlink
 
 tests/                   Backend-contract and core regression tests
 docs/                    Architecture, metadata, transaction and roadmap contracts
@@ -132,7 +132,7 @@ Write operations are not enabled until transaction planning, error propagation a
 
 The first supported development target is Linux. The desktop shell uses GTK4 through its C API from C++17, avoiding an additional gtkmm runtime/development layer.
 
-The repository pins the exact reviewed Common 1.19.8 release/commit and uses CMake/CTest. Linux releases publish a verified Debian package, deterministic source bundle, licence and checksums from the exact tested main commit; release publication is immutable.
+The repository pins the exact reviewed Common 1.19.10 release/commit and uses CMake/CTest. Linux releases publish a verified Debian package, deterministic source bundle, licence and checksums from the exact tested main commit; release publication is immutable.
 
 ## Repository policy
 

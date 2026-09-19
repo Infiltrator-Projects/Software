@@ -49,10 +49,16 @@ GtkWidget *make_label(
 }
 
 GtkWidget *make_stat_card(
-    const char *caption, const char *value, GtkWidget **value_out = nullptr)
+    const char *caption,
+    const char *value,
+    const char *semantic_class,
+    GtkWidget **value_out = nullptr)
 {
     GtkWidget *card = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
     gtk_widget_add_css_class(card, "stat-card");
+    if (semantic_class != nullptr) {
+        gtk_widget_add_css_class(card, semantic_class);
+    }
 
     GtkWidget *caption_label = make_label(caption, "stat-caption");
     gtk_box_append(GTK_BOX(card), caption_label);
@@ -97,10 +103,14 @@ GtkWidget *make_foundation_page(
     const char *title,
     const char *subtitle,
     const char *section_title,
-    const char *section_copy)
+    const char *section_copy,
+    const char *semantic_class)
 {
     GtkWidget *page = gtk_box_new(GTK_ORIENTATION_VERTICAL, 16);
     gtk_widget_add_css_class(page, "content");
+    if (semantic_class != nullptr) {
+        gtk_widget_add_css_class(page, semantic_class);
+    }
 
     gtk_box_append(
         GTK_BOX(page),
@@ -128,6 +138,7 @@ void list_item_setup(GtkSignalListItemFactory *, GtkListItem *item, gpointer)
     gtk_widget_add_css_class(row, "package-row");
 
     GtkWidget *icon = make_icon("application-x-executable-symbolic", 20);
+    gtk_widget_add_css_class(icon, "package-icon");
     gtk_box_append(GTK_BOX(row), icon);
 
     GtkWidget *label = gtk_label_new(nullptr);
@@ -204,6 +215,7 @@ GtkWidget *make_installed_page(WindowState *state)
 {
     GtkWidget *page = gtk_box_new(GTK_ORIENTATION_VERTICAL, 16);
     gtk_widget_add_css_class(page, "content");
+    gtk_widget_add_css_class(page, "page-installed");
 
     gtk_box_append(
         GTK_BOX(page),
@@ -217,20 +229,21 @@ GtkWidget *make_installed_page(WindowState *state)
     gtk_grid_set_column_homogeneous(GTK_GRID(stats), true);
     gtk_grid_attach(
         GTK_GRID(stats),
-        make_stat_card("PACKAGES", "0", &state->installed_count),
+        make_stat_card("PACKAGES", "0", "stat-info", &state->installed_count),
         0, 0, 1, 1);
     gtk_grid_attach(
         GTK_GRID(stats),
-        make_stat_card("BACKEND", "APT/.deb"),
+        make_stat_card("BACKEND", "APT/.deb", "stat-operation"),
         1, 0, 1, 1);
     gtk_grid_attach(
         GTK_GRID(stats),
-        make_stat_card("STATE", "Loading", &state->backend_state),
+        make_stat_card("STATE", "Loading", "stat-success", &state->backend_state),
         2, 0, 1, 1);
     gtk_box_append(GTK_BOX(page), stats);
 
     GtkWidget *card = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
     gtk_widget_add_css_class(card, "card");
+    gtk_widget_add_css_class(card, "card-info");
     gtk_widget_set_vexpand(card, true);
 
     GtkWidget *heading = make_label("Installed packages", "card-title");
@@ -266,7 +279,8 @@ GtkWidget *make_installed_page(WindowState *state)
     return page;
 }
 
-GtkWidget *make_nav_row(const char *icon_name, const char *text)
+GtkWidget *make_nav_row(
+    const char *icon_name, const char *text, const char *semantic_class)
 {
     GtkWidget *row_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 11);
     GtkWidget *icon = make_icon(icon_name, 18);
@@ -277,6 +291,9 @@ GtkWidget *make_nav_row(const char *icon_name, const char *text)
 
     GtkWidget *row = gtk_list_box_row_new();
     gtk_widget_add_css_class(row, "nav-row");
+    if (semantic_class != nullptr) {
+        gtk_widget_add_css_class(row, semantic_class);
+    }
     gtk_list_box_row_set_child(GTK_LIST_BOX_ROW(row), row_box);
     return row;
 }
@@ -317,6 +334,10 @@ GtkWidget *make_navigation(WindowState *state)
         "document-open-recent-symbolic",
         "dialog-warning-symbolic"
     };
+    static constexpr const char *semantic_classes[] = {
+        "nav-discover", "nav-installed", "nav-updates", "nav-system",
+        "nav-repositories", "nav-history", "nav-repair"
+    };
 
     GtkWidget *outer = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
     gtk_widget_set_size_request(outer, 248, -1);
@@ -340,7 +361,7 @@ GtkWidget *make_navigation(WindowState *state)
     for (int i = 0; i < 7; ++i) {
         gtk_list_box_append(
             GTK_LIST_BOX(list),
-            make_nav_row(icons[i], labels[i]));
+            make_nav_row(icons[i], labels[i], semantic_classes[i]));
     }
 
     g_signal_connect(
@@ -353,7 +374,7 @@ GtkWidget *make_navigation(WindowState *state)
     GtkWidget *footer = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
     gtk_widget_add_css_class(footer, "sidebar-footer");
     GtkWidget *backend = make_label("APT/.deb backend", "sidebar-note");
-    GtkWidget *common = make_label("Common 1.19.8", "sidebar-note");
+    GtkWidget *common = make_label("Common 1.19.10", "sidebar-note");
     gtk_box_append(GTK_BOX(footer), backend);
     gtk_box_append(GTK_BOX(footer), common);
     gtk_box_append(GTK_BOX(outer), footer);
@@ -436,12 +457,14 @@ GtkWidget *make_header_bar(WindowState *state)
     gtk_box_append(GTK_BOX(title_box), subtitle);
     gtk_header_bar_set_title_widget(GTK_HEADER_BAR(bar), title_box);
 
-    GtkWidget *about = gtk_button_new_from_icon_name("help-about-symbolic");
-    gtk_widget_set_tooltip_text(about, "About Infiltrator Software");
-    gtk_widget_add_css_class(about, "titlebar-button");
+    GtkWidget *refresh =
+        gtk_button_new_from_icon_name("view-refresh-symbolic");
+    gtk_widget_set_tooltip_text(
+        refresh, "Refresh installed software information");
+    gtk_widget_add_css_class(refresh, "titlebar-button");
     g_signal_connect(
-        about, "clicked", G_CALLBACK(about_clicked), state);
-    gtk_header_bar_pack_end(GTK_HEADER_BAR(bar), about);
+        refresh, "clicked", G_CALLBACK(refresh_clicked), state);
+    gtk_header_bar_pack_end(GTK_HEADER_BAR(bar), refresh);
 
     state->theme_button = gtk_button_new_with_label("Theme: System");
     gtk_widget_set_tooltip_text(
@@ -452,14 +475,12 @@ GtkWidget *make_header_bar(WindowState *state)
         state->theme_button, "clicked", G_CALLBACK(theme_clicked), state);
     gtk_header_bar_pack_end(GTK_HEADER_BAR(bar), state->theme_button);
 
-    GtkWidget *refresh =
-        gtk_button_new_from_icon_name("view-refresh-symbolic");
-    gtk_widget_set_tooltip_text(
-        refresh, "Refresh installed software information");
-    gtk_widget_add_css_class(refresh, "titlebar-button");
+    GtkWidget *about = gtk_button_new_from_icon_name("help-about-symbolic");
+    gtk_widget_set_tooltip_text(about, "About Infiltrator Software");
+    gtk_widget_add_css_class(about, "titlebar-button");
     g_signal_connect(
-        refresh, "clicked", G_CALLBACK(refresh_clicked), state);
-    gtk_header_bar_pack_end(GTK_HEADER_BAR(bar), refresh);
+        about, "clicked", G_CALLBACK(about_clicked), state);
+    gtk_header_bar_pack_end(GTK_HEADER_BAR(bar), about);
 
     update_theme_button(state);
     return bar;
@@ -541,7 +562,8 @@ void activate(GtkApplication *application, gpointer)
             "Catalogue foundation",
             "Authoritative repository metadata, application identity and icon "
             "provenance are the next functional milestone. The UI is already "
-            "separated from package-manager mechanics."),
+            "separated from package-manager mechanics.",
+            "page-discover"),
         "discover");
 
     gtk_stack_add_named(
@@ -557,7 +579,8 @@ void activate(GtkApplication *application, gpointer)
             "Application and system updates in one place.",
             "Transaction planning first",
             "Updates remain read-only until dependency resolution, complete "
-            "change-set presentation and privilege separation are proven."),
+            "change-set presentation and privilege separation are proven.",
+            "page-updates"),
         "updates");
 
     gtk_stack_add_named(
@@ -568,7 +591,8 @@ void activate(GtkApplication *application, gpointer)
             "Kernels, drivers and core operating-system components.",
             "System changes stay distinct",
             "System-critical updates will remain visually and operationally "
-            "distinct without forcing a second updater application."),
+            "distinct without forcing a second updater application.",
+            "page-system"),
         "system");
 
     gtk_stack_add_named(
@@ -579,7 +603,8 @@ void activate(GtkApplication *application, gpointer)
             "Sources, priorities and Stable/Beta/Alpha channels.",
             "Repository policy",
             "Repository and channel management will be exposed here without "
-            "requiring manual editing of package-source files."),
+            "requiring manual editing of package-source files.",
+            "page-repositories"),
         "repositories");
 
     gtk_stack_add_named(
@@ -590,7 +615,8 @@ void activate(GtkApplication *application, gpointer)
             "Exact software-management operations and outcomes.",
             "Durable transaction history",
             "Future write operations will record exact before/after versions, "
-            "source provenance and recovery linkage."),
+            "source provenance and recovery linkage.",
+            "page-history"),
         "history");
 
     gtk_stack_add_named(
@@ -601,7 +627,8 @@ void activate(GtkApplication *application, gpointer)
             "Diagnose interrupted package and repository state.",
             "Repair is explicit",
             "Broken dependencies, interrupted transactions and inconsistent "
-            "repository state will be diagnosed here rather than hidden."),
+            "repository state will be diagnosed here rather than hidden.",
+            "page-repair"),
         "repair");
 
     gtk_stack_set_visible_child_name(state->stack, "discover");
