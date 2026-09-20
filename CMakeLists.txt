@@ -128,7 +128,8 @@ add_library(software-engine STATIC
 target_include_directories(software-engine PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_link_libraries(software-engine PUBLIC software-core
-    PRIVATE PkgConfig::CURL PkgConfig::GLIB PkgConfig::ZLIB PkgConfig::LZMA)
+    PRIVATE InfiltratrCommon::Common
+            PkgConfig::CURL PkgConfig::GLIB PkgConfig::ZLIB PkgConfig::LZMA)
 
 add_library(software-apt STATIC src/backends/apt/apt_backend.cpp)
 target_include_directories(software-apt PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
