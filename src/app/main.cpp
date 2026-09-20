@@ -2858,8 +2858,12 @@ void activate(GtkApplication *application, gpointer)
             G_OBJECT(application),
             "infiltrator-open-updates") != nullptr;
 
+    GList *windows =
+        gtk_application_get_windows(application);
     GtkWindow *existing =
-        gtk_application_get_active_window(application);
+        windows == nullptr
+            ? nullptr
+            : GTK_WINDOW(windows->data);
     if (existing != nullptr) {
         auto *state =
             static_cast<WindowState *>(
