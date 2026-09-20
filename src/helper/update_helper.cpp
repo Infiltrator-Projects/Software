@@ -140,6 +140,54 @@ const char *apt_get_path()
     return nullptr;
 }
 
+std::vector<char *> apt_argv(std::vector<std::string> &arguments)
+{
+    std::vector<char *> argv;
+    argv.reserve(arguments.size() + 2U);
+    argv.push_back(const_cast<char *>("apt-get"));
+    for (std::string &argument : arguments) {
+        argv.push_back(argument.data());
+    }
+    argv.push_back(nullptr);
+    return argv;
+}
+
+int run_apt(std::vector<std::string> arguments)
+{
+    const char *path = apt_get_path();
+    if (path == nullptr) {
+        std::fprintf(stderr, "apt-get is not available.\n");
+        return 127;
+    }
+
+    const pid_t child = fork();
+    if (child < 0) {
+        std::perror("Unable to start apt-get");
+        return 127;
+    }
+    if (child == 0) {
+        std::vector<char *> argv = apt_argv(arguments);
+        (void)setenv("DEBIAN_FRONTEND", "noninteractive", 1);
+        (void)setenv("LC_ALL", "C", 1);
+        execv(path, argv.data());
+        std::perror("Unable to execute apt-get");
+        _exit(127);
+    }
+
+    int status = 0;
+    while (waitpid(child, &status, 0) < 0) {
+        if (errno == EINTR) {
+            continue;
+        }
+        std::perror("Unable to collect apt-get status");
+        return 127;
+    }
+    if (!WIFEXITED(status)) {
+        return 1;
+    }
+    return WEXITSTATUS(status);
+}
+
 int execute_apt(std::vector<std::string> arguments)
 {
     const char *path = apt_get_path();
@@ -148,14 +196,7 @@ int execute_apt(std::vector<std::string> arguments)
         return 127;
     }
 
-    std::vector<char *> argv;
-    argv.reserve(arguments.size() + 2U);
-    argv.push_back(const_cast<char *>("apt-get"));
-    for (std::string &argument : arguments) {
-        argv.push_back(argument.data());
-    }
-    argv.push_back(nullptr);
-
+    std::vector<char *> argv = apt_argv(arguments);
     (void)setenv("DEBIAN_FRONTEND", "noninteractive", 1);
     (void)setenv("LC_ALL", "C", 1);
     execv(path, argv.data());
@@ -173,10 +214,6 @@ int main(int argc, char **argv)
             stderr,
             "infiltrator-software-update-helper must run as root.\n");
         return 1;
-    }
-
-    if (argc == 2 && std::strcmp(argv[1], "refresh") == 0) {
-        return execute_apt({"update"});
     }
 
     if (argc >= 3 && std::strcmp(argv[1], "apply") == 0) {
@@ -205,12 +242,26 @@ int main(int argc, char **argv)
             arguments.push_back(spec);
         }
 
+        /*
+         * Refresh the root-owned system metadata only after the user has
+         * chosen to install and Polkit has authorized this helper. The GUI's
+         * read-only refresh never needs administrator credentials; this update
+         * also ensures the exact versions approved in the preflight plan are
+         * checked against current authenticated system repository metadata.
+         */
+        const int refresh_status = run_apt({"update"});
+        if (refresh_status != 0) {
+            std::fprintf(
+                stderr,
+                "Unable to refresh system package metadata before install.\n");
+            return refresh_status;
+        }
+
         return execute_apt(std::move(arguments));
     }
 
     std::fprintf(
         stderr,
-        "Usage: infiltrator-software-update-helper refresh\n"
-        "   or: infiltrator-software-update-helper apply PACKAGE[=VERSION]...\n");
+        "Usage: infiltrator-software-update-helper apply PACKAGE[=VERSION]...\n");
     return 64;
 }
