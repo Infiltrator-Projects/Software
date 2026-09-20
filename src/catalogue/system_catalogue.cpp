@@ -4,7 +4,12 @@
 #include <appstream.h>
 
 #include <algorithm>
+#include <array>
+#include <cerrno>
 #include <cstdlib>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
 #include <filesystem>
 #include <iterator>
 #include <set>
@@ -114,6 +119,153 @@ std::unordered_set<std::string> flatpak_installed_ids()
     return ids;
 }
 
+
+std::vector<std::string_view> split_tabs(const std::string_view line)
+{
+    std::vector<std::string_view> fields;
+    std::size_t start = 0U;
+    for (;;) {
+        const std::size_t tab = line.find('\t', start);
+        if (tab == std::string_view::npos) {
+            fields.emplace_back(line.substr(start));
+            return fields;
+        }
+        fields.emplace_back(line.substr(start, tab - start));
+        start = tab + 1U;
+    }
+}
+
+bool run_flatpak_remote_ls(std::string &output)
+{
+    output.clear();
+
+    if (access("/usr/bin/flatpak", X_OK) != 0 &&
+        access("/bin/flatpak", X_OK) != 0) {
+        return true;
+    }
+
+    int pipe_fd[2]{};
+    if (pipe(pipe_fd) != 0) {
+        return false;
+    }
+
+    const pid_t child = fork();
+    if (child < 0) {
+        close(pipe_fd[0]);
+        close(pipe_fd[1]);
+        return false;
+    }
+
+    if (child == 0) {
+        close(pipe_fd[0]);
+        if (dup2(pipe_fd[1], STDOUT_FILENO) < 0 ||
+            dup2(pipe_fd[1], STDERR_FILENO) < 0) {
+            _exit(127);
+        }
+        close(pipe_fd[1]);
+
+        execlp(
+            "flatpak",
+            "flatpak",
+            "remote-ls",
+            "--app",
+            "--columns=application,name,description,branch,origin",
+            static_cast<char *>(nullptr));
+        _exit(127);
+    }
+
+    close(pipe_fd[1]);
+    std::array<char, 8192> buffer{};
+    for (;;) {
+        const ssize_t count =
+            read(pipe_fd[0], buffer.data(), buffer.size());
+        if (count > 0) {
+            output.append(
+                buffer.data(),
+                static_cast<std::size_t>(count));
+            continue;
+        }
+        if (count == 0) {
+            break;
+        }
+        if (errno == EINTR) {
+            continue;
+        }
+        close(pipe_fd[0]);
+        int ignored = 0;
+        (void)waitpid(child, &ignored, 0);
+        return false;
+    }
+    close(pipe_fd[0]);
+
+    int status = 0;
+    while (waitpid(child, &status, 0) < 0) {
+        if (errno == EINTR) {
+            continue;
+        }
+        return false;
+    }
+
+    return WIFEXITED(status) && WEXITSTATUS(status) == 0;
+}
+
+std::vector<PackageRecord> flatpak_remote_records()
+{
+    std::vector<PackageRecord> result;
+    std::string output;
+    if (!run_flatpak_remote_ls(output) || output.empty()) {
+        return result;
+    }
+
+    const auto installed = flatpak_installed_ids();
+
+    std::size_t start = 0U;
+    while (start < output.size()) {
+        const std::size_t end = output.find('\n', start);
+        const std::string_view line{
+            output.data() + start,
+            (end == std::string::npos ? output.size() : end) - start};
+
+        const auto fields = split_tabs(line);
+        if (fields.size() >= 5U &&
+            !fields[0].empty() &&
+            !fields[1].empty()) {
+            PackageRecord record;
+            record.id = "flatpak:" + std::string(fields[0]);
+            record.package_name.assign(fields[0]);
+            record.name.assign(fields[1]);
+            record.description.assign(fields[2]);
+            record.summary = record.description;
+            record.available_version.assign(fields[3]);
+            record.source = fields[4].empty()
+                ? "Flatpak"
+                : "Flatpak · " + std::string(fields[4]);
+            record.category = "Flatpak";
+            record.kind = PackageKind::application;
+            record.channel = Channel::stable;
+
+            if (installed.find(record.package_name) != installed.end()) {
+                record.state = InstallState::installed;
+                record.installed_version =
+                    record.available_version.empty()
+                        ? "Flatpak"
+                        : record.available_version;
+            }
+
+            if (valid_identity(record)) {
+                result.emplace_back(std::move(record));
+            }
+        }
+
+        if (end == std::string::npos) {
+            break;
+        }
+        start = end + 1U;
+    }
+
+    return result;
+}
+
 PackageRecord convert_component(
     AsComponent *component,
     const std::unordered_set<std::string> &installed_flatpaks)
@@ -136,9 +288,7 @@ PackageRecord convert_component(
         return record;
     }
 
-    AsBundle *flatpak_bundle =
-        as_component_get_bundle(component, AS_BUNDLE_KIND_FLATPAK);
-    const bool is_flatpak = flatpak_bundle != nullptr;
+    const bool is_flatpak = false;
 
     record.name = name;
     record.category = category_for(component);
@@ -207,7 +357,7 @@ CatalogueSnapshot SystemCatalogue::refresh(std::string &error)
 {
     error.clear();
     CatalogueSnapshot snapshot;
-    snapshot.source = "System AppStream + Flatpak";
+    snapshot.source = "System AppStream + Flatpak CLI";
 
     AsPool *pool = as_pool_new();
     if (pool == nullptr) {
@@ -219,8 +369,7 @@ CatalogueSnapshot SystemCatalogue::refresh(std::string &error)
         pool,
         static_cast<AsPoolFlags>(
             AS_POOL_FLAG_LOAD_OS_CATALOG |
-            AS_POOL_FLAG_LOAD_OS_METAINFO |
-            AS_POOL_FLAG_LOAD_FLATPAK));
+            AS_POOL_FLAG_LOAD_OS_METAINFO));
 
     GError *load_error = nullptr;
     if (!as_pool_load(pool, nullptr, &load_error)) {
@@ -260,6 +409,14 @@ CatalogueSnapshot SystemCatalogue::refresh(std::string &error)
 
     g_object_unref(components);
     g_object_unref(pool);
+
+    std::vector<PackageRecord> flatpaks =
+        flatpak_remote_records();
+    for (PackageRecord &record : flatpaks) {
+        if (seen.insert(record.id).second) {
+            snapshot.records.emplace_back(std::move(record));
+        }
+    }
 
     std::sort(
         snapshot.records.begin(),
