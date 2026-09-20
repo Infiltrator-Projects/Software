@@ -105,6 +105,8 @@ The seventh native slice implements the durable package-state store. It uses SQL
 
 The eighth native slice implements deterministic transaction planning for install and upgrade operations. A plan is tied to a state generation and source fingerprint, selects requested roots using repository priority and Debian version rules, expands dependencies through the native resolver, rejects unresolved Conflicts/Breaks, honours holds and downgrade policy, distinguishes requested from dependency-induced changes, carries repository/payload provenance and SHA-256 into each item, and calculates total download bytes plus signed installed-size delta. Removal deliberately remains fail-closed until reverse-dependency state is represented in the engine database.
 
+The ninth native slice implements the shared engine service. A D-Bus-activatable session process owns the cached in-memory view of the latest SQLite generation and computes the update view once per generation. It exposes health/generation status, installed inventory, update inventory and native transaction planning through a typed local D-Bus contract, monitors package-state publication, emits StateChanged/HealthChanged events, and preserves the last loaded generation if a later read fails. Database reads use a dedicated read-only SQLite connection so ordinary clients never need write access to the state store.
+
 Migration is complete only when normal operation no longer spawns APT programs.
 
 During migration:
