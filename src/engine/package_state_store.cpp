@@ -193,6 +193,39 @@ bool open_database(
             error);
 }
 
+bool open_database_read_only(
+    const std::string &path,
+    Database &database,
+    std::string &error)
+{
+    error.clear();
+
+    if (sqlite3_open_v2(
+            path.c_str(),
+            &database.handle,
+            SQLITE_OPEN_READONLY |
+                SQLITE_OPEN_FULLMUTEX |
+                SQLITE_OPEN_NOFOLLOW,
+            nullptr) != SQLITE_OK) {
+        error = database.handle != nullptr
+            ? sqlite_error(database.handle)
+            : "Unable to open package-state database for reading.";
+        return false;
+    }
+
+    sqlite3_busy_timeout(database.handle, 5000);
+
+    return
+        exec_sql(
+            database.handle,
+            "PRAGMA query_only=ON;",
+            error) &&
+        exec_sql(
+            database.handle,
+            "PRAGMA trusted_schema=OFF;",
+            error);
+}
+
 bool read_schema_version(
     sqlite3 *database,
     int &version,
@@ -312,6 +345,32 @@ bool open_ready(
     return
         open_database(path, database, error) &&
         ensure_schema(database.handle, error);
+}
+
+bool open_reader(
+    const std::string &path,
+    Database &database,
+    std::string &error)
+{
+    if (!open_database_read_only(
+            path, database, error)) {
+        return false;
+    }
+
+    int version = 0;
+    if (!read_schema_version(
+            database.handle,
+            version,
+            error)) {
+        return false;
+    }
+    if (version != kSchemaVersion) {
+        error =
+            "Unsupported package-state schema version " +
+            std::to_string(version) + ".";
+        return false;
+    }
+    return true;
 }
 
 bool step_done(
@@ -632,7 +691,7 @@ PackageStateStore::load_current(
     std::string &error) const
 {
     Database database;
-    if (!open_ready(path_, database, error)) {
+    if (!open_reader(path_, database, error)) {
         return std::nullopt;
     }
 
