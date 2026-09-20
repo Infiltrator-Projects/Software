@@ -175,15 +175,13 @@ PackageRecord convert_component(
                     : record.available_version;
         }
     } else {
-        gchar *package_name = as_component_get_pkgname(component);
+        const gchar *package_name = as_component_get_pkgname(component);
         if (package_name == nullptr || *package_name == '\0') {
-            g_free(package_name);
             return PackageRecord{};
         }
 
         record.package_name = package_name;
         record.id = "apt:" + record.package_name;
-        g_free(package_name);
 
         record.source = origin.empty()
             ? "APT repository"
