@@ -15,6 +15,8 @@ public:
     std::vector<PackageRecord> list_installed(std::string &error) override;
     std::vector<PackageRecord> search(
         std::string_view query, std::string &error) override;
+    bool refresh_metadata(std::string &error);
+
     std::vector<PackageRecord> list_updates(std::string &error) override;
     std::optional<TransactionPlan> plan(
         const TransactionRequest &request, std::string &error) override;
