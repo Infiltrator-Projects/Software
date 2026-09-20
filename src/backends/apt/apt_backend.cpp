@@ -155,7 +155,7 @@ std::string package_key(std::string value)
 
 void classify(PackageRecord &package)
 {
-    const std::string_view id = package_key(package.id);
+    const std::string id = package_key(package.id);
 
     if (id.rfind("linux-image", 0U) == 0U ||
         id.rfind("linux-modules", 0U) == 0U ||
