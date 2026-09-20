@@ -1,0 +1,264 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+#include "engine/engine_service_core.hpp"
+
+#include "engine/debian_transaction.hpp"
+
+#include <algorithm>
+#include <cstdlib>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
+
+namespace infiltrator::software {
+namespace {
+
+std::string package_base(const std::string_view identity)
+{
+    const std::size_t colon = identity.find(':');
+    return std::string(
+        colon == std::string_view::npos
+            ? identity
+            : identity.substr(0U, colon));
+}
+
+void classify_update(
+    PackageRecord &record,
+    const DebianPackageVersion &candidate)
+{
+    const std::string name =
+        package_base(record.package_name.empty()
+            ? record.id
+            : record.package_name);
+
+    record.system_critical =
+        candidate.essential ||
+        candidate.priority == "required" ||
+        name == "dpkg" ||
+        name == "systemd" ||
+        name == "libc6" ||
+        name == "linux-base" ||
+        name == "infiltrator-software" ||
+        name.rfind("linux-image", 0U) == 0U ||
+        name.rfind("linux-modules", 0U) == 0U;
+
+    if (name.rfind("linux-image", 0U) == 0U ||
+        name.rfind("linux-modules", 0U) == 0U ||
+        name.rfind("linux-headers", 0U) == 0U) {
+        record.kind = PackageKind::kernel;
+    } else if (record.system_critical) {
+        record.kind = PackageKind::system;
+    } else if (name.rfind("lib", 0U) == 0U) {
+        record.kind = PackageKind::library;
+    } else {
+        record.kind = PackageKind::application;
+    }
+}
+
+std::vector<PackageRecord> build_updates(
+    const PackageStateSnapshot &snapshot,
+    const DebianCandidatePolicy &policy)
+{
+    std::vector<PackageRecord> result;
+    const auto selections =
+        DebianCandidateSelector::select(
+            snapshot.installed,
+            snapshot.available,
+            policy);
+
+    for (const DebianCandidateSelection &selection : selections) {
+        if (!selection.candidate.has_value() ||
+            (!selection.upgrade_available &&
+             !selection.downgrade_selected)) {
+            continue;
+        }
+
+        const DebianPackageVersion &candidate =
+            *selection.candidate;
+        PackageRecord record = selection.installed;
+        record.available_version = candidate.version;
+        record.source = candidate.source;
+        record.asset = candidate.filename;
+        record.package_sha256 = candidate.sha256;
+        record.download_size_bytes = candidate.size_bytes;
+        record.state = InstallState::upgradable;
+        classify_update(record, candidate);
+        result.emplace_back(std::move(record));
+    }
+
+    std::sort(
+        result.begin(),
+        result.end(),
+        [](const PackageRecord &left,
+           const PackageRecord &right) {
+            if (left.system_critical != right.system_critical) {
+                return left.system_critical >
+                       right.system_critical;
+            }
+            if (left.kind != right.kind) {
+                return static_cast<int>(left.kind) <
+                       static_cast<int>(right.kind);
+            }
+            return left.name < right.name;
+        });
+
+    return result;
+}
+
+} // namespace
+
+EngineServiceCore::EngineServiceCore(
+    std::string state_database_path,
+    DebianCandidatePolicy policy)
+    : store_(std::move(state_database_path)),
+      policy_(std::move(policy))
+{
+}
+
+bool EngineServiceCore::reload(std::string &error)
+{
+    std::string load_error;
+    auto loaded = store_.load_current(load_error);
+    if (!loaded.has_value()) {
+        healthy_ = false;
+        detail_ = load_error.empty()
+            ? "No published package-state generation is available."
+            : load_error;
+        error = detail_;
+        return false;
+    }
+
+    if (snapshot_.has_value() &&
+        snapshot_->generation == loaded->generation &&
+        snapshot_->source_fingerprint ==
+            loaded->source_fingerprint) {
+        healthy_ = true;
+        detail_ = "Ready";
+        error.clear();
+        return true;
+    }
+
+    std::vector<PackageRecord> new_updates =
+        build_updates(*loaded, policy_);
+
+    snapshot_ = std::move(*loaded);
+    updates_ = std::move(new_updates);
+    healthy_ = true;
+    detail_ = "Ready";
+    error.clear();
+    return true;
+}
+
+EngineServiceStatus EngineServiceCore::status() const
+{
+    EngineServiceStatus result;
+    result.healthy = healthy_;
+    result.detail = detail_.empty()
+        ? (healthy_ ? "Ready" : "Package state unavailable.")
+        : detail_;
+
+    if (snapshot_.has_value()) {
+        result.generation = snapshot_->generation;
+        result.published_at_unix =
+            snapshot_->published_at_unix;
+        result.source_fingerprint =
+            snapshot_->source_fingerprint;
+        result.installed_count =
+            snapshot_->installed.size();
+        result.available_count =
+            snapshot_->available.size();
+        result.update_count = updates_.size();
+    }
+
+    return result;
+}
+
+std::vector<PackageRecord> EngineServiceCore::installed() const
+{
+    return snapshot_.has_value()
+        ? snapshot_->installed
+        : std::vector<PackageRecord>{};
+}
+
+std::vector<PackageRecord> EngineServiceCore::updates() const
+{
+    return updates_;
+}
+
+const std::string &EngineServiceCore::database_path() const noexcept
+{
+    return store_.path();
+}
+
+std::optional<TransactionPlan> EngineServiceCore::plan(
+    const TransactionRequest &request,
+    const std::string_view target_architecture,
+    std::string &error) const
+{
+    if (!snapshot_.has_value()) {
+        error =
+            "No package-state generation is available for planning.";
+        return std::nullopt;
+    }
+    if (!healthy_) {
+        error =
+            "Package state is not healthy enough to create a new "
+            "transaction plan: " + detail_;
+        return std::nullopt;
+    }
+
+    const std::string architecture =
+        target_architecture.empty()
+            ? native_debian_architecture()
+            : std::string(target_architecture);
+    if (architecture.empty()) {
+        error =
+            "Unable to determine the native Debian architecture.";
+        return std::nullopt;
+    }
+
+    return DebianTransactionPlanner::plan(
+        request,
+        snapshot_->installed,
+        snapshot_->available,
+        architecture,
+        snapshot_->generation,
+        snapshot_->source_fingerprint,
+        policy_,
+        error);
+}
+
+std::string default_package_state_path()
+{
+    const char *override_path =
+        std::getenv("INFILTRATOR_SOFTWARE_STATE_DB");
+    if (override_path != nullptr &&
+        *override_path != '\0') {
+        return override_path;
+    }
+
+    return "/var/lib/infiltrator/software/packages.db";
+}
+
+std::string native_debian_architecture()
+{
+#if defined(__x86_64__) || defined(_M_X64)
+    return "amd64";
+#elif defined(__aarch64__) || defined(_M_ARM64)
+    return "arm64";
+#elif defined(__i386__) || defined(_M_IX86)
+    return "i386";
+#elif defined(__arm__)
+    return "armhf";
+#elif defined(__powerpc64__) && defined(__LITTLE_ENDIAN__)
+    return "ppc64el";
+#elif defined(__s390x__)
+    return "s390x";
+#elif defined(__riscv) && (__riscv_xlen == 64)
+    return "riscv64";
+#else
+    return {};
+#endif
+}
+
+} // namespace infiltrator::software
