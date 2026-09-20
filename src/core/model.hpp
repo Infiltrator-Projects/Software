@@ -51,15 +51,22 @@ struct TransactionRequest {
 struct TransactionItem {
     std::string package_id;
     TransactionAction action{TransactionAction::install};
+    std::string architecture;
     std::string from_version;
     std::string to_version;
+    std::string source;
+    std::string filename;
+    std::string sha256;
     std::int64_t disk_delta_bytes{0};
     std::uint64_t download_bytes{0};
+    bool requested{false};
     bool system_critical{false};
 };
 
 struct TransactionPlan {
     std::vector<TransactionItem> items;
+    std::uint64_t state_generation{0};
+    std::string source_fingerprint;
     std::uint64_t download_bytes{0};
     std::int64_t disk_delta_bytes{0};
     bool touches_system{false};

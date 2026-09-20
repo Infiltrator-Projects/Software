@@ -17,7 +17,9 @@ No phase may be silently skipped merely because a backend can perform the entire
 
 The engine resolves the complete intended change set before asking for privilege.
 
-The plan contains exact package identities and versions, installs, upgrades, removals, dependency-driven changes, download bytes, estimated disk delta, repository/source provenance, trust/signature state, system-critical classification and the state generation used for the calculation.
+The plan contains exact package identities and versions, installs, upgrades, dependency-driven changes, download bytes, estimated disk delta, repository/source provenance, payload filename and SHA-256, system-critical classification and the state generation used for the calculation.
+
+The native 0.4 planner now produces install and upgrade plans from a coherent state generation. It resolves dependencies before constructing the immutable plan, distinguishes explicit requests from dependency-induced changes, enforces hold and downgrade policy, rejects unresolved conflicts, and computes aggregate download/disk impact. Native removal planning remains intentionally disabled until installed reverse-dependency state is represented, rather than guessing and risking an unsafe removal.
 
 The GUI presents the meaningful consequences before authorization.
 

@@ -126,7 +126,8 @@ add_library(software-engine STATIC
     src/engine/debian_candidate.cpp
     src/engine/debian_dependency.cpp
     src/engine/debian_repository.cpp
-    src/engine/package_state_store.cpp)
+    src/engine/package_state_store.cpp
+    src/engine/debian_transaction.cpp)
 target_include_directories(software-engine PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_link_libraries(software-engine PUBLIC software-core
@@ -257,6 +258,13 @@ if(BUILD_TESTING)
     add_test(
         NAME software-package-state-test
         COMMAND software-package-state-test)
+
+    add_executable(software-debian-transaction-test
+        tests/debian_transaction_test.cpp)
+    target_link_libraries(software-debian-transaction-test PRIVATE software-engine)
+    add_test(
+        NAME software-debian-transaction-test
+        COMMAND software-debian-transaction-test)
 
     add_executable(software-apt-test tests/apt_backend_test.cpp)
     target_link_libraries(software-apt-test PRIVATE software-apt)

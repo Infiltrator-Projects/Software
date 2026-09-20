@@ -103,6 +103,8 @@ The sixth native slice implements repository refresh itself. The engine fetches 
 
 The seventh native slice implements the durable package-state store. It uses SQLite in WAL mode with an explicit schema version, immutable generations and an atomically switched current-generation pointer. Installed state and normalized repository package versions are written in one transaction; a failed publish rolls back without disturbing the previously readable generation. The store retains the current and immediately previous generations and is intentionally rebuildable from authoritative repository and installed-package inputs.
 
+The eighth native slice implements deterministic transaction planning for install and upgrade operations. A plan is tied to a state generation and source fingerprint, selects requested roots using repository priority and Debian version rules, expands dependencies through the native resolver, rejects unresolved Conflicts/Breaks, honours holds and downgrade policy, distinguishes requested from dependency-induced changes, carries repository/payload provenance and SHA-256 into each item, and calculates total download bytes plus signed installed-size delta. Removal deliberately remains fail-closed until reverse-dependency state is represented in the engine database.
+
 Migration is complete only when normal operation no longer spawns APT programs.
 
 During migration:
