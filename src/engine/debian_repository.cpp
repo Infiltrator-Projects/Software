@@ -501,6 +501,7 @@ bool load_release(
 
 bool decompress_gzip(
     const std::string_view input,
+    const std::size_t maximum_output,
     std::string &output,
     std::string &error)
 {
@@ -540,9 +541,16 @@ bool decompress_gzip(
 
         const int status = inflate(&stream, Z_NO_FLUSH);
         consumed += before - stream.avail_in;
-        output.append(
-            buffer.data(),
-            buffer.size() - stream.avail_out);
+        const std::size_t produced =
+            buffer.size() - stream.avail_out;
+        if (produced > maximum_output - output.size()) {
+            error =
+                "Decompressed gzip repository index exceeds the signed size.";
+            inflateEnd(&stream);
+            output.clear();
+            return false;
+        }
+        output.append(buffer.data(), produced);
 
         if (status == Z_STREAM_END) {
             inflateEnd(&stream);
@@ -566,6 +574,7 @@ bool decompress_gzip(
 
 bool decompress_xz(
     const std::string_view input,
+    const std::size_t maximum_output,
     std::string &output,
     std::string &error)
 {
@@ -594,9 +603,18 @@ bool decompress_xz(
                     ? LZMA_FINISH
                     : LZMA_RUN);
 
+        const std::size_t produced =
+            buffer.size() - stream.avail_out;
+        if (produced > maximum_output - output.size()) {
+            error =
+                "Decompressed xz repository index exceeds the signed size.";
+            lzma_end(&stream);
+            output.clear();
+            return false;
+        }
         output.append(
             reinterpret_cast<const char *>(buffer.data()),
-            buffer.size() - stream.avail_out);
+            produced);
 
         if (status == LZMA_STREAM_END) {
             lzma_end(&stream);
@@ -614,16 +632,24 @@ bool decompress_xz(
 bool decompress_index(
     const std::string_view path,
     const std::string_view input,
+    const std::size_t maximum_output,
     std::string &output,
     std::string &error)
 {
     if (path.size() >= 3U &&
         path.substr(path.size() - 3U) == ".gz") {
-        return decompress_gzip(input, output, error);
+        return decompress_gzip(
+            input, maximum_output, output, error);
     }
     if (path.size() >= 3U &&
         path.substr(path.size() - 3U) == ".xz") {
-        return decompress_xz(input, output, error);
+        return decompress_xz(
+            input, maximum_output, output, error);
+    }
+    if (input.size() > maximum_output) {
+        error = "Repository package index exceeds the signed size.";
+        output.clear();
+        return false;
     }
     output.assign(input);
     return true;
@@ -831,9 +857,19 @@ DebianRepositorySnapshot DebianRepositoryRefresh::refresh(
     for (const std::string &base_index : base_indexes) {
         const DebianReleaseEntry *entry =
             preferred_index(release, base_index);
-        if (entry == nullptr) {
+        const DebianReleaseEntry *uncompressed_entry =
+            release.find(base_index);
+        if (entry == nullptr || uncompressed_entry == nullptr) {
             error =
-                "Repository Release metadata has no package index for " +
+                "Repository Release metadata has no complete package index "
+                "integrity record for " + base_index + ".";
+            return {};
+        }
+        if (uncompressed_entry->size_bytes >
+            static_cast<std::uint64_t>(
+                std::numeric_limits<std::size_t>::max())) {
+            error =
+                "Repository package index is too large for this platform: " +
                 base_index + ".";
             return {};
         }
@@ -856,8 +892,14 @@ DebianRepositorySnapshot DebianRepositoryRefresh::refresh(
         if (!decompress_index(
                 entry->path,
                 compressed,
+                static_cast<std::size_t>(
+                    uncompressed_entry->size_bytes),
                 packages_text,
                 error)) {
+            return {};
+        }
+        if (!verify_payload(
+                packages_text, *uncompressed_entry, error)) {
             return {};
         }
 
