@@ -1,3 +1,13 @@
+infiltrator-software (0.2.5) unstable; urgency=medium
+
+  * Fix AppStream component-box ownership after the merged system catalogue load.
+  * Keep the AsPool as the sole owner of its returned component collection.
+  * Retain the unified Discover view across Infiltrator, native AppStream/APT and configured Flatpak remotes.
+  * Retain the integrated Repositories source inventory and Add Source workflow.
+  * Verify the complete application under the permanent graphical launch smoke gate.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Sun, 20 Sep 2026 15:44:00 +1000
+
 infiltrator-software (0.2.4) unstable; urgency=medium
 
   * Standardise the application icon on the canonical #00ADEF Infiltrator blue.

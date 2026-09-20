@@ -47,6 +47,10 @@ Future package mutation remains a separate design: unprivileged planning, explic
 
 Repository/network operations must not block the GTK main loop. Discover performs Infiltrator HTTPS catalogue refresh, host AppStream/Flatpak catalogue loading and installed-state reconciliation off the GTK thread. Catalogue results publish first; verified first-party icon hydration remains a separate generation-checked background task so slow icons cannot withhold the catalogue UI. Live first-party HTTPS metadata is atomically cached; a network failure can fall back to the last valid cached document without converting cache data into an authoritative source.
 
+## Ownership
+
+AppStream component collections returned by an AsPool remain pool-owned. Software borrows those collections for enumeration and releases only the pool, preventing double-unref teardown faults in asynchronous Discover refreshes.
+
 ## Failure model
 
 Backend failures are data, not crashes. Every operation returns either a typed result or an explicit error. Partial state must not be silently represented as authoritative complete state.
