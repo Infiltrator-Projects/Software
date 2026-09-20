@@ -10,6 +10,10 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstring>
+#include <filesystem>
+#include <fstream>
+#include <optional>
 #include <set>
 #include <sstream>
 #include <string>
@@ -59,9 +63,20 @@ struct WindowState {
     GtkWidget *repository_flow{};
     GtkWidget *repository_count{};
     GtkWidget *repository_status{};
+
+    GtkListBox *updates_list{};
+    GtkWidget *updates_status{};
+    GtkWidget *updates_count{};
+    GtkWidget *updates_critical{};
+    GtkWidget *updates_install{};
+    GtkWidget *updates_refresh{};
+    std::vector<PackageRecord> update_records;
+    unsigned int updates_generation{0U};
+    bool updates_busy{false};
 };
 
 void refresh_repositories(WindowState *state);
+void refresh_updates(WindowState *state);
 
 GtkWidget *make_icon(const char *name, int size)
 {
@@ -1103,6 +1118,825 @@ GtkWidget *make_installed_page(WindowState *state)
 
 
 
+struct UpdatesResult {
+    unsigned int generation{0U};
+    std::vector<PackageRecord> records;
+    std::string error;
+};
+
+struct UpdatesTaskData {
+    unsigned int generation{0U};
+};
+
+struct UpdatePlanResult {
+    std::optional<infiltrator::software::TransactionPlan> plan;
+    std::string error;
+};
+
+struct UpdatePlanTaskData {
+    std::vector<std::string> package_ids;
+};
+
+struct UpdateProcessRun {
+    GtkWindow *window{};
+    std::string operation;
+};
+
+std::filesystem::path update_runtime_state_path()
+{
+    const char *runtime = g_get_user_runtime_dir();
+    if (runtime == nullptr || *runtime == '\0') {
+        return {};
+    }
+    return std::filesystem::path(runtime) /
+           "infiltrator-software" / "update-state";
+}
+
+std::string one_line(std::string value)
+{
+    for (char &ch : value) {
+        if (ch == '\n' || ch == '\r' || ch == '\t') {
+            ch = ' ';
+        }
+    }
+    while (!value.empty() &&
+           std::isspace(static_cast<unsigned char>(value.back())) != 0) {
+        value.pop_back();
+    }
+    if (value.size() > 220U) {
+        value.resize(217U);
+        value += "...";
+    }
+    return value;
+}
+
+void set_update_runtime_state(const std::string_view value)
+{
+    const std::filesystem::path path = update_runtime_state_path();
+    if (path.empty()) {
+        return;
+    }
+
+    std::error_code ec;
+    if (value.empty()) {
+        std::filesystem::remove(path, ec);
+        return;
+    }
+
+    std::filesystem::create_directories(path.parent_path(), ec);
+    if (ec) {
+        return;
+    }
+
+    std::ofstream output(path, std::ios::trunc);
+    if (!output) {
+        return;
+    }
+    output << value << '\n';
+}
+
+const char *update_icon_name(const PackageRecord &package)
+{
+    switch (package.kind) {
+    case infiltrator::software::PackageKind::kernel:
+        return "computer-symbolic";
+    case infiltrator::software::PackageKind::driver:
+        return "preferences-system-symbolic";
+    case infiltrator::software::PackageKind::library:
+    case infiltrator::software::PackageKind::runtime:
+        return "applications-system-symbolic";
+    case infiltrator::software::PackageKind::system:
+        return "emblem-system-symbolic";
+    case infiltrator::software::PackageKind::application:
+    case infiltrator::software::PackageKind::unknown:
+        return "software-update-available-symbolic";
+    }
+    return "software-update-available-symbolic";
+}
+
+GtkWidget *make_update_row(const PackageRecord &package)
+{
+    GtkWidget *row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
+    gtk_widget_add_css_class(row, "package-row");
+    gtk_widget_set_margin_top(row, 6);
+    gtk_widget_set_margin_bottom(row, 6);
+    gtk_widget_set_margin_start(row, 8);
+    gtk_widget_set_margin_end(row, 8);
+
+    GtkWidget *icon = make_icon(update_icon_name(package), 24);
+    gtk_widget_add_css_class(icon, "package-icon");
+    gtk_box_append(GTK_BOX(row), icon);
+
+    GtkWidget *identity = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
+    gtk_widget_set_hexpand(identity, true);
+
+    GtkWidget *name = make_label(package.name.c_str(), "card-title");
+    gtk_label_set_ellipsize(GTK_LABEL(name), PANGO_ELLIPSIZE_END);
+    gtk_box_append(GTK_BOX(identity), name);
+
+    std::string version =
+        package.installed_version + "  →  " + package.available_version;
+    GtkWidget *version_label = make_label(version.c_str(), "card-copy");
+    gtk_label_set_ellipsize(
+        GTK_LABEL(version_label), PANGO_ELLIPSIZE_END);
+    gtk_box_append(GTK_BOX(identity), version_label);
+
+    std::string meta =
+        std::string(infiltrator::software::package_kind_name(package.kind));
+    if (!package.source.empty()) {
+        meta += "  •  " + package.source;
+    }
+    GtkWidget *meta_label = make_label(meta.c_str(), "discover-meta");
+    gtk_box_append(GTK_BOX(identity), meta_label);
+
+    gtk_box_append(GTK_BOX(row), identity);
+
+    if (package.system_critical) {
+        GtkWidget *critical =
+            make_label("System-critical", "state-warning");
+        gtk_widget_set_valign(critical, GTK_ALIGN_CENTER);
+        gtk_box_append(GTK_BOX(row), critical);
+    } else {
+        GtkWidget *available =
+            make_label("Update available", "state-available");
+        gtk_widget_set_valign(available, GTK_ALIGN_CENTER);
+        gtk_box_append(GTK_BOX(row), available);
+    }
+
+    return row;
+}
+
+void rebuild_updates(WindowState *state)
+{
+    if (state == nullptr || state->updates_list == nullptr) {
+        return;
+    }
+
+    GtkWidget *child =
+        gtk_widget_get_first_child(GTK_WIDGET(state->updates_list));
+    while (child != nullptr) {
+        GtkWidget *next = gtk_widget_get_next_sibling(child);
+        gtk_list_box_remove(state->updates_list, child);
+        child = next;
+    }
+
+    std::size_t critical_count = 0U;
+    for (const PackageRecord &package : state->update_records) {
+        if (package.system_critical) {
+            ++critical_count;
+        }
+        GtkWidget *row = gtk_list_box_row_new();
+        gtk_list_box_row_set_child(
+            GTK_LIST_BOX_ROW(row), make_update_row(package));
+        gtk_list_box_append(state->updates_list, row);
+    }
+
+    if (state->updates_count != nullptr) {
+        const std::string count =
+            std::to_string(state->update_records.size());
+        gtk_label_set_text(
+            GTK_LABEL(state->updates_count), count.c_str());
+    }
+    if (state->updates_critical != nullptr) {
+        const std::string critical =
+            std::to_string(critical_count);
+        gtk_label_set_text(
+            GTK_LABEL(state->updates_critical), critical.c_str());
+    }
+}
+
+void updates_worker(
+    GTask *task,
+    gpointer,
+    gpointer task_data,
+    GCancellable *)
+{
+    auto *data = static_cast<UpdatesTaskData *>(task_data);
+    auto *result = new UpdatesResult{};
+    result->generation = data == nullptr ? 0U : data->generation;
+
+    AptBackend backend;
+    result->records = backend.list_updates(result->error);
+
+    g_task_return_pointer(
+        task,
+        result,
+        [](gpointer pointer) {
+            delete static_cast<UpdatesResult *>(pointer);
+        });
+}
+
+void updates_complete(
+    GObject *,
+    GAsyncResult *async_result,
+    gpointer user_data)
+{
+    auto *state = static_cast<WindowState *>(user_data);
+    auto *result = static_cast<UpdatesResult *>(
+        g_task_propagate_pointer(G_TASK(async_result), nullptr));
+
+    if (state == nullptr || result == nullptr) {
+        delete result;
+        return;
+    }
+
+    if (result->generation != state->updates_generation) {
+        delete result;
+        return;
+    }
+
+    state->updates_busy = false;
+    state->update_records = std::move(result->records);
+    const std::string error = result->error;
+    delete result;
+
+    rebuild_updates(state);
+
+    if (state->updates_status != nullptr) {
+        if (!error.empty()) {
+            const std::string message =
+                "Unable to check for updates: " + one_line(error);
+            gtk_label_set_text(
+                GTK_LABEL(state->updates_status), message.c_str());
+        } else if (state->update_records.empty()) {
+            gtk_label_set_text(
+                GTK_LABEL(state->updates_status),
+                "Your system is up to date.");
+        } else {
+            const std::string message =
+                std::to_string(state->update_records.size()) +
+                (state->update_records.size() == 1U
+                     ? " update is available."
+                     : " updates are available.");
+            gtk_label_set_text(
+                GTK_LABEL(state->updates_status), message.c_str());
+        }
+    }
+
+    if (state->updates_install != nullptr) {
+        gtk_widget_set_sensitive(
+            state->updates_install,
+            error.empty() && !state->update_records.empty());
+    }
+    if (state->updates_refresh != nullptr) {
+        gtk_widget_set_sensitive(state->updates_refresh, true);
+    }
+
+    if (error.empty()) {
+        set_update_runtime_state({});
+    } else {
+        set_update_runtime_state(
+            "error:" + one_line(error));
+    }
+}
+
+void refresh_updates(WindowState *state)
+{
+    if (state == nullptr || state->updates_list == nullptr ||
+        state->updates_busy) {
+        return;
+    }
+
+    state->updates_busy = true;
+    ++state->updates_generation;
+
+    if (state->updates_status != nullptr) {
+        gtk_label_set_text(
+            GTK_LABEL(state->updates_status),
+            "Checking installed versions and available updates…");
+    }
+    if (state->updates_install != nullptr) {
+        gtk_widget_set_sensitive(state->updates_install, false);
+    }
+    if (state->updates_refresh != nullptr) {
+        gtk_widget_set_sensitive(state->updates_refresh, false);
+    }
+
+    set_update_runtime_state("checking");
+
+    auto *data = new UpdatesTaskData{state->updates_generation};
+    GTask *task = g_task_new(
+        nullptr, nullptr, updates_complete, state);
+    g_task_set_task_data(
+        task, data,
+        [](gpointer pointer) {
+            delete static_cast<UpdatesTaskData *>(pointer);
+        });
+    g_task_run_in_thread(task, updates_worker);
+    g_object_unref(task);
+}
+
+void destroy_update_process_run(UpdateProcessRun *run)
+{
+    if (run == nullptr) {
+        return;
+    }
+    if (run->window != nullptr) {
+        g_object_unref(run->window);
+    }
+    delete run;
+}
+
+void update_process_complete(
+    GObject *source_object,
+    GAsyncResult *async_result,
+    gpointer user_data)
+{
+    auto *run = static_cast<UpdateProcessRun *>(user_data);
+    auto *process = G_SUBPROCESS(source_object);
+
+    GError *error = nullptr;
+    gchar *stdout_text = nullptr;
+    gchar *stderr_text = nullptr;
+    const gboolean communicated =
+        g_subprocess_communicate_utf8_finish(
+            process, async_result,
+            &stdout_text, &stderr_text, &error);
+
+    auto *state =
+        run == nullptr || run->window == nullptr
+            ? nullptr
+            : static_cast<WindowState *>(
+                  g_object_get_data(
+                      G_OBJECT(run->window),
+                      "infiltrator-window-state"));
+
+    const bool success =
+        communicated && g_subprocess_get_successful(process);
+
+    if (state != nullptr) {
+        state->updates_busy = false;
+
+        if (success) {
+            set_update_runtime_state({});
+            if (state->updates_status != nullptr) {
+                gtk_label_set_text(
+                    GTK_LABEL(state->updates_status),
+                    run->operation == "refresh"
+                        ? "Package lists refreshed. Checking updates…"
+                        : "Updates installed. Checking system state…");
+            }
+
+            refresh_installed(state);
+            refresh_discover(state);
+            refresh_repositories(state);
+            refresh_updates(state);
+        } else {
+            std::string message =
+                run->operation == "refresh"
+                    ? "Unable to refresh package lists."
+                    : "Unable to install updates.";
+
+            if (g_subprocess_get_if_exited(process) &&
+                g_subprocess_get_exit_status(process) == 126) {
+                message = "Authentication was cancelled.";
+                set_update_runtime_state({});
+            } else {
+                if (stderr_text != nullptr && *stderr_text != '\0') {
+                    message += " ";
+                    message += one_line(stderr_text);
+                } else if (error != nullptr &&
+                           error->message != nullptr) {
+                    message += " ";
+                    message += one_line(error->message);
+                }
+                set_update_runtime_state(
+                    "error:" + one_line(message));
+            }
+
+            if (state->updates_status != nullptr) {
+                gtk_label_set_text(
+                    GTK_LABEL(state->updates_status),
+                    message.c_str());
+            }
+            if (state->updates_install != nullptr) {
+                gtk_widget_set_sensitive(
+                    state->updates_install,
+                    !state->update_records.empty());
+            }
+            if (state->updates_refresh != nullptr) {
+                gtk_widget_set_sensitive(
+                    state->updates_refresh, true);
+            }
+        }
+    }
+
+    g_free(stdout_text);
+    g_free(stderr_text);
+    g_clear_error(&error);
+    destroy_update_process_run(run);
+}
+
+void start_update_process(
+    WindowState *state,
+    std::vector<std::string> arguments,
+    const std::string &operation)
+{
+    if (state == nullptr || state->window == nullptr ||
+        arguments.empty()) {
+        return;
+    }
+
+    std::vector<const gchar *> argv;
+    argv.reserve(arguments.size() + 1U);
+    for (const std::string &argument : arguments) {
+        argv.push_back(argument.c_str());
+    }
+    argv.push_back(nullptr);
+
+    GError *error = nullptr;
+    GSubprocess *process = g_subprocess_newv(
+        argv.data(),
+        static_cast<GSubprocessFlags>(
+            G_SUBPROCESS_FLAGS_STDOUT_PIPE |
+            G_SUBPROCESS_FLAGS_STDERR_PIPE),
+        &error);
+
+    if (process == nullptr) {
+        state->updates_busy = false;
+        std::string message =
+            operation == "refresh"
+                ? "Unable to start package-list refresh."
+                : "Unable to start update installation.";
+        if (error != nullptr && error->message != nullptr) {
+            message += " ";
+            message += one_line(error->message);
+        }
+        if (state->updates_status != nullptr) {
+            gtk_label_set_text(
+                GTK_LABEL(state->updates_status),
+                message.c_str());
+        }
+        set_update_runtime_state(
+            "error:" + one_line(message));
+        g_clear_error(&error);
+        if (state->updates_refresh != nullptr) {
+            gtk_widget_set_sensitive(
+                state->updates_refresh, true);
+        }
+        if (state->updates_install != nullptr) {
+            gtk_widget_set_sensitive(
+                state->updates_install,
+                !state->update_records.empty());
+        }
+        return;
+    }
+
+    auto *run = new UpdateProcessRun{
+        GTK_WINDOW(g_object_ref(state->window)), operation};
+
+    g_subprocess_communicate_utf8_async(
+        process, nullptr, nullptr,
+        update_process_complete, run);
+    g_object_unref(process);
+}
+
+void update_refresh_clicked(GtkButton *, gpointer user_data)
+{
+    auto *state = static_cast<WindowState *>(user_data);
+    if (state == nullptr || state->updates_busy) {
+        return;
+    }
+
+    state->updates_busy = true;
+    if (state->updates_status != nullptr) {
+        gtk_label_set_text(
+            GTK_LABEL(state->updates_status),
+            "Refreshing package lists…");
+    }
+    if (state->updates_install != nullptr) {
+        gtk_widget_set_sensitive(state->updates_install, false);
+    }
+    if (state->updates_refresh != nullptr) {
+        gtk_widget_set_sensitive(state->updates_refresh, false);
+    }
+    set_update_runtime_state("checking");
+
+    start_update_process(
+        state,
+        {"pkexec",
+         "/usr/libexec/infiltrator-software-update-helper",
+         "refresh"},
+        "refresh");
+}
+
+void begin_apply_updates(WindowState *state)
+{
+    if (state == nullptr || state->update_records.empty()) {
+        return;
+    }
+
+    state->updates_busy = true;
+    if (state->updates_status != nullptr) {
+        gtk_label_set_text(
+            GTK_LABEL(state->updates_status),
+            "Installing software updates…");
+    }
+    if (state->updates_install != nullptr) {
+        gtk_widget_set_sensitive(state->updates_install, false);
+    }
+    if (state->updates_refresh != nullptr) {
+        gtk_widget_set_sensitive(state->updates_refresh, false);
+    }
+    set_update_runtime_state("installing");
+
+    std::vector<std::string> arguments{
+        "pkexec",
+        "/usr/libexec/infiltrator-software-update-helper",
+        "apply"};
+    arguments.reserve(state->update_records.size() + 3U);
+
+    for (const PackageRecord &package : state->update_records) {
+        std::string spec = package.package_name;
+        if (!package.available_version.empty()) {
+            spec += "=" + package.available_version;
+        }
+        arguments.emplace_back(std::move(spec));
+    }
+
+    start_update_process(
+        state, std::move(arguments), "install");
+}
+
+void update_confirm_response(
+    GtkDialog *dialog,
+    gint response_id,
+    gpointer user_data)
+{
+    auto *state = static_cast<WindowState *>(user_data);
+    gtk_window_destroy(GTK_WINDOW(dialog));
+
+    if (state == nullptr) {
+        return;
+    }
+
+    if (response_id == GTK_RESPONSE_ACCEPT) {
+        begin_apply_updates(state);
+        return;
+    }
+
+    state->updates_busy = false;
+    if (state->updates_status != nullptr) {
+        gtk_label_set_text(
+            GTK_LABEL(state->updates_status),
+            "Update installation cancelled.");
+    }
+    if (state->updates_install != nullptr) {
+        gtk_widget_set_sensitive(
+            state->updates_install,
+            !state->update_records.empty());
+    }
+    if (state->updates_refresh != nullptr) {
+        gtk_widget_set_sensitive(state->updates_refresh, true);
+    }
+    set_update_runtime_state({});
+}
+
+void update_plan_worker(
+    GTask *task,
+    gpointer,
+    gpointer task_data,
+    GCancellable *)
+{
+    auto *data = static_cast<UpdatePlanTaskData *>(task_data);
+    auto *result = new UpdatePlanResult{};
+
+    if (data == nullptr || data->package_ids.empty()) {
+        result->error = "No updates are available to plan.";
+    } else {
+        infiltrator::software::TransactionRequest request;
+        request.action =
+            infiltrator::software::TransactionAction::upgrade;
+        request.package_ids = data->package_ids;
+
+        AptBackend backend;
+        result->plan = backend.plan(request, result->error);
+    }
+
+    g_task_return_pointer(
+        task,
+        result,
+        [](gpointer pointer) {
+            delete static_cast<UpdatePlanResult *>(pointer);
+        });
+}
+
+void update_plan_complete(
+    GObject *,
+    GAsyncResult *async_result,
+    gpointer user_data)
+{
+    auto *state = static_cast<WindowState *>(user_data);
+    auto *result = static_cast<UpdatePlanResult *>(
+        g_task_propagate_pointer(G_TASK(async_result), nullptr));
+
+    if (state == nullptr || result == nullptr) {
+        delete result;
+        return;
+    }
+
+    if (!result->plan.has_value()) {
+        state->updates_busy = false;
+        std::string message =
+            "Unable to plan updates: " + one_line(result->error);
+        if (state->updates_status != nullptr) {
+            gtk_label_set_text(
+                GTK_LABEL(state->updates_status),
+                message.c_str());
+        }
+        if (state->updates_install != nullptr) {
+            gtk_widget_set_sensitive(
+                state->updates_install,
+                !state->update_records.empty());
+        }
+        if (state->updates_refresh != nullptr) {
+            gtk_widget_set_sensitive(state->updates_refresh, true);
+        }
+        set_update_runtime_state(
+            "error:" + one_line(message));
+        delete result;
+        return;
+    }
+
+    const infiltrator::software::TransactionPlan plan =
+        *result->plan;
+    delete result;
+
+    std::ostringstream secondary;
+    secondary << plan.items.size()
+              << (plan.items.size() == 1U
+                      ? " package change is in the resolved transaction."
+                      : " package changes are in the resolved transaction.");
+    if (plan.touches_system) {
+        secondary
+            << "\n\nThis transaction includes system-critical components.";
+    }
+    secondary
+        << "\n\nAPT is constrained to upgrade-only operation and package "
+           "removal is prohibited.";
+
+    GtkWidget *dialog = gtk_message_dialog_new(
+        state->window,
+        static_cast<GtkDialogFlags>(
+            GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT),
+        plan.touches_system
+            ? GTK_MESSAGE_WARNING
+            : GTK_MESSAGE_QUESTION,
+        GTK_BUTTONS_NONE,
+        "Install %zu available software update%s?",
+        state->update_records.size(),
+        state->update_records.size() == 1U ? "" : "s");
+    gtk_message_dialog_format_secondary_text(
+        GTK_MESSAGE_DIALOG(dialog), "%s",
+        secondary.str().c_str());
+    gtk_dialog_add_buttons(
+        GTK_DIALOG(dialog),
+        "Cancel", GTK_RESPONSE_CANCEL,
+        "Install updates", GTK_RESPONSE_ACCEPT,
+        nullptr);
+    g_signal_connect(
+        dialog, "response",
+        G_CALLBACK(update_confirm_response), state);
+    gtk_window_present(GTK_WINDOW(dialog));
+}
+
+void update_install_clicked(GtkButton *, gpointer user_data)
+{
+    auto *state = static_cast<WindowState *>(user_data);
+    if (state == nullptr || state->updates_busy ||
+        state->update_records.empty()) {
+        return;
+    }
+
+    state->updates_busy = true;
+    if (state->updates_status != nullptr) {
+        gtk_label_set_text(
+            GTK_LABEL(state->updates_status),
+            "Resolving the complete update transaction…");
+    }
+    if (state->updates_install != nullptr) {
+        gtk_widget_set_sensitive(state->updates_install, false);
+    }
+    if (state->updates_refresh != nullptr) {
+        gtk_widget_set_sensitive(state->updates_refresh, false);
+    }
+    set_update_runtime_state("checking");
+
+    auto *data = new UpdatePlanTaskData{};
+    data->package_ids.reserve(state->update_records.size());
+    for (const PackageRecord &package : state->update_records) {
+        data->package_ids.push_back(package.package_name);
+    }
+
+    GTask *task = g_task_new(
+        nullptr, nullptr, update_plan_complete, state);
+    g_task_set_task_data(
+        task, data,
+        [](gpointer pointer) {
+            delete static_cast<UpdatePlanTaskData *>(pointer);
+        });
+    g_task_run_in_thread(task, update_plan_worker);
+    g_object_unref(task);
+}
+
+GtkWidget *make_updates_page(WindowState *state)
+{
+    GtkWidget *page = gtk_box_new(GTK_ORIENTATION_VERTICAL, 16);
+    gtk_widget_add_css_class(page, "content");
+    gtk_widget_add_css_class(page, "page-updates");
+
+    gtk_box_append(
+        GTK_BOX(page),
+        make_page_intro(
+            "software-update-available-symbolic",
+            "Updates",
+            "Application, library, kernel and system updates in one place."));
+
+    GtkWidget *stats = gtk_grid_new();
+    gtk_grid_set_column_spacing(GTK_GRID(stats), 10);
+    gtk_grid_set_column_homogeneous(GTK_GRID(stats), true);
+    gtk_grid_attach(
+        GTK_GRID(stats),
+        make_stat_card(
+            "AVAILABLE", "0", "stat-operation",
+            &state->updates_count),
+        0, 0, 1, 1);
+    gtk_grid_attach(
+        GTK_GRID(stats),
+        make_stat_card(
+            "SYSTEM-CRITICAL", "0", "stat-warning",
+            &state->updates_critical),
+        1, 0, 1, 1);
+    gtk_grid_attach(
+        GTK_GRID(stats),
+        make_stat_card(
+            "BACKEND", "APT/.deb", "stat-info"),
+        2, 0, 1, 1);
+    gtk_box_append(GTK_BOX(page), stats);
+
+    GtkWidget *controls =
+        gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    gtk_widget_add_css_class(controls, "card");
+
+    state->updates_status =
+        make_label("Checking for updates…", "card-copy");
+    gtk_label_set_wrap(GTK_LABEL(state->updates_status), true);
+    gtk_widget_set_hexpand(state->updates_status, true);
+    gtk_box_append(GTK_BOX(controls), state->updates_status);
+
+    state->updates_refresh =
+        gtk_button_new_with_label("Refresh package lists");
+    gtk_widget_add_css_class(
+        state->updates_refresh, "discover-details");
+    g_signal_connect(
+        state->updates_refresh, "clicked",
+        G_CALLBACK(update_refresh_clicked), state);
+    gtk_box_append(GTK_BOX(controls), state->updates_refresh);
+
+    state->updates_install =
+        gtk_button_new_with_label("Install all updates");
+    gtk_widget_add_css_class(
+        state->updates_install, "suggested-action");
+    gtk_widget_set_sensitive(state->updates_install, false);
+    g_signal_connect(
+        state->updates_install, "clicked",
+        G_CALLBACK(update_install_clicked), state);
+    gtk_box_append(GTK_BOX(controls), state->updates_install);
+
+    gtk_box_append(GTK_BOX(page), controls);
+
+    GtkWidget *card =
+        gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
+    gtk_widget_add_css_class(card, "card");
+    gtk_widget_add_css_class(card, "card-info");
+    gtk_widget_set_vexpand(card, true);
+
+    GtkWidget *heading =
+        make_label("Available updates", "card-title");
+    gtk_box_append(GTK_BOX(card), heading);
+
+    GtkWidget *list = gtk_list_box_new();
+    state->updates_list = GTK_LIST_BOX(list);
+    gtk_widget_add_css_class(list, "package-list");
+    gtk_list_box_set_selection_mode(
+        state->updates_list, GTK_SELECTION_NONE);
+
+    GtkWidget *scroll = gtk_scrolled_window_new();
+    gtk_widget_set_vexpand(scroll, true);
+    gtk_scrolled_window_set_policy(
+        GTK_SCROLLED_WINDOW(scroll),
+        GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
+    gtk_scrolled_window_set_child(
+        GTK_SCROLLED_WINDOW(scroll), list);
+    gtk_box_append(GTK_BOX(card), scroll);
+
+    gtk_box_append(GTK_BOX(page), card);
+
+    refresh_updates(state);
+    return page;
+}
+
+
 struct AddSourceDialog {
     GtkWindow *window{};
     GtkWindow *main_window{};
@@ -1816,6 +2650,7 @@ void refresh_clicked(GtkButton *, gpointer user_data)
     refresh_installed(state);
     refresh_discover(state);
     refresh_repositories(state);
+    refresh_updates(state);
 }
 
 void about_clicked(GtkButton *, gpointer user_data)
@@ -1977,14 +2812,7 @@ void activate(GtkApplication *application, gpointer)
 
     gtk_stack_add_named(
         state->stack,
-        make_foundation_page(
-            "software-update-available-symbolic",
-            "Updates",
-            "Application and system updates in one place.",
-            "Transaction planning first",
-            "Updates remain read-only until dependency resolution, complete "
-            "change-set presentation and privilege separation are proven.",
-            "page-updates"),
+        make_updates_page(state),
         "updates");
 
     gtk_stack_add_named(
@@ -2028,10 +2856,15 @@ void activate(GtkApplication *application, gpointer)
             "page-repair"),
         "repair");
 
-    gtk_stack_set_visible_child_name(state->stack, "discover");
+    const int initial_page = g_object_get_data(
+        G_OBJECT(application), "infiltrator-open-updates") != nullptr
+            ? 2
+            : 0;
+    gtk_stack_set_visible_child_name(
+        state->stack, initial_page == 2 ? "updates" : "discover");
     if (state->navigation_list != nullptr) {
         GtkListBoxRow *first = gtk_list_box_get_row_at_index(
-            state->navigation_list, 0);
+            state->navigation_list, initial_page);
         gtk_list_box_select_row(state->navigation_list, first);
     }
     gtk_box_append(GTK_BOX(root), make_status_bar());
@@ -2043,12 +2876,36 @@ void activate(GtkApplication *application, gpointer)
 
 int main(int argc, char **argv)
 {
+    bool open_updates = false;
+    std::vector<char *> filtered_arguments;
+    filtered_arguments.reserve(static_cast<std::size_t>(argc) + 1U);
+    if (argc > 0) {
+        filtered_arguments.push_back(argv[0]);
+    }
+    for (int index = 1; index < argc; ++index) {
+        if (std::strcmp(argv[index], "--updates") == 0) {
+            open_updates = true;
+        } else {
+            filtered_arguments.push_back(argv[index]);
+        }
+    }
+    filtered_arguments.push_back(nullptr);
+
     GtkApplication *application = gtk_application_new(
         "net.ssmith.infiltrator.software", G_APPLICATION_DEFAULT_FLAGS);
+    if (open_updates) {
+        g_object_set_data(
+            G_OBJECT(application),
+            "infiltrator-open-updates",
+            GINT_TO_POINTER(1));
+    }
     g_signal_connect(application, "activate", G_CALLBACK(activate), nullptr);
 
     const int status =
-        g_application_run(G_APPLICATION(application), argc, argv);
+        g_application_run(
+            G_APPLICATION(application),
+            static_cast<int>(filtered_arguments.size() - 1U),
+            filtered_arguments.data());
     g_object_unref(application);
     return status;
 }
