@@ -382,7 +382,6 @@ CatalogueSnapshot SystemCatalogue::refresh(std::string &error)
         snapshot.records.emplace_back(std::move(record));
     }
 
-    g_object_unref(components);
     g_object_unref(pool);
 
     std::vector<PackageRecord> flatpaks =
