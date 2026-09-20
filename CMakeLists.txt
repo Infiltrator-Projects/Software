@@ -131,6 +131,9 @@ add_library(software-sources STATIC
 target_include_directories(software-sources PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/src")
 
+add_executable(infiltrator-software-helper
+    src/helper/source_helper.cpp)
+
 add_executable(infiltrator-software
     src/app/main.cpp
     src/app/theme.cpp)
@@ -142,13 +145,16 @@ target_compile_definitions(infiltrator-software PRIVATE
     INFILTRATOR_SOFTWARE_VERSION="${PROJECT_VERSION}")
 
 install(TARGETS infiltrator-software RUNTIME DESTINATION bin)
+install(TARGETS infiltrator-software-helper RUNTIME DESTINATION libexec)
+install(FILES data/net.ssmith.infiltrator.software.policy
+    DESTINATION share/polkit-1/actions)
 install(FILES ${SOFTWARE_FONT_FILES}
     DESTINATION share/fonts/truetype/infiltrator-software)
 install(FILES LICENSE DESTINATION share/doc/infiltrator-software)
 
 foreach(target IN ITEMS
         software-core software-apt software-catalogue software-sources
-        infiltrator-software)
+        infiltrator-software-helper infiltrator-software)
     if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
         target_compile_options(${target} PRIVATE
             -Wall -Wextra -Wpedantic -Wshadow -Wconversion -Wsign-conversion)
