@@ -82,8 +82,12 @@ jobs:
           package="../infiltrator-software_$(tr -d '[:space:]' < VERSION)_amd64.deb"
           test -f "$package"
           test "$(dpkg-deb -f "$package" Package)" = "infiltrator-software"
+          dpkg-deb -f "$package" Depends | grep -Eq '(^|, )pkexec([, ]|$)'
+          dpkg-deb -f "$package" Recommends | grep -Eq '(^|, )flatpak([, ]|$)'
           dpkg-deb --fsys-tarfile "$package" | tar -tf - > package-files.txt
           grep -qx './usr/bin/infiltrator-software' package-files.txt
+          grep -qx './usr/libexec/infiltrator-software-helper' package-files.txt
+          grep -qx './usr/share/polkit-1/actions/net.ssmith.infiltrator.software.policy' package-files.txt
           grep -qx './usr/share/applications/infiltrator-software.desktop' package-files.txt
           grep -qx './usr/share/icons/hicolor/scalable/apps/infiltrator-software.svg' package-files.txt
           grep -qx './usr/share/app-install/icons/infiltrator-software.svg' package-files.txt

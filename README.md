@@ -8,7 +8,7 @@ Infiltrator Software is the software-management application for the Infiltrator 
 
 The application presents one authoritative view of software discovery, installation, removal, updates, system components, repositories, release channels, history and repair while keeping privileged package operations isolated behind backend interfaces.
 
-**Current source version:** 0.2.2  
+**Current source version:** 0.2.3  
 **Language:** C++17 application/core with native GTK4 Linux shell; C11 Common foundation  
 **Shared foundation:** Common 1.19.10  
 **Initial package backend:** APT/.deb  
@@ -36,11 +36,11 @@ The UI does not encode APT semantics. It consumes a package-backend contract. AP
 
 The primary navigation contract is:
 
-- **Discover** — live search and category browsing of verified Infiltrator repository applications, with authoritative icons, versions, provenance and installed state.
+- **Discover** — one merged catalogue of verified Infiltrator applications, the host distribution's AppStream applications and configured Flatpak remotes, with search, categories, icons, provenance and installed state.
 - **Installed** — installed applications, components, versions, source and size.
 - **Updates** — application, library, kernel and system updates in one place.
 - **System** — kernels, drivers, core components and operating-system packages.
-- **Repositories** — configured sources, priorities and release channels.
+- **Repositories** — configured Infiltrator/APT/Flatpak sources plus an integrated **Add Source…** workflow; APT additions use a narrow Polkit-authorized helper and Flatpak user remotes remain unprivileged.
 - **History** — exact install/remove/update operations with versions and timestamps.
 - **Repair** — interrupted transactions, broken dependencies and repository inconsistencies.
 
@@ -98,7 +98,9 @@ The project follows the same rule as the rest of the family: Common is used when
 src/
 ├── app/                 Native application shell
 ├── core/                Product model and transaction model
-├── catalogue/           Backend-neutral catalogue source + Infiltrator repository implementation
+├── catalogue/           Infiltrator + system AppStream/Flatpak catalogue sources
+├── sources/             APT/Flatpak source inventory
+├── helper/              Narrow privileged APT-source writer
 ├── backend/             Backend-neutral package-management contracts
 ├── backends/apt/        Initial APT/.deb implementation
 └── infiltratr-common/   Exact Common 1.19.10 gitlink
@@ -119,15 +121,16 @@ The UI never calls APT directly.
 
 ## Initial milestone
 
-Version 0.2 retains the proven read-only architecture and makes Discover functional. The foundation remains intentionally non-mutating until transaction planning is complete. The implemented foundation includes:
+Version 0.2 establishes a functional discovery/source-management foundation. Package install/remove/update remains intentionally non-mutating until transaction planning is complete; repository addition is the only enabled mutation and is isolated behind the source-management boundary. The implemented foundation includes:
 
 1. the application shell exposes the seven product areas;
 2. package/application identity is represented once in the core;
-3. a separate catalogue source refreshes verified first-party repository metadata without teaching the UI repository mechanics;
-4. Discover provides asynchronous live refresh, offline cache fallback, search, categories and details; catalogue metadata renders immediately while SHA-256-verified icons hydrate independently in the background;
-5. APT enumerates installed package state through the backend contract and Discover merges that state by canonical package identity;
-6. transaction planning remains the required gate before privileged installation/removal;
-7. tests enforce the catalogue/backend/core boundaries, CI builds the exact Common-pinned source, and a graphical Xvfb smoke test keeps the real application alive long enough for Discover's asynchronous startup path to complete.
+3. separate catalogue sources merge verified first-party records with host AppStream metadata and configured Flatpak metadata without teaching the UI repository mechanics;
+4. Discover provides asynchronous live refresh, offline first-party cache fallback, search, categories and details; first-party catalogue metadata renders immediately while SHA-256-verified icons hydrate independently in the background;
+5. APT enumerates installed package state through the backend contract, Flatpak installed state is reconciled from its deployment roots, and Discover merges those states into the application catalogue;
+6. Repositories inventories Infiltrator, APT and Flatpak sources and can add HTTPS APT `.sources` entries through a constrained Polkit helper or add user Flatpak remotes without privilege;
+7. transaction planning remains the required gate before package installation/removal/update;
+8. tests enforce catalogue/source/backend/core boundaries, CI builds the exact Common-pinned source, and a graphical Xvfb smoke test keeps the real application alive through asynchronous startup.
 
 Write operations are not enabled until transaction planning, error propagation and privilege separation are proven.
 

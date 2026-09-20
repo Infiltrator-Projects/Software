@@ -12,7 +12,7 @@ The core owns package/application identity, classification, channels, installed/
 
 A backend translates one native package ecosystem into the core model. Capabilities are explicit so the UI never assumes that a backend supports mutation merely because it can inventory packages.
 
-APT/.deb is the first package backend. Installed-package inventory remains read-only. Discover is deliberately separate: a catalogue-source contract reads authoritative application records from Infiltrator-Repository, verifies icon digests, caches metadata atomically for offline use and merges local installation state by canonical package identity. Update calculation and transaction planning remain required before any write path.
+APT/.deb is the first package backend. Installed-package inventory remains read-only. Discover is deliberately separate from package mechanics: one catalogue source reads authoritative Infiltrator application records, while a system catalogue source consumes the host AppStream pool including configured Flatpak metadata. These records are merged by application/package identity and reconciled with local APT and Flatpak installed state. Update calculation and transaction planning remain required before package mutation.
 
 Common 1.19.10 owns reusable project-family facilities such as semantic theme design and other product-neutral mechanisms. Software's appearance controller consumes Common's System/Day/Night mode policy, semantic palettes, typography roles and structural metrics. Follow OS listens for GTK desktop-theme changes and resolves System dynamically. The selected mode is stored atomically through Common's POSIX durability API. Package semantics remain local to Software.
 
@@ -22,10 +22,13 @@ Common 1.19.10 owns reusable project-family facilities such as semantic theme de
 native shell
     |                 |
     v                 v
-product core      catalogue source <---- Infiltrator Repository
-    |
+product core      catalogue sources <---- Infiltrator Repository
+    |                    ^
+    |                    +---- host AppStream / Flatpak metadata
     v
 backend contract <---- APT implementation
+    |
+    +---- source inventory <---- /etc/apt + Flatpak remotes
     |
     +---- Common product-neutral facilities
 ```
@@ -34,15 +37,15 @@ No dependency points from the core into APT.
 
 ## Privilege model
 
-The graphical process is not intended to run as root. Read-only inventory remains unprivileged.
+The graphical process never runs as root. Catalogue loading, installed inventory, APT source inventory and Flatpak user-remote management remain unprivileged.
 
-Future mutation is split into an unprivileged planning phase, an explicit user authorization step, a minimal privileged transaction executor, and unprivileged verification/history presentation.
+System APT source addition is the first privileged operation. It is isolated in `/usr/libexec/infiltrator-software-helper`, authorized by a dedicated Polkit action, accepts only a fixed `add-apt-source` operation, validates every argument, requires HTTPS, rejects newline/whitespace injection, restricts optional `Signed-By` paths to standard keyring directories and writes a single modern Deb822 `.sources` file atomically. The helper does not accept arbitrary commands or shell text.
 
-The privileged component will accept a validated transaction description rather than arbitrary shell text.
+Future package mutation remains a separate design: unprivileged planning, explicit authorization, a minimal transaction executor, then unprivileged verification/history presentation.
 
 ## Concurrency
 
-Repository/network operations must not block the GTK main loop. Discover uses a two-stage GTask pipeline: catalogue metadata and installed-state reconciliation publish first, then icon verification/caching runs as a separate generation-checked background task. This prevents slow or failed icon downloads from withholding the catalogue UI. Live HTTPS metadata is atomically cached; a network failure can fall back to the last valid cached document without converting cache data into an authoritative source.
+Repository/network operations must not block the GTK main loop. Discover performs Infiltrator HTTPS catalogue refresh, host AppStream/Flatpak catalogue loading and installed-state reconciliation off the GTK thread. Catalogue results publish first; verified first-party icon hydration remains a separate generation-checked background task so slow icons cannot withhold the catalogue UI. Live first-party HTTPS metadata is atomically cached; a network failure can fall back to the last valid cached document without converting cache data into an authoritative source.
 
 ## Failure model
 

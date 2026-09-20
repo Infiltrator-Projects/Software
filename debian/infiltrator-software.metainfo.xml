@@ -14,9 +14,10 @@
       mechanics isolated behind replaceable backend contracts.
     </p>
     <p>
-      The initial Linux implementation uses APT/.deb and presents Discover,
-      Installed, Updates, System, Repositories, History and Repair in one
-      application.
+      The Linux implementation merges verified Infiltrator catalogue records,
+      host AppStream applications and configured Flatpak metadata while presenting
+      Discover, Installed, Updates, System, Repositories, History and Repair in
+      one application.
     </p>
   </description>
 
@@ -33,6 +34,11 @@
   <url type="homepage">https://github.com/Infiltrator-Projects/Software</url>
 
   <releases>
+    <release version="0.2.3" date="2026-09-20">
+      <description>
+        <p>Unified Infiltrator, AppStream and Flatpak discovery with live repository inventory and integrated source addition.</p>
+      </description>
+    </release>
     <release version="0.2.2" date="2026-09-20">
       <description>
         <p>Fixes the Discover startup model-lifetime crash and adds a permanent graphical launch smoke test.</p>

@@ -6,11 +6,11 @@
 
 One shell with Discover, Installed, Updates, System, Repositories, History and Repair; exact Common 1.19.10 pin; backend-neutral models; explicit capabilities; real read-only dpkg installed inventory; virtualized GTK4 list; tests and main-branch CI.
 
-## 0.2 — Discover and authoritative first-party identity
+## 0.2 — Discover, system catalogues and source management
 
-Implemented: asynchronous Infiltrator-Repository refresh, first-party application-record validation, canonical icon digest/cache pipeline, offline metadata fallback, search, categories, application details, installed-state merging and transitional-package suppression at the repository catalogue layer.
+Implemented: asynchronous Infiltrator-Repository refresh; first-party application-record validation; canonical icon digest/cache pipeline; offline metadata fallback; host AppStream application ingestion; configured Flatpak catalogue ingestion; merged search/categories/details; APT and Flatpak installed-state reconciliation; live APT/Flatpak source inventory; and an integrated Add Source workflow.
 
-Still deliberately deferred from this milestone: third-party AppStream/package normalization and all install/remove mutation. Those must not dilute first-party identity correctness or bypass transaction planning.
+APT source addition is isolated behind a constrained Polkit-authorized helper that writes modern HTTPS-only Deb822 `.sources` records. User Flatpak remotes are added without elevating the GUI. Package installation/removal/update remains deferred until transaction planning is complete.
 
 ## 0.3 — Update inventory and read-only planning
 
@@ -20,9 +20,9 @@ Candidate-version comparison, application/system grouping, dependency resolution
 
 Minimal privileged executor, exact-plan authorization, staged verification, progress events, durable history and interrupted-transaction diagnosis.
 
-## 0.5 — Repository and channel management
+## 0.5 — Advanced repository and channel management
 
-Stable/Beta/Alpha policy, source enable/disable, priority presentation, repository signature/health state and safe channel-transition planning.
+The 0.2 line already provides source inventory and safe source addition. This milestone adds Stable/Beta/Alpha policy, source enable/disable/removal, priority presentation, repository signature/health state and safe channel-transition planning.
 
 ## 0.6 — Recovery integration
 
