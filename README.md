@@ -8,7 +8,7 @@ Infiltrator Software is the software-management application for the Infiltrator 
 
 The application presents one authoritative view of software discovery, installation, removal, updates, system components, repositories, release channels, history and repair while keeping privileged package operations isolated behind backend interfaces.
 
-**Current source version:** 0.2.5  
+**Current source version:** 0.3.0  
 **Language:** C++17 application/core with native GTK4 Linux shell; C11 Common foundation  
 **Shared foundation:** Common 1.19.10  
 **Initial package backend:** APT/.deb  
@@ -38,7 +38,7 @@ The primary navigation contract is:
 
 - **Discover** — one merged catalogue of verified Infiltrator applications, the host distribution's AppStream applications and configured Flatpak remotes, with search, categories, icons, provenance and installed state.
 - **Installed** — installed applications, components, versions, source and size.
-- **Updates** — application, library, kernel and system updates in one place.
+- **Updates** — live APT application, library, kernel and system updates with preflight transaction resolution, authenticated execution and panel status.
 - **System** — kernels, drivers, core components and operating-system packages.
 - **Repositories** — configured Infiltrator/APT/Flatpak sources plus an integrated **Add Source…** workflow; APT additions use a narrow Polkit-authorized helper and Flatpak user remotes remain unprivileged.
 - **History** — exact install/remove/update operations with versions and timestamps.
@@ -100,7 +100,8 @@ src/
 ├── core/                Product model and transaction model
 ├── catalogue/           Infiltrator + native AppStream + isolated Flatpak catalogue sources
 ├── sources/             APT/Flatpak source inventory
-├── helper/              Narrow privileged APT-source writer
+├── helper/              Narrow privileged source/update helpers
+├── tray/                XApp desktop-panel update indicator
 ├── backend/             Backend-neutral package-management contracts
 ├── backends/apt/        Initial APT/.deb implementation
 └── infiltratr-common/   Exact Common 1.19.10 gitlink
@@ -119,20 +120,24 @@ UI -> core -> backend contract <- APT backend
 
 The UI never calls APT directly.
 
-## Initial milestone
+## Current milestone
 
-Version 0.2 establishes a functional discovery/source-management foundation. Package install/remove/update remains intentionally non-mutating until transaction planning is complete; repository addition is the only enabled mutation and is isolated behind the source-management boundary. The implemented foundation includes:
+Version 0.3 turns Updates into an operational APT updater while retaining the unified software-management architecture established by 0.2. The implemented foundation now includes:
 
-1. the application shell exposes the seven product areas;
-2. package/application identity is represented once in the core;
-3. separate catalogue sources merge verified first-party records with host AppStream metadata and configured Flatpak remotes without teaching the UI repository mechanics; native AppStream stays in-process while Flatpak enumeration is isolated through its CLI;
-4. Discover provides asynchronous live refresh, offline first-party cache fallback, search, categories and details; first-party catalogue metadata renders immediately while SHA-256-verified icons hydrate independently in the background;
-5. APT enumerates installed package state through the backend contract, Flatpak installed state is reconciled from its deployment roots, and Discover merges those states into the application catalogue;
-6. Repositories inventories Infiltrator, APT and Flatpak sources and can add HTTPS APT `.sources` entries through a constrained Polkit helper or add user Flatpak remotes without privilege;
-7. transaction planning remains the required gate before package installation/removal/update;
-8. tests enforce catalogue/source/backend/core boundaries, CI builds the exact Common-pinned source, and a graphical Xvfb smoke test keeps the real application alive through asynchronous startup.
+1. the application shell exposes Discover, Installed, Updates, System, Repositories, History and Repair in one product;
+2. Discover merges verified Infiltrator catalogue records, native AppStream applications and configured Flatpak remotes, with asynchronous metadata/icon loading and installed-state reconciliation;
+3. Repositories inventories Infiltrator, APT and Flatpak sources and can add HTTPS APT sources through a constrained Polkit helper or user Flatpak remotes without privilege;
+4. the APT backend asynchronously inventories real candidate upgrades and classifies application, library, kernel and system-critical updates;
+5. every update execution is preflighted through the backend transaction planner, including dependency changes and system-critical classification, before authentication is requested;
+6. update execution is isolated in a separate root helper reached through Polkit; it accepts only exact-version requests for packages already installed, and APT package removal is prohibited;
+7. package-list refresh is an explicit authenticated operation and all update work remains off the GTK event loop;
+8. the Updates page shows live availability and system-critical counts, refreshes package lists, plans the transaction and installs the complete available update set;
+9. a separate XApp status process integrates with Cinnamon/Mint's desktop panel and exposes distinct up-to-date, orange update-available, checking, installing and red failure states;
+10. the panel indicator autostarts at login, is single-instance, is also started by Software for existing sessions, and opens Software directly on the Updates page;
+11. CI builds the GTK4 application and GTK3/XApp indicator together, runs unit tests and the graphical launch smoke test, validates AppStream metadata, and verifies every updater payload in the Debian package;
+12. Common remains pinned to the exact reviewed 1.19.10 release and package-system privilege boundaries stay outside the shared library.
 
-Write operations are not enabled until transaction planning, error propagation and privilege separation are proven.
+Discover-side arbitrary install/remove remains non-mutating. The dedicated update path is enabled because transaction planning, error propagation and privilege separation are now implemented for that constrained operation.
 
 ## Build direction
 
