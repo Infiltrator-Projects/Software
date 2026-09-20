@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<node>
+  <interface name="net.ssmith.infiltrator.software.Engine">
+    <method name="GetStatus">
+      <arg name="status" type="a{sv}" direction="out"/>
+    </method>
+    <method name="ListInstalled">
+      <arg name="packages" type="aa{sv}" direction="out"/>
+    </method>
+    <method name="ListUpdates">
+      <arg name="packages" type="aa{sv}" direction="out"/>
+    </method>
+    <method name="PlanTransaction">
+      <arg name="action" type="s" direction="in"/>
+      <arg name="package_ids" type="as" direction="in"/>
+      <arg name="plan" type="a{sv}" direction="out"/>
+    </method>
+    <method name="ReloadState">
+      <arg name="status" type="a{sv}" direction="out"/>
+    </method>
+    <signal name="StateChanged">
+      <arg name="generation" type="t"/>
+    </signal>
+    <signal name="HealthChanged">
+      <arg name="healthy" type="b"/>
+      <arg name="detail" type="s"/>
+    </signal>
+  </interface>
+</node>
