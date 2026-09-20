@@ -50,6 +50,29 @@ jobs:
       - name: Test
         run: ctest --test-dir build --output-on-failure
 
+      - name: Verify update authorization boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          app = Path("src/app/main.cpp").read_text()
+          backend = Path("src/backends/apt/apt_backend.cpp").read_text()
+          helper = Path("src/helper/update_helper.cpp").read_text()
+          policy = Path("data/net.ssmith.infiltrator.software.updates.policy").read_text()
+
+          assert "refresh_updates(state, true)" in app
+          assert "backend.refresh_metadata(result->error)" in app
+          assert '"refresh"}' not in app
+          assert "AptBackend::refresh_metadata" in backend
+          assert "Dir::State::lists=" in backend
+          assert "APT::Sandbox::User=" in backend
+          assert 'strcmp(argv[1], "refresh")' not in helper
+          assert 'run_apt({"update"})' in helper
+          assert "Authentication is required to install system software updates." in policy
+          PY
+
       - name: Engine service smoke test
         shell: bash
         run: |
