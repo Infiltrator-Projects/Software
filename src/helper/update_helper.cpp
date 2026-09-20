@@ -3,8 +3,11 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <fcntl.h>
 #include <string>
 #include <string_view>
+#include <sys/types.h>
+#include <sys/wait.h>
 #include <unistd.h>
 #include <utility>
 #include <vector>
@@ -53,6 +56,76 @@ bool safe_package_spec(const std::string_view value)
     }
 
     return true;
+}
+
+bool installed_package(const std::string &spec)
+{
+    const std::size_t equals = spec.find('=');
+    const std::string package =
+        equals == std::string::npos ? spec : spec.substr(0U, equals);
+
+    const char *dpkg_query =
+        access("/usr/bin/dpkg-query", X_OK) == 0
+            ? "/usr/bin/dpkg-query"
+            : (access("/bin/dpkg-query", X_OK) == 0
+                   ? "/bin/dpkg-query"
+                   : nullptr);
+    if (dpkg_query == nullptr) {
+        return false;
+    }
+
+    int pipe_fd[2]{};
+    if (pipe(pipe_fd) != 0) {
+        return false;
+    }
+
+    const pid_t child = fork();
+    if (child < 0) {
+        close(pipe_fd[0]);
+        close(pipe_fd[1]);
+        return false;
+    }
+
+    if (child == 0) {
+        close(pipe_fd[0]);
+        if (dup2(pipe_fd[1], STDOUT_FILENO) < 0) {
+            _exit(127);
+        }
+        const int null_fd = open("/dev/null", O_WRONLY);
+        if (null_fd >= 0) {
+            (void)dup2(null_fd, STDERR_FILENO);
+            close(null_fd);
+        }
+        close(pipe_fd[1]);
+        execl(
+            dpkg_query,
+            "dpkg-query",
+            "-W",
+            "--showformat=${db:Status-Abbrev}",
+            package.c_str(),
+            static_cast<char *>(nullptr));
+        _exit(127);
+    }
+
+    close(pipe_fd[1]);
+    char status_text[8]{};
+    const ssize_t count =
+        read(pipe_fd[0], status_text, sizeof(status_text) - 1U);
+    close(pipe_fd[0]);
+
+    int status = 0;
+    while (waitpid(child, &status, 0) < 0) {
+        if (errno == EINTR) {
+            continue;
+        }
+        return false;
+    }
+
+    return count >= 2 &&
+           status_text[0] == 'i' &&
+           status_text[1] == 'i' &&
+           WIFEXITED(status) &&
+           WEXITSTATUS(status) == 0;
 }
 
 const char *apt_get_path()
@@ -107,17 +180,26 @@ int main(int argc, char **argv)
 
     if (argc >= 3 && std::strcmp(argv[1], "apply") == 0) {
         std::vector<std::string> arguments{
-            "-y", "--no-remove", "--only-upgrade", "install"};
+            "-y", "--no-remove", "install"};
         arguments.reserve(static_cast<std::size_t>(argc) + 3U);
 
         for (int index = 2; index < argc; ++index) {
             const std::string spec(argv[index]);
-            if (!safe_package_spec(spec)) {
+            if (!safe_package_spec(spec) ||
+                spec.find('=') == std::string::npos) {
                 std::fprintf(
                     stderr,
-                    "Invalid package specification: %s\n",
+                    "Invalid exact package specification: %s\n",
                     argv[index]);
                 return 64;
+            }
+            if (!installed_package(spec)) {
+                std::fprintf(
+                    stderr,
+                    "Refusing to install a requested package that is not "
+                    "already installed: %s\n",
+                    argv[index]);
+                return 65;
             }
             arguments.push_back(spec);
         }
