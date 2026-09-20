@@ -16,6 +16,9 @@ public:
 
     [[nodiscard]] std::string_view name() const noexcept override;
     CatalogueSnapshot refresh(std::string &error) override;
+    void hydrate_icons(
+        std::vector<PackageRecord> &records,
+        std::string &error);
 
     static std::vector<PackageRecord> parse_document(
         std::string_view document,
