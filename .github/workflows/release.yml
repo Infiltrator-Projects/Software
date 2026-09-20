@@ -97,7 +97,7 @@ jobs:
           grep -qx './usr/share/icons/hicolor/scalable/status/infiltrator-software-checking-symbolic.svg' package-files.txt
           grep -qx './usr/share/icons/hicolor/scalable/status/infiltrator-software-installing-symbolic.svg' package-files.txt
           grep -qx './usr/share/icons/hicolor/scalable/status/infiltrator-software-error-symbolic.svg' package-files.txt
-          grep -qx './usr/share/applications/infiltrator-software.desktop' package-files.txt
+          grep -qx './usr/share/applications/net.ssmith.infiltrator.software.desktop' package-files.txt
           grep -qx './usr/share/icons/hicolor/scalable/apps/infiltrator-software.svg' package-files.txt
           grep -qx './usr/share/app-install/icons/infiltrator-software.svg' package-files.txt
           grep -qx './usr/share/metainfo/infiltrator-software.metainfo.xml' package-files.txt

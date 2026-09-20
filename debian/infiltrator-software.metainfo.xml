@@ -21,7 +21,7 @@
     </p>
   </description>
 
-  <launchable type="desktop-id">infiltrator-software.desktop</launchable>
+  <launchable type="desktop-id">net.ssmith.infiltrator.software.desktop</launchable>
   <provides>
     <binary>infiltrator-software</binary>
   </provides>
