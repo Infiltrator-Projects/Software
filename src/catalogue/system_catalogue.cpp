@@ -266,9 +266,7 @@ std::vector<PackageRecord> flatpak_remote_records()
     return result;
 }
 
-PackageRecord convert_component(
-    AsComponent *component,
-    const std::unordered_set<std::string> &installed_flatpaks)
+PackageRecord convert_component(AsComponent *component)
 {
     PackageRecord record;
     if (component == nullptr) {
@@ -288,55 +286,34 @@ PackageRecord convert_component(
         return record;
     }
 
-    const bool is_flatpak = false;
+    const gchar *package_name =
+        as_component_get_pkgname(component);
+    if (package_name == nullptr || *package_name == '\0') {
+        return record;
+    }
 
+    record.id = "apt:" + std::string(package_name);
     record.name = name;
+    record.package_name = package_name;
     record.category = category_for(component);
-    record.summary = text_or_empty(as_component_get_summary(component));
+    record.summary =
+        text_or_empty(as_component_get_summary(component));
     record.description = record.summary;
     record.publisher =
         text_or_empty(as_component_get_project_group(component));
     record.source_url =
-        text_or_empty(as_component_get_url(component, AS_URL_KIND_HOMEPAGE));
+        text_or_empty(
+            as_component_get_url(
+                component, AS_URL_KIND_HOMEPAGE));
     record.kind = PackageKind::application;
     record.channel = Channel::stable;
     record.state = InstallState::not_installed;
 
     const std::string origin =
         text_or_empty(as_component_get_origin(component));
-
-    if (is_flatpak) {
-        const std::string bundle_id =
-            text_or_empty(as_bundle_get_id(flatpak_bundle));
-        record.id = "flatpak:" + component_id;
-        record.package_name = component_id;
-        record.asset = bundle_id;
-        record.source = origin.empty()
-            ? "Flatpak"
-            : "Flatpak · " + origin;
-        record.available_version =
-            text_or_empty(as_component_get_branch(component));
-        if (installed_flatpaks.find(component_id) !=
-            installed_flatpaks.end()) {
-            record.state = InstallState::installed;
-            record.installed_version =
-                record.available_version.empty()
-                    ? "Flatpak"
-                    : record.available_version;
-        }
-    } else {
-        const gchar *package_name = as_component_get_pkgname(component);
-        if (package_name == nullptr || *package_name == '\0') {
-            return PackageRecord{};
-        }
-
-        record.package_name = package_name;
-        record.id = "apt:" + record.package_name;
-
-        record.source = origin.empty()
-            ? "APT repository"
-            : "APT · " + origin;
-    }
+    record.source = origin.empty()
+        ? "APT repository"
+        : "APT · " + origin;
 
     if (record.publisher.empty()) {
         record.publisher = origin;
@@ -387,8 +364,6 @@ CatalogueSnapshot SystemCatalogue::refresh(std::string &error)
         return snapshot;
     }
 
-    const std::unordered_set<std::string> installed_flatpaks =
-        flatpak_installed_ids();
     std::unordered_set<std::string> seen;
     const guint count = as_component_box_get_size(components);
     snapshot.records.reserve(static_cast<std::size_t>(count));
@@ -397,7 +372,7 @@ CatalogueSnapshot SystemCatalogue::refresh(std::string &error)
         AsComponent *component =
             as_component_box_index_safe(components, i);
         PackageRecord record =
-            convert_component(component, installed_flatpaks);
+            convert_component(component);
         if (!valid_identity(record) || record.package_name.empty()) {
             continue;
         }
