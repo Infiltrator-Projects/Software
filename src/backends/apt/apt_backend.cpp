@@ -7,6 +7,8 @@
 #include <cerrno>
 #include <charconv>
 #include <cstdint>
+#include <cstdlib>
+#include <filesystem>
 #include <limits>
 #include <string>
 #include <string_view>
@@ -109,6 +111,95 @@ bool apt_get_available() noexcept
 {
     return access("/usr/bin/apt-get", X_OK) == 0 ||
            access("/bin/apt-get", X_OK) == 0;
+}
+
+std::filesystem::path user_apt_cache_root()
+{
+    const char *xdg_cache = std::getenv("XDG_CACHE_HOME");
+    if (xdg_cache != nullptr && *xdg_cache != '\0') {
+        return std::filesystem::path(xdg_cache) /
+               "infiltrator/software/apt";
+    }
+
+    const char *home = std::getenv("HOME");
+    if (home != nullptr && *home != '\0') {
+        return std::filesystem::path(home) /
+               ".cache/infiltrator/software/apt";
+    }
+
+    return std::filesystem::temp_directory_path() /
+           ("infiltrator-software-" + std::to_string(getuid())) /
+           "apt";
+}
+
+bool prepare_user_apt_cache(
+    std::filesystem::path &root,
+    std::string &error)
+{
+    root = user_apt_cache_root();
+    std::error_code ec;
+    for (const std::filesystem::path &path : {
+             root / "lists/partial",
+             root / "archives/partial",
+             root / "periodic"}) {
+        std::filesystem::create_directories(path, ec);
+        if (ec) {
+            error =
+                "Unable to create the user package-metadata cache: " +
+                ec.message();
+            return false;
+        }
+    }
+    return true;
+}
+
+std::vector<std::string> user_apt_options(
+    const std::filesystem::path &root)
+{
+    return {
+        "-o", "Dir::State::lists=" + (root / "lists").string(),
+        "-o", "Dir::State::periodic=" + (root / "periodic").string(),
+        "-o", "Dir::Cache=" + root.string(),
+        "-o", "Dir::Cache::archives=" + (root / "archives").string(),
+        "-o", "Dir::Cache::pkgcache=" + (root / "pkgcache.bin").string(),
+        "-o", "Dir::Cache::srcpkgcache=" + (root / "srcpkgcache.bin").string(),
+        "-o", "Dir::State::status=/var/lib/dpkg/status"};
+}
+
+bool user_lists_ready(const std::filesystem::path &root)
+{
+    const std::filesystem::path lists = root / "lists";
+    std::error_code ec;
+    if (!std::filesystem::is_directory(lists, ec) || ec) {
+        return false;
+    }
+
+    for (const auto &entry : std::filesystem::directory_iterator(lists, ec)) {
+        if (ec) {
+            return false;
+        }
+        if (!entry.is_regular_file(ec) || ec) {
+            ec.clear();
+            continue;
+        }
+        const std::string name = entry.path().filename().string();
+        if (name != "lock") {
+            return true;
+        }
+    }
+    return false;
+}
+
+void append_user_apt_options(
+    std::vector<std::string> &arguments,
+    const std::filesystem::path &root)
+{
+    const std::vector<std::string> options =
+        user_apt_options(root);
+    arguments.insert(
+        arguments.end(),
+        options.begin(),
+        options.end());
 }
 
 std::string package_key(std::string value)
@@ -226,6 +317,37 @@ std::vector<PackageRecord> AptBackend::search(
     return {};
 }
 
+bool AptBackend::refresh_metadata(std::string &error)
+{
+    error.clear();
+    if (!apt_get_available()) {
+        error = "apt-get is not available.";
+        return false;
+    }
+
+    std::filesystem::path root;
+    if (!prepare_user_apt_cache(root, error)) {
+        return false;
+    }
+
+    std::vector<std::string> arguments{
+        "env", "LC_ALL=C", "apt-get"};
+    append_user_apt_options(arguments, root);
+    arguments.emplace_back("update");
+
+    std::string output;
+    if (!run_command(arguments, output, error)) {
+        return false;
+    }
+
+    if (!user_lists_ready(root)) {
+        error =
+            "Repository refresh completed without publishing package metadata.";
+        return false;
+    }
+    return true;
+}
+
 std::vector<PackageRecord> AptBackend::list_updates(std::string &error)
 {
     error.clear();
@@ -238,11 +360,19 @@ std::vector<PackageRecord> AptBackend::list_updates(std::string &error)
         return {};
     }
 
+    std::vector<std::string> arguments{
+        "env", "LC_ALL=C", "apt-get", "-s"};
+    const std::filesystem::path user_root =
+        user_apt_cache_root();
+    if (user_lists_ready(user_root)) {
+        append_user_apt_options(arguments, user_root);
+    }
+    arguments.emplace_back("-o");
+    arguments.emplace_back("Debug::NoLocking=1");
+    arguments.emplace_back("dist-upgrade");
+
     std::string output;
-    if (!run_command(
-            {"env", "LC_ALL=C", "apt-get", "-s",
-             "-o", "Debug::NoLocking=1", "dist-upgrade"},
-            output, error)) {
+    if (!run_command(arguments, output, error)) {
         return {};
     }
 
@@ -319,9 +449,16 @@ std::optional<TransactionPlan> AptBackend::plan(
     }
 
     std::vector<std::string> arguments{
-        "env", "LC_ALL=C", "apt-get", "-s",
-        "-o", "Debug::NoLocking=1",
-        "--no-remove", "install"};
+        "env", "LC_ALL=C", "apt-get", "-s"};
+    const std::filesystem::path user_root =
+        user_apt_cache_root();
+    if (user_lists_ready(user_root)) {
+        append_user_apt_options(arguments, user_root);
+    }
+    arguments.emplace_back("-o");
+    arguments.emplace_back("Debug::NoLocking=1");
+    arguments.emplace_back("--no-remove");
+    arguments.emplace_back("install");
     arguments.insert(
         arguments.end(),
         request.package_ids.begin(), request.package_ids.end());
