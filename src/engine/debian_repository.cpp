@@ -7,6 +7,7 @@
 #include <glib.h>
 #include <lzma.h>
 #include <zlib.h>
+#include <infiltratr/posix.h>
 
 #include <algorithm>
 #include <array>
@@ -670,36 +671,16 @@ bool write_atomic(
         return false;
     }
 
-    const std::filesystem::path temporary =
-        path.string() + ".tmp-" + std::to_string(getpid());
-    {
-        std::ofstream output(
-            temporary,
-            std::ios::binary | std::ios::trunc);
-        if (!output) {
-            error =
-                "Unable to write repository cache file: " +
-                temporary.string();
-            return false;
-        }
-        output.write(
-            content.data(),
-            static_cast<std::streamsize>(content.size()));
-        if (!output) {
-            error =
-                "Unable to finish repository cache file: " +
-                temporary.string();
-            return false;
-        }
-    }
-
-    std::filesystem::rename(temporary, path, ec);
-    if (ec) {
-        std::error_code ignored;
-        std::filesystem::remove(temporary, ignored);
+    const std::string destination = path.string();
+    const int status = infiltratr_atomic_file_write_bytes(
+        destination.c_str(),
+        INFILTRATR_ATOMIC_FILE_PRIVATE,
+        content.data(),
+        content.size());
+    if (status != 0) {
         error =
-            "Unable to publish repository cache file: " +
-            path.string();
+            "Unable to durably publish repository cache file: " +
+            destination + " (" + std::to_string(status) + ").";
         return false;
     }
     return true;
