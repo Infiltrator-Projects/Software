@@ -39,7 +39,7 @@ jobs:
           DEBIAN_FRONTEND: noninteractive
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends appstream build-essential cmake debhelper dpkg-dev git libcurl4-openssl-dev libgtk-4-dev libjson-glib-dev pkg-config xvfb
+          sudo apt-get install -y --no-install-recommends appstream build-essential cmake debhelper dpkg-dev gdb git libcurl4-openssl-dev libgtk-4-dev libjson-glib-dev pkg-config xvfb
 
       - name: Configure
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
@@ -66,6 +66,8 @@ jobs:
             exit 0
           fi
           echo "::error::Software exited unexpectedly during launch smoke test (status $status)."
+          echo "Collecting debugger backtrace..."
+          timeout 20s xvfb-run -a gdb --batch             -ex "set pagination off"             -ex run             -ex "thread apply all bt full"             --args ./build/infiltrator-software || true
           exit "$status"
 
       - name: Validate AppStream metadata
