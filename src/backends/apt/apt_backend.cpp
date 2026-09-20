@@ -10,6 +10,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <limits>
+#include <pwd.h>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -156,7 +157,7 @@ bool prepare_user_apt_cache(
 std::vector<std::string> user_apt_options(
     const std::filesystem::path &root)
 {
-    return {
+    std::vector<std::string> options{
         "-o", "Dir::State::lists=" + (root / "lists").string(),
         "-o", "Dir::State::periodic=" + (root / "periodic").string(),
         "-o", "Dir::Cache=" + root.string(),
@@ -164,6 +165,23 @@ std::vector<std::string> user_apt_options(
         "-o", "Dir::Cache::pkgcache=" + (root / "pkgcache.bin").string(),
         "-o", "Dir::Cache::srcpkgcache=" + (root / "srcpkgcache.bin").string(),
         "-o", "Dir::State::status=/var/lib/dpkg/status"};
+
+    /*
+     * apt normally drops acquisition workers to _apt. A per-user cache often
+     * lives below a 0700 home directory, so _apt cannot traverse it. The
+     * refresh process is already unprivileged; keeping acquisition workers at
+     * the calling user's uid preserves the sandbox boundary without granting
+     * any additional access.
+     */
+    if (const passwd *account = getpwuid(getuid());
+        account != nullptr &&
+        account->pw_name != nullptr &&
+        *account->pw_name != '\0') {
+        options.emplace_back("-o");
+        options.emplace_back(
+            std::string("APT::Sandbox::User=") + account->pw_name);
+    }
+    return options;
 }
 
 bool user_lists_ready(const std::filesystem::path &root)
