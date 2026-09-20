@@ -95,6 +95,11 @@ bool bind_text(
     const int index,
     const std::string_view value)
 {
+    if (value.size() >
+        static_cast<std::size_t>(
+            std::numeric_limits<int>::max())) {
+        return false;
+    }
     return sqlite3_bind_text(
                statement,
                index,
@@ -158,7 +163,8 @@ bool open_database(
             &database.handle,
             SQLITE_OPEN_READWRITE |
                 SQLITE_OPEN_CREATE |
-                SQLITE_OPEN_FULLMUTEX,
+                SQLITE_OPEN_FULLMUTEX |
+                SQLITE_OPEN_NOFOLLOW,
             nullptr) != SQLITE_OK) {
         error = database.handle != nullptr
             ? sqlite_error(database.handle)
@@ -180,6 +186,10 @@ bool open_database(
         exec_sql(
             database.handle,
             "PRAGMA foreign_keys=ON;",
+            error) &&
+        exec_sql(
+            database.handle,
+            "PRAGMA trusted_schema=OFF;",
             error);
 }
 
