@@ -61,6 +61,8 @@ struct WindowState {
     GtkWidget *repository_status{};
 };
 
+void refresh_repositories(WindowState *state);
+
 GtkWidget *make_icon(const char *name, int size)
 {
     GtkWidget *image = gtk_image_new_from_icon_name(name);
