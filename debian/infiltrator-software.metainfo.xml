@@ -34,6 +34,11 @@
   <url type="homepage">https://github.com/Infiltrator-Projects/Software</url>
 
   <releases>
+    <release version="0.3.0" date="2026-09-20">
+      <description>
+        <p>Operational APT updates with preflight transaction planning, constrained Polkit execution and a Mint-native XApp panel status indicator.</p>
+      </description>
+    </release>
     <release version="0.2.5" date="2026-09-20">
       <description>
         <p>Fixes AppStream ownership in the merged Discover catalogue while retaining integrated APT and Flatpak source discovery.</p>
