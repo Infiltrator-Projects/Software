@@ -92,6 +92,8 @@ One engine owns package/repository reconciliation.
 
 Clients subscribe to snapshots and change events. They do not perform duplicate update calculations.
 
+The first shared service slice is now implemented as a session D-Bus service at `net.ssmith.infiltrator.software.Engine`. It owns the in-memory view of the latest package-state generation, caches the update calculation once per generation, exposes status/installed/update snapshots and native transaction planning, and emits generation/health changes. It is D-Bus activatable and keeps stale known-good state readable if a subsequent database reload fails. GUI and tray migration to this service is the next slice.
+
 The derived state database is disposable. Authoritative state remains repository metadata, configured repository policy and installed package state.
 
 See [State](STATE.md).
