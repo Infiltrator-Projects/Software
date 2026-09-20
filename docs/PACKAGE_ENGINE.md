@@ -91,7 +91,9 @@ The long-term native payload installer can replace this boundary without changin
 
 The first native slice reads installed package state directly from /var/lib/dpkg/status and no longer spawns dpkg-query for Installed inventory. Architecture and Multi-Arch identity are retained in the normalized record.
 
-The second native slice parses Debian Packages indexes directly without an APT process. It preserves package/version/architecture identity, payload filename, SHA-256 and sizes, Essential/Priority/Multi-Arch metadata, and dependency/provides/conflict relationship text. This parser is format-level engine code and is not tied to APT's private caches. Native repository download/signature policy and candidate selection are separate later slices.
+The second native slice parses Debian Packages indexes directly without an APT process. It preserves package/version/architecture identity, payload filename, SHA-256 and sizes, Essential/Priority/Multi-Arch metadata, and dependency/provides/conflict relationship text. This parser is format-level engine code and is not tied to APT's private caches.
+
+The third native slice implements Debian version comparison inside the engine. It handles epochs without integer-size limits, upstream and Debian revision parts, numeric runs and leading zeroes, tilde-before-end ordering, letter-before-punctuation ordering and the implicit revision 0 used when no Debian revision is present. Native repository download/signature policy and candidate selection are separate later slices.
 
 Migration is complete only when normal operation no longer spawns APT programs.
 
