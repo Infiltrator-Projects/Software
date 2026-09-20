@@ -7,6 +7,7 @@
 #include "sources/source_inventory.hpp"
 
 #include <gtk/gtk.h>
+#include <infiltratr/core.h>
 
 #include <algorithm>
 #include <cctype>
@@ -214,19 +215,10 @@ std::string folded(const std::string_view value)
 
 std::string display_size(const std::uint64_t bytes)
 {
-    std::ostringstream text;
-    if (bytes >= 1024U * 1024U) {
-        const double mib =
-            static_cast<double>(bytes) / (1024.0 * 1024.0);
-        text.setf(std::ios::fixed);
-        text.precision(mib >= 10.0 ? 0 : 1);
-        text << mib << " MiB";
-    } else if (bytes >= 1024U) {
-        text << (bytes / 1024U) << " KiB";
-    } else {
-        text << bytes << " B";
-    }
-    return text.str();
+    char text[32];
+    const char *formatted =
+        infiltratr_format_bytes(bytes, text, sizeof(text));
+    return formatted != nullptr ? std::string(formatted) : std::string();
 }
 
 const char *category_icon(const std::string_view category) noexcept
