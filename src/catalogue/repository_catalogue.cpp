@@ -225,15 +225,21 @@ CatalogueSnapshot RepositoryCatalogue::refresh(std::string &error)
                 live_error;
     }
 
-    for (PackageRecord &record : snapshot.records) {
+    return snapshot;
+}
+
+void RepositoryCatalogue::hydrate_icons(
+    std::vector<PackageRecord> &records,
+    std::string &error)
+{
+    error.clear();
+    for (PackageRecord &record : records) {
         std::string icon_error;
         if (!cache_icon(record, icon_error) &&
             error.empty() && !icon_error.empty()) {
             error = icon_error;
         }
     }
-
-    return snapshot;
 }
 
 std::vector<PackageRecord> RepositoryCatalogue::parse_document(
