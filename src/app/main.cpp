@@ -40,6 +40,8 @@ struct WindowState {
     GtkWidget *discover_flow{};
     GtkWidget *discover_search{};
     GtkWidget *discover_category{};
+    GtkStringList *discover_categories{};
+    GtkListBox *navigation_list{};
     GtkWidget *discover_status{};
     GtkWidget *discover_count{};
     GtkWidget *discover_source{};
@@ -696,17 +698,19 @@ void discover_complete(
         categories.insert(record.category);
     }
 
-    GtkStringList *category_model = gtk_string_list_new(nullptr);
-    gtk_string_list_append(category_model, "All");
-    for (const std::string &category : categories) {
-        gtk_string_list_append(category_model, category.c_str());
+    if (state->discover_categories != nullptr) {
+        while (g_list_model_get_n_items(
+                   G_LIST_MODEL(state->discover_categories)) > 0U) {
+            gtk_string_list_remove(state->discover_categories, 0U);
+        }
+        gtk_string_list_append(state->discover_categories, "All");
+        for (const std::string &category : categories) {
+            gtk_string_list_append(
+                state->discover_categories, category.c_str());
+        }
+        gtk_drop_down_set_selected(
+            GTK_DROP_DOWN(state->discover_category), 0U);
     }
-    gtk_drop_down_set_model(
-        GTK_DROP_DOWN(state->discover_category),
-        G_LIST_MODEL(category_model));
-    g_object_unref(category_model);
-    gtk_drop_down_set_selected(
-        GTK_DROP_DOWN(state->discover_category), 0U);
 
     if (state->discover_count != nullptr) {
         const std::string count =
@@ -818,11 +822,11 @@ GtkWidget *make_discover_page(WindowState *state)
         state);
     gtk_box_append(GTK_BOX(controls), state->discover_search);
 
-    GtkStringList *categories = gtk_string_list_new(nullptr);
-    gtk_string_list_append(categories, "All");
+    state->discover_categories = gtk_string_list_new(nullptr);
+    gtk_string_list_append(state->discover_categories, "All");
     state->discover_category =
-        gtk_drop_down_new(G_LIST_MODEL(categories), nullptr);
-    g_object_unref(categories);
+        gtk_drop_down_new(
+            G_LIST_MODEL(state->discover_categories), nullptr);
     gtk_widget_set_size_request(state->discover_category, 190, -1);
     g_signal_connect(
         state->discover_category,
@@ -1085,6 +1089,7 @@ GtkWidget *make_navigation(WindowState *state)
     gtk_box_append(GTK_BOX(outer), section);
 
     GtkWidget *list = gtk_list_box_new();
+    state->navigation_list = GTK_LIST_BOX(list);
     gtk_widget_add_css_class(list, "nav-list");
     gtk_list_box_set_selection_mode(GTK_LIST_BOX(list), GTK_SELECTION_SINGLE);
     gtk_widget_set_margin_start(list, 8);
@@ -1100,10 +1105,6 @@ GtkWidget *make_navigation(WindowState *state)
 
     g_signal_connect(
         list, "row-selected", G_CALLBACK(navigation_changed), state);
-
-    GtkListBoxRow *first =
-        gtk_list_box_get_row_at_index(GTK_LIST_BOX(list), 0);
-    gtk_list_box_select_row(GTK_LIST_BOX(list), first);
 
     GtkWidget *footer = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
     gtk_widget_add_css_class(footer, "sidebar-footer");
@@ -1250,6 +1251,10 @@ void destroy_window_state(gpointer data)
         g_object_unref(state->installed_strings);
         state->installed_strings = nullptr;
     }
+    if (state->discover_categories != nullptr) {
+        g_object_unref(state->discover_categories);
+        state->discover_categories = nullptr;
+    }
     delete state;
 }
 
@@ -1359,6 +1364,11 @@ void activate(GtkApplication *application, gpointer)
         "repair");
 
     gtk_stack_set_visible_child_name(state->stack, "discover");
+    if (state->navigation_list != nullptr) {
+        GtkListBoxRow *first = gtk_list_box_get_row_at_index(
+            state->navigation_list, 0);
+        gtk_list_box_select_row(state->navigation_list, first);
+    }
     gtk_box_append(GTK_BOX(root), make_status_bar());
 
     gtk_window_present(GTK_WINDOW(window));
