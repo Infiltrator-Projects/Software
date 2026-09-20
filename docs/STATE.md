@@ -44,7 +44,9 @@ The package engine exposes current snapshot/generation, state-changed events, re
 
 Software and the panel indicator are clients.
 
-The indicator therefore displays the same update count/state as Software rather than running its own solver.
+The initial D-Bus service is now implemented. It exposes `GetStatus`, `ListInstalled`, `ListUpdates`, `PlanTransaction` and `ReloadState` on `net.ssmith.infiltrator.software.Engine`, with `StateChanged` and `HealthChanged` signals. Package-state database reads are read-only and do not require clients to own or mutate the database. The service caches update state per generation so multiple clients consume the same calculation.
+
+The indicator therefore displays the same update count/state as Software rather than running its own solver once client migration is complete.
 
 ## Startup
 
