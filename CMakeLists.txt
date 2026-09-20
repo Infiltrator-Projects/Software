@@ -143,6 +143,7 @@ target_link_libraries(software-apt PUBLIC software-engine)
 
 add_library(software-catalogue STATIC
     src/catalogue/repository_catalogue.cpp
+    src/catalogue/catalogue_snapshot_store.cpp
     src/catalogue/system_catalogue.cpp)
 target_include_directories(software-catalogue PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/src")
@@ -295,6 +296,13 @@ if(BUILD_TESTING)
     add_executable(software-catalogue-test tests/catalogue_test.cpp)
     target_link_libraries(software-catalogue-test PRIVATE software-catalogue)
     add_test(NAME software-catalogue-test COMMAND software-catalogue-test)
+
+    add_executable(software-catalogue-store-test
+        tests/catalogue_snapshot_store_test.cpp)
+    target_link_libraries(software-catalogue-store-test PRIVATE software-catalogue)
+    add_test(
+        NAME software-catalogue-store-test
+        COMMAND software-catalogue-store-test)
 
     add_executable(software-sources-test tests/source_inventory_test.cpp)
     target_link_libraries(software-sources-test PRIVATE software-sources)

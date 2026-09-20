@@ -2,6 +2,7 @@
 #include "app/theme.hpp"
 #include "backends/apt/apt_backend.hpp"
 #include "catalogue/repository_catalogue.hpp"
+#include "catalogue/catalogue_snapshot_store.hpp"
 #include "catalogue/system_catalogue.hpp"
 #include "core/model.hpp"
 #include "sources/source_inventory.hpp"
@@ -31,6 +32,7 @@ namespace {
 
 using infiltrator::software::AptBackend;
 using infiltrator::software::CatalogueSnapshot;
+using infiltrator::software::CatalogueSnapshotStore;
 using infiltrator::software::PackageRecord;
 using infiltrator::software::RepositoryCatalogue;
 using infiltrator::software::SourceInventory;
@@ -191,10 +193,13 @@ GtkWidget *make_foundation_page(
 struct DiscoverResult {
     CatalogueSnapshot snapshot;
     std::string warning;
+    std::size_t added{0U};
+    std::size_t removed{0U};
 };
 
 struct DiscoverTaskData {
     unsigned int generation{0U};
+    bool force_refresh{false};
 };
 
 struct IconHydrationResult {
@@ -539,98 +544,269 @@ std::string package_key(std::string value)
 void discover_worker(
     GTask *task,
     gpointer,
-    gpointer,
+    gpointer task_data,
     GCancellable *)
 {
-    auto *result = new DiscoverResult{};
+    auto *data =
+        static_cast<DiscoverTaskData *>(task_data);
+    const bool force_refresh =
+        data != nullptr &&
+        data->force_refresh;
+
+    auto *result =
+        new DiscoverResult{};
+    CatalogueSnapshotStore store;
+
+    if (!force_refresh) {
+        std::string cache_error;
+        if (store.load(
+                result->snapshot,
+                cache_error)) {
+            AptBackend apt;
+            std::string apt_error;
+            const std::vector<PackageRecord> installed =
+                apt.list_installed(apt_error);
+
+            std::unordered_map<std::string, std::string>
+                versions;
+            versions.reserve(installed.size());
+            for (const PackageRecord &package :
+                 installed) {
+                versions.emplace(
+                    package_key(
+                        package.package_name),
+                    package.installed_version);
+            }
+
+            for (PackageRecord &record :
+                 result->snapshot.records) {
+                if (record.id.rfind(
+                        "flatpak:",
+                        0U) == 0U) {
+                    continue;
+                }
+
+                record.state =
+                    infiltrator::software::InstallState::
+                        not_installed;
+                record.installed_version.clear();
+
+                const auto found =
+                    versions.find(
+                        package_key(
+                            record.package_name));
+                if (found != versions.end()) {
+                    record.state =
+                        infiltrator::software::InstallState::
+                            installed;
+                    record.installed_version =
+                        found->second;
+                }
+            }
+
+            if (!apt_error.empty()) {
+                result->warning =
+                    "Saved catalogue loaded; installed-state detection failed: " +
+                    apt_error;
+            }
+
+            g_task_return_pointer(
+                task,
+                result,
+                [](gpointer pointer) {
+                    delete static_cast<DiscoverResult *>(
+                        pointer);
+                });
+            return;
+        }
+    }
+
+    CatalogueSnapshot previous;
+    std::string previous_error;
+    const bool had_previous =
+        store.load(
+            previous,
+            previous_error);
 
     RepositoryCatalogue catalogue;
     std::string infiltrator_warning;
-    result->snapshot = catalogue.refresh(infiltrator_warning);
+    result->snapshot =
+        force_refresh
+            ? catalogue.refresh(
+                  infiltrator_warning)
+            : catalogue.load(
+                  infiltrator_warning);
 
     SystemCatalogue system_catalogue;
     std::string system_warning;
     CatalogueSnapshot system_snapshot =
-        system_catalogue.refresh(system_warning);
+        system_catalogue.refresh(
+            system_warning);
 
-    std::unordered_set<std::string> native_packages;
-    native_packages.reserve(result->snapshot.records.size());
-    for (const PackageRecord &record : result->snapshot.records) {
+    std::unordered_set<std::string>
+        native_packages;
+    native_packages.reserve(
+        result->snapshot.records.size());
+    for (const PackageRecord &record :
+         result->snapshot.records) {
         if (!record.package_name.empty()) {
             native_packages.insert(
-                package_key(record.package_name));
+                package_key(
+                    record.package_name));
         }
     }
 
-    for (PackageRecord &record : system_snapshot.records) {
+    for (PackageRecord &record :
+         system_snapshot.records) {
         const bool native_duplicate =
             record.id.rfind("apt:", 0U) == 0U &&
-            native_packages.find(package_key(record.package_name)) !=
+            native_packages.find(
+                package_key(
+                    record.package_name)) !=
                 native_packages.end();
         if (!native_duplicate) {
-            result->snapshot.records.emplace_back(std::move(record));
+            result->snapshot.records.emplace_back(
+                std::move(record));
         }
     }
 
     std::sort(
         result->snapshot.records.begin(),
         result->snapshot.records.end(),
-        [](const PackageRecord &left, const PackageRecord &right) {
+        [](const PackageRecord &left,
+           const PackageRecord &right) {
             if (left.name != right.name) {
                 return left.name < right.name;
             }
             return left.source < right.source;
         });
 
-    result->snapshot.source = "Infiltrator + system";
-    if (!infiltrator_warning.empty()) {
-        result->warning = infiltrator_warning;
-    }
-    if (!system_warning.empty()) {
-        if (!result->warning.empty()) {
-            result->warning += " ";
-        }
-        result->warning +=
-            "System catalogue: " + system_warning;
-    }
+    result->snapshot.source =
+        "Infiltrator + system";
 
     AptBackend apt;
     std::string apt_error;
     const std::vector<PackageRecord> installed =
         apt.list_installed(apt_error);
 
-    std::unordered_map<std::string, std::string> versions;
+    std::unordered_map<std::string, std::string>
+        versions;
     versions.reserve(installed.size());
-    for (const PackageRecord &package : installed) {
+    for (const PackageRecord &package :
+         installed) {
         versions.emplace(
-            package_key(package.package_name),
+            package_key(
+                package.package_name),
             package.installed_version);
     }
 
-    for (PackageRecord &record : result->snapshot.records) {
-        if (record.id.rfind("flatpak:", 0U) == 0U) {
+    std::unordered_map<std::string, PackageRecord>
+        previous_records;
+    previous_records.reserve(
+        previous.records.size());
+    for (const PackageRecord &record :
+         previous.records) {
+        previous_records.emplace(
+            record.id,
+            record);
+    }
+
+    std::unordered_set<std::string>
+        current_ids;
+    current_ids.reserve(
+        result->snapshot.records.size());
+
+    for (PackageRecord &record :
+         result->snapshot.records) {
+        current_ids.insert(record.id);
+
+        const auto old =
+            previous_records.find(record.id);
+        if (old ==
+            previous_records.end()) {
+            if (had_previous) {
+                ++result->added;
+            }
+        } else if (
+            record.icon_sha256 ==
+                old->second.icon_sha256 &&
+            !old->second.cached_icon_path.empty()) {
+            record.cached_icon_path =
+                old->second.cached_icon_path;
+        }
+
+        if (record.id.rfind(
+                "flatpak:",
+                0U) == 0U) {
             continue;
         }
+
         const auto found =
-            versions.find(package_key(record.package_name));
+            versions.find(
+                package_key(
+                    record.package_name));
         if (found != versions.end()) {
             record.state =
-                infiltrator::software::InstallState::installed;
-            record.installed_version = found->second;
+                infiltrator::software::InstallState::
+                    installed;
+            record.installed_version =
+                found->second;
         }
     }
 
-    if (!apt_error.empty() && result->warning.empty()) {
+    if (had_previous) {
+        for (const PackageRecord &record :
+             previous.records) {
+            if (current_ids.find(record.id) ==
+                current_ids.end()) {
+                ++result->removed;
+            }
+        }
+    }
+
+    std::string cache_error;
+    CatalogueSnapshot to_save =
+        result->snapshot;
+    to_save.from_cache = false;
+    if (!store.save(
+            to_save,
+            cache_error) &&
+        result->warning.empty()) {
         result->warning =
-            "Catalogue loaded, but installed-state detection failed: " +
+            "Catalogue loaded but could not save local state: " +
+            cache_error;
+    }
+
+    if (!infiltrator_warning.empty()) {
+        if (!result->warning.empty()) {
+            result->warning += " ";
+        }
+        result->warning +=
+            infiltrator_warning;
+    }
+    if (!system_warning.empty()) {
+        if (!result->warning.empty()) {
+            result->warning += " ";
+        }
+        result->warning +=
+            "System catalogue: " +
+            system_warning;
+    }
+    if (!apt_error.empty()) {
+        if (!result->warning.empty()) {
+            result->warning += " ";
+        }
+        result->warning +=
+            "Installed-state detection failed: " +
             apt_error;
     }
 
     g_task_return_pointer(
         task,
         result,
-        [](gpointer data) {
-            delete static_cast<DiscoverResult *>(data);
+        [](gpointer pointer) {
+            delete static_cast<DiscoverResult *>(
+                pointer);
         });
 }
 
@@ -712,7 +888,8 @@ void start_discover_icon_hydration(
 
     bool has_remote_icons = false;
     for (const PackageRecord &record : state->discover_records) {
-        if (!record.icon_url.empty()) {
+        if (!record.icon_url.empty() &&
+            record.cached_icon_path.empty()) {
             has_remote_icons = true;
             break;
         }
@@ -825,11 +1002,28 @@ void discover_complete(
             GTK_LABEL(state->discover_state),
             result->snapshot.from_cache ? "Cached" : "Ready");
     }
-    if (state->discover_status != nullptr &&
-        !result->warning.empty()) {
-        gtk_label_set_text(
-            GTK_LABEL(state->discover_status),
-            result->warning.c_str());
+    if (state->discover_status != nullptr) {
+        if (!result->warning.empty()) {
+            gtk_label_set_text(
+                GTK_LABEL(state->discover_status),
+                result->warning.c_str());
+        } else if (task_data->force_refresh) {
+            const std::string message =
+                "Catalogue synchronized: " +
+                std::to_string(result->added) +
+                " added, " +
+                std::to_string(result->removed) +
+                " removed.";
+            gtk_label_set_text(
+                GTK_LABEL(state->discover_status),
+                message.c_str());
+        } else {
+            gtk_label_set_text(
+                GTK_LABEL(state->discover_status),
+                result->snapshot.from_cache
+                    ? "Loaded saved software catalogue."
+                    : "Software catalogue initialized.");
+        }
     }
 
     rebuild_discover(state);
@@ -838,7 +1032,9 @@ void discover_complete(
     delete result;
 }
 
-void refresh_discover(WindowState *state)
+void refresh_discover(
+    WindowState *state,
+    const bool force_refresh = false)
 {
     if (state == nullptr || state->window == nullptr ||
         state->discover_state == nullptr) {
@@ -852,7 +1048,9 @@ void refresh_discover(WindowState *state)
     if (state->discover_status != nullptr) {
         gtk_label_set_text(
             GTK_LABEL(state->discover_status),
-            "Refreshing Infiltrator, system and Flatpak metadata…");
+            force_refresh
+                ? "Synchronizing software catalogue…"
+                : "Loading saved software catalogue…");
     }
 
     GTask *task = g_task_new(
@@ -862,6 +1060,7 @@ void refresh_discover(WindowState *state)
         nullptr);
     auto *task_data = new DiscoverTaskData{};
     task_data->generation = state->discover_generation;
+    task_data->force_refresh = force_refresh;
     g_task_set_task_data(
         task,
         task_data,
@@ -2051,7 +2250,7 @@ void add_source_process_complete(
 
     if (success && state != nullptr) {
         refresh_repositories(state);
-        refresh_discover(state);
+        refresh_discover(state, true);
         if (run != nullptr && run->dialog != nullptr) {
             gtk_window_destroy(run->dialog);
         }
@@ -2700,7 +2899,7 @@ void refresh_clicked(GtkButton *, gpointer user_data)
     }
 
     if (std::strcmp(page, "discover") == 0) {
-        refresh_discover(state);
+        refresh_discover(state, true);
     } else if (std::strcmp(page, "installed") == 0) {
         refresh_installed(state);
     } else if (std::strcmp(page, "updates") == 0) {

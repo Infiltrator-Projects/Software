@@ -15,6 +15,7 @@ public:
     RepositoryCatalogue();
 
     [[nodiscard]] std::string_view name() const noexcept override;
+    CatalogueSnapshot load(std::string &error);
     CatalogueSnapshot refresh(std::string &error) override;
     void hydrate_icons(
         std::vector<PackageRecord> &records,

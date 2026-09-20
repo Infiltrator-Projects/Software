@@ -8,7 +8,6 @@
 
 #include <algorithm>
 #include <cctype>
-#include <chrono>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -28,7 +27,6 @@ constexpr std::string_view kRepositoryRoot =
     "https://infiltrator-projects.github.io/Infiltrator-Repository/";
 constexpr std::size_t kCatalogueLimit = 4U * 1024U * 1024U;
 constexpr std::size_t kIconLimit = 2U * 1024U * 1024U;
-constexpr auto kCatalogueFreshness = std::chrono::minutes(30);
 
 struct CurlRuntime final {
     CurlRuntime()
@@ -175,24 +173,6 @@ std::string icon_extension(const std::string &url)
     return ".img";
 }
 
-bool catalogue_cache_is_fresh(const std::string &path)
-{
-    if (path.empty()) {
-        return false;
-    }
-
-    std::error_code error;
-    const auto modified =
-        std::filesystem::last_write_time(path, error);
-    if (error) {
-        return false;
-    }
-
-    const auto now =
-        std::filesystem::file_time_type::clock::now();
-    return modified <= now &&
-           now - modified <= kCatalogueFreshness;
-}
 
 } // namespace
 
@@ -207,33 +187,57 @@ std::string_view RepositoryCatalogue::name() const noexcept
     return "Infiltrator Repository";
 }
 
-CatalogueSnapshot RepositoryCatalogue::refresh(std::string &error)
+CatalogueSnapshot RepositoryCatalogue::load(
+    std::string &error)
 {
     error.clear();
     CatalogueSnapshot snapshot;
-    snapshot.source = std::string(name());
+    snapshot.source =
+        std::string(name());
 
-    const std::string cache_path = catalogue_cache_path();
     std::string document;
+    const std::string cache_path =
+        catalogue_cache_path();
 
-    if (catalogue_cache_is_fresh(cache_path) &&
-        read_file(cache_path, document)) {
+    if (read_file(cache_path, document)) {
         std::string parse_error;
         snapshot.records =
-            parse_document(document, repository_root_, parse_error);
+            parse_document(
+                document,
+                repository_root_,
+                parse_error);
         if (parse_error.empty()) {
             snapshot.from_cache = true;
             return snapshot;
         }
-        document.clear();
     }
 
+    return refresh(error);
+}
+
+CatalogueSnapshot RepositoryCatalogue::refresh(
+    std::string &error)
+{
+    error.clear();
+    CatalogueSnapshot snapshot;
+    snapshot.source =
+        std::string(name());
+
+    const std::string cache_path =
+        catalogue_cache_path();
+    std::string document;
     std::string live_error;
     const bool live =
-        download(endpoint_, kCatalogueLimit, document, live_error);
+        download(
+            endpoint_,
+            kCatalogueLimit,
+            document,
+            live_error);
 
     if (!live) {
-        if (!read_file(cache_path, document)) {
+        if (!read_file(
+                cache_path,
+                document)) {
             error = live_error.empty()
                 ? "The Infiltrator catalogue is unavailable."
                 : live_error;
@@ -244,7 +248,10 @@ CatalogueSnapshot RepositoryCatalogue::refresh(std::string &error)
 
     std::string parse_error;
     snapshot.records =
-        parse_document(document, repository_root_, parse_error);
+        parse_document(
+            document,
+            repository_root_,
+            parse_error);
     if (!parse_error.empty()) {
         error = parse_error;
         return snapshot;
@@ -252,13 +259,16 @@ CatalogueSnapshot RepositoryCatalogue::refresh(std::string &error)
 
     if (live) {
         std::string cache_error;
-        if (!write_file(cache_path, document, cache_error) &&
-            error.empty()) {
+        if (!write_file(
+                cache_path,
+                document,
+                cache_error)) {
             error = cache_error;
         }
     } else if (!live_error.empty()) {
-        error = "Live catalogue unavailable; using verified cached metadata. " +
-                live_error;
+        error =
+            "Live catalogue unavailable; using saved metadata. " +
+            live_error;
     }
 
     return snapshot;
