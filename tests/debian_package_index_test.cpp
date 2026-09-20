@@ -10,9 +10,9 @@ int main()
     using namespace infiltrator::software;
 
     const std::string fixture =
-        "Package: alpha\n"
+        "pAcKaGe: alpha\n"
         "Version: 1:2.3-4\n"
-        "Architecture: amd64\n"
+        "ARCHITECTURE: amd64\n"
         "Priority: optional\n"
         "Essential: yes\n"
         "Multi-Arch: same\n"
@@ -78,6 +78,18 @@ int main()
     assert(data.size_bytes == 0U);
     assert(data.installed_size_bytes == 3U * 1024U);
     assert(!data.essential);
+
+    const auto duplicate = DebianPackageIndex::parse(
+        "Package: one\nPACKAGE: two\nVersion: 1\nArchitecture: amd64\n",
+        "test", error);
+    assert(duplicate.empty());
+    assert(!error.empty());
+
+    const auto malformed = DebianPackageIndex::parse(
+        "Package: one\nthis is not a field\nVersion: 1\nArchitecture: amd64\n",
+        "test", error);
+    assert(malformed.empty());
+    assert(!error.empty());
 
     return 0;
 }
