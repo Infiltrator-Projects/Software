@@ -119,7 +119,8 @@ add_library(software-engine STATIC
     src/engine/debian_installed_state.cpp
     src/engine/debian_package_index.cpp
     src/engine/debian_version.cpp
-    src/engine/debian_candidate.cpp)
+    src/engine/debian_candidate.cpp
+    src/engine/debian_dependency.cpp)
 target_include_directories(software-engine PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_link_libraries(software-engine PUBLIC software-core)
@@ -226,6 +227,13 @@ if(BUILD_TESTING)
     add_test(
         NAME software-debian-candidate-test
         COMMAND software-debian-candidate-test)
+
+    add_executable(software-debian-dependency-test
+        tests/debian_dependency_test.cpp)
+    target_link_libraries(software-debian-dependency-test PRIVATE software-engine)
+    add_test(
+        NAME software-debian-dependency-test
+        COMMAND software-debian-dependency-test)
 
     add_executable(software-apt-test tests/apt_backend_test.cpp)
     target_link_libraries(software-apt-test PRIVATE software-apt)
