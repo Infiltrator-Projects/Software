@@ -398,7 +398,7 @@ std::optional<TransactionPlan> AptBackend::plan(
     std::vector<std::string> arguments{
         "env", "LC_ALL=C", "apt-get", "-s",
         "-o", "Debug::NoLocking=1",
-        "--no-remove", "--only-upgrade", "install"};
+        "--no-remove", "install"};
     arguments.insert(
         arguments.end(),
         request.package_ids.begin(), request.package_ids.end());
