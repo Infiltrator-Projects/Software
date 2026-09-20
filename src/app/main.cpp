@@ -1141,7 +1141,7 @@ std::filesystem::path update_runtime_state_path()
         return {};
     }
     return std::filesystem::path(runtime) /
-           "net.ssmith.infiltrator.software" / "update-state";
+           "infiltrator-software" / "update-state";
 }
 
 std::string one_line(std::string value)
