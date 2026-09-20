@@ -9,7 +9,8 @@ Homepage: https://github.com/Infiltrator-Projects/Software
 
 Package: infiltrator-software
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}
+Depends: ${shlibs:Depends}, ${misc:Depends}, pkexec
+Recommends: flatpak
 Description: unified Infiltrator software manager and updater
  Infiltrator Software provides one graphical surface for software discovery,
  installed applications, updates, system components, repositories, history
