@@ -93,7 +93,9 @@ The first native slice reads installed package state directly from /var/lib/dpkg
 
 The second native slice parses Debian Packages indexes directly without an APT process. It preserves package/version/architecture identity, payload filename, SHA-256 and sizes, Essential/Priority/Multi-Arch metadata, and dependency/provides/conflict relationship text. This parser is format-level engine code and is not tied to APT's private caches.
 
-The third native slice implements Debian version comparison inside the engine. It handles epochs without integer-size limits, upstream and Debian revision parts, numeric runs and leading zeroes, tilde-before-end ordering, letter-before-punctuation ordering and the implicit revision 0 used when no Debian revision is present. Native repository download/signature policy and candidate selection are separate later slices.
+The third native slice implements Debian version comparison inside the engine. It handles epochs without integer-size limits, upstream and Debian revision parts, numeric runs and leading zeroes, tilde-before-end ordering, letter-before-punctuation ordering and the implicit revision 0 used when no Debian revision is present.
+
+The fourth native slice implements deterministic candidate selection. It matches installed package identity and architecture (including architecture-independent all packages), applies configurable per-source priorities, honours explicit holds, prefers the highest-priority source then the newest Debian version, uses deterministic source/file tie-breaking, and refuses downgrades unless the winning priority exceeds 1000. Native repository download/signature policy and dependency resolution remain separate later slices.
 
 Migration is complete only when normal operation no longer spawns APT programs.
 
