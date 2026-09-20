@@ -35,7 +35,7 @@ bool safe_token_list(std::string_view value)
     for (const unsigned char ch : value) {
         if (std::isalnum(ch) != 0 ||
             ch == '-' || ch == '_' || ch == '.' || ch == '+' ||
-            ch == '/' || ch == ':' || std::isspace(ch) != 0) {
+            ch == '/' || ch == ':' || ch == ' ' || ch == '\t') {
             continue;
         }
         return false;
@@ -45,10 +45,17 @@ bool safe_token_list(std::string_view value)
 
 bool https_uri(std::string_view value)
 {
-    return value.rfind("https://", 0U) == 0U &&
-           value.size() <= 2048U &&
-           value.find('\n') == std::string_view::npos &&
-           value.find('\r') == std::string_view::npos;
+    if (value.rfind("https://", 0U) != 0U ||
+        value.size() > 2048U) {
+        return false;
+    }
+
+    for (const unsigned char ch : value) {
+        if (std::isspace(ch) != 0) {
+            return false;
+        }
+    }
+    return true;
 }
 
 bool valid_signed_by(std::string_view value)
