@@ -6,8 +6,11 @@
 
 #include <filesystem>
 #include <fstream>
+#include <fcntl.h>
 #include <sstream>
 #include <string>
+#include <sys/file.h>
+#include <unistd.h>
 #include <utility>
 #include <vector>
 
@@ -27,6 +30,36 @@ struct TrayState {
     std::size_t update_count{0U};
     std::string last_error;
 };
+
+int acquire_single_instance_lock()
+{
+    const char *runtime = g_get_user_runtime_dir();
+    if (runtime == nullptr || *runtime == '\0') {
+        return -1;
+    }
+
+    const std::filesystem::path directory =
+        std::filesystem::path(runtime) / "infiltrator-software";
+    std::error_code ec;
+    std::filesystem::create_directories(directory, ec);
+    if (ec) {
+        return -1;
+    }
+
+    const std::filesystem::path path = directory / "tray.lock";
+    const int fd = open(
+        path.c_str(),
+        O_CREAT | O_RDWR | O_CLOEXEC,
+        0600);
+    if (fd < 0) {
+        return -1;
+    }
+    if (flock(fd, LOCK_EX | LOCK_NB) != 0) {
+        close(fd);
+        return -2;
+    }
+    return fd;
+}
 
 std::filesystem::path state_file()
 {
@@ -243,6 +276,15 @@ int main(int argc, char **argv)
 {
     gtk_init(&argc, &argv);
 
+    const int lock_fd = acquire_single_instance_lock();
+    if (lock_fd == -2) {
+        return 0;
+    }
+    if (lock_fd < 0) {
+        g_warning("Unable to establish update-indicator single-instance lock.");
+        return 1;
+    }
+
     TrayState state;
     state.icon =
         xapp_status_icon_new_with_name("infiltrator-software-updater");
@@ -290,5 +332,6 @@ int main(int argc, char **argv)
     gtk_main();
 
     g_object_unref(state.icon);
+    close(lock_fd);
     return 0;
 }
