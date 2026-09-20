@@ -2,7 +2,7 @@
 #include "backends/apt/apt_backend.hpp"
 
 #include <gtk/gtk.h>
-#include <xapp/xapp-status-icon.h>
+#include <libxapp/xapp-status-icon.h>
 
 #include <filesystem>
 #include <fstream>
