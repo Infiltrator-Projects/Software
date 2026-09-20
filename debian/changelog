@@ -1,3 +1,14 @@
+infiltrator-software (0.3.1) unstable; urgency=medium
+
+  * Bind the GTK application window explicitly to the canonical
+    infiltrator-software icon.
+  * Use the same project-owned icon in the About dialog.
+  * Publish the GTK application WM class so Cinnamon taskbar matching does not
+    fall back to a generic application icon.
+  * Keep the 0.3.0 update engine and panel updater behaviour unchanged.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Sun, 20 Sep 2026 16:40:00 +1000
+
 infiltrator-software (0.3.0) unstable; urgency=medium
 
   * Replace the Updates placeholder with live asynchronous APT update inventory.
