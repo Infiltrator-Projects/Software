@@ -39,6 +39,16 @@ std::string trim(const std::string_view value)
     return std::string(value.substr(first, last - first));
 }
 
+std::string field_key(std::string value)
+{
+    std::transform(
+        value.begin(), value.end(), value.begin(),
+        [](const unsigned char character) {
+            return static_cast<char>(std::tolower(character));
+        });
+    return value;
+}
+
 std::uint64_t kib_to_bytes(const std::string_view text)
 {
     std::uint64_t kib = 0U;
@@ -72,9 +82,9 @@ void append_package(
     const Fields &fields,
     std::vector<PackageRecord> &packages)
 {
-    const auto status = fields.find("Status");
-    const auto name = fields.find("Package");
-    const auto version = fields.find("Version");
+    const auto status = fields.find("status");
+    const auto name = fields.find("package");
+    const auto version = fields.find("version");
 
     if (status == fields.end() ||
         name == fields.end() ||
@@ -88,12 +98,12 @@ void append_package(
     PackageRecord package;
     package.id = name->second;
 
-    const auto architecture = fields.find("Architecture");
+    const auto architecture = fields.find("architecture");
     if (architecture != fields.end()) {
         package.architecture = architecture->second;
     }
 
-    const auto multi_arch = fields.find("Multi-Arch");
+    const auto multi_arch = fields.find("multi-arch");
     if (multi_arch != fields.end() &&
         multi_arch->second == "same" &&
         !package.architecture.empty()) {
@@ -107,7 +117,7 @@ void append_package(
     package.source = "Debian";
     package.state = InstallState::installed;
 
-    const auto size = fields.find("Installed-Size");
+    const auto size = fields.find("installed-size");
     if (size != fields.end()) {
         package.installed_size_bytes = kib_to_bytes(size->second);
     }
@@ -176,7 +186,7 @@ std::vector<PackageRecord> DebianInstalledState::parse(
             line.remove_suffix(1U);
         }
 
-        if (line.empty()) {
+        if (line.find_first_not_of(" \t") == std::string_view::npos) {
             flush();
         } else if (
             (line.front() == ' ' || line.front() == '\t') &&
@@ -186,12 +196,22 @@ std::vector<PackageRecord> DebianInstalledState::parse(
         } else {
             const std::size_t colon = line.find(':');
             if (colon == std::string_view::npos) {
-                current_key.clear();
+                error = "Malformed Debian control line without a field separator.";
+                return {};
             } else {
-                current_key = trim(line.substr(0U, colon));
-                if (!current_key.empty()) {
-                    fields[current_key] =
-                        trim(line.substr(colon + 1U));
+                current_key =
+                    field_key(trim(line.substr(0U, colon)));
+                if (current_key.empty()) {
+                    error = "Debian control field name is empty.";
+                    return {};
+                }
+                const auto inserted = fields.emplace(
+                    current_key, trim(line.substr(colon + 1U)));
+                if (!inserted.second) {
+                    error =
+                        "Duplicate Debian control field: " +
+                        current_key;
+                    return {};
                 }
             }
         }
