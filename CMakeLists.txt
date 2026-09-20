@@ -112,6 +112,7 @@ pkg_check_modules(APPSTREAM REQUIRED IMPORTED_TARGET appstream)
 pkg_check_modules(CURL REQUIRED IMPORTED_TARGET libcurl)
 pkg_check_modules(JSON_GLIB REQUIRED IMPORTED_TARGET json-glib-1.0)
 pkg_check_modules(GLIB REQUIRED IMPORTED_TARGET glib-2.0)
+pkg_check_modules(GIO REQUIRED IMPORTED_TARGET gio-2.0)
 pkg_check_modules(ZLIB REQUIRED IMPORTED_TARGET zlib)
 pkg_check_modules(LZMA REQUIRED IMPORTED_TARGET liblzma)
 pkg_check_modules(SQLITE3 REQUIRED IMPORTED_TARGET sqlite3)
@@ -127,7 +128,8 @@ add_library(software-engine STATIC
     src/engine/debian_dependency.cpp
     src/engine/debian_repository.cpp
     src/engine/package_state_store.cpp
-    src/engine/debian_transaction.cpp)
+    src/engine/debian_transaction.cpp
+    src/engine/engine_service_core.cpp)
 target_include_directories(software-engine PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_link_libraries(software-engine PUBLIC software-core
@@ -159,6 +161,11 @@ add_executable(infiltrator-software-helper
 add_executable(infiltrator-software-update-helper
     src/helper/update_helper.cpp)
 
+add_executable(infiltrator-software-engine
+    src/service/main.cpp)
+target_link_libraries(infiltrator-software-engine PRIVATE
+    software-engine PkgConfig::GIO)
+
 add_executable(infiltrator-software-tray
     src/tray/main.cpp)
 target_link_libraries(infiltrator-software-tray PRIVATE
@@ -179,7 +186,14 @@ install(TARGETS infiltrator-software infiltrator-software-tray
 install(TARGETS
     infiltrator-software-helper
     infiltrator-software-update-helper
+    infiltrator-software-engine
     RUNTIME DESTINATION libexec)
+install(FILES
+    data/net.ssmith.infiltrator.software.Engine.service
+    DESTINATION share/dbus-1/services)
+install(FILES
+    data/net.ssmith.infiltrator.software.Engine.xml
+    DESTINATION share/dbus-1/interfaces)
 install(FILES
     data/net.ssmith.infiltrator.software.policy
     data/net.ssmith.infiltrator.software.updates.policy
@@ -198,7 +212,8 @@ install(FILES LICENSE DESTINATION share/doc/infiltrator-software)
 foreach(target IN ITEMS
         software-core software-engine software-apt software-catalogue software-sources
         infiltrator-software-helper infiltrator-software-update-helper
-        infiltrator-software-tray infiltrator-software)
+        infiltrator-software-engine infiltrator-software-tray
+        infiltrator-software)
     if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
         target_compile_options(${target} PRIVATE
             -Wall -Wextra -Wpedantic -Wshadow -Wconversion -Wsign-conversion)
@@ -265,6 +280,13 @@ if(BUILD_TESTING)
     add_test(
         NAME software-debian-transaction-test
         COMMAND software-debian-transaction-test)
+
+    add_executable(software-engine-service-core-test
+        tests/engine_service_core_test.cpp)
+    target_link_libraries(software-engine-service-core-test PRIVATE software-engine)
+    add_test(
+        NAME software-engine-service-core-test
+        COMMAND software-engine-service-core-test)
 
     add_executable(software-apt-test tests/apt_backend_test.cpp)
     target_link_libraries(software-apt-test PRIVATE software-apt)
