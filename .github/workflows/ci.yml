@@ -86,8 +86,17 @@ jobs:
           dpkg-deb -f "$package" Recommends | grep -Eq '(^|, )flatpak([, ]|$)'
           dpkg-deb --fsys-tarfile "$package" | tar -tf - > package-files.txt
           grep -qx './usr/bin/infiltrator-software' package-files.txt
+          grep -qx './usr/bin/infiltrator-software-tray' package-files.txt
           grep -qx './usr/libexec/infiltrator-software-helper' package-files.txt
+          grep -qx './usr/libexec/infiltrator-software-update-helper' package-files.txt
           grep -qx './usr/share/polkit-1/actions/net.ssmith.infiltrator.software.policy' package-files.txt
+          grep -qx './usr/share/polkit-1/actions/net.ssmith.infiltrator.software.updates.policy' package-files.txt
+          grep -qx './etc/xdg/autostart/infiltrator-software-tray.desktop' package-files.txt
+          grep -qx './usr/share/icons/hicolor/scalable/status/infiltrator-software-up-to-date-symbolic.svg' package-files.txt
+          grep -qx './usr/share/icons/hicolor/scalable/status/infiltrator-software-updates-available-symbolic.svg' package-files.txt
+          grep -qx './usr/share/icons/hicolor/scalable/status/infiltrator-software-checking-symbolic.svg' package-files.txt
+          grep -qx './usr/share/icons/hicolor/scalable/status/infiltrator-software-installing-symbolic.svg' package-files.txt
+          grep -qx './usr/share/icons/hicolor/scalable/status/infiltrator-software-error-symbolic.svg' package-files.txt
           grep -qx './usr/share/applications/infiltrator-software.desktop' package-files.txt
           grep -qx './usr/share/icons/hicolor/scalable/apps/infiltrator-software.svg' package-files.txt
           grep -qx './usr/share/app-install/icons/infiltrator-software.svg' package-files.txt
