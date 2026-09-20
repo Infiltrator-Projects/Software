@@ -34,6 +34,11 @@
   <url type="homepage">https://github.com/Infiltrator-Projects/Software</url>
 
   <releases>
+    <release version="0.2.4" date="2026-09-20">
+      <description>
+        <p>Separates native AppStream and Flatpak catalogue ingestion for a stable unified Discover view.</p>
+      </description>
+    </release>
     <release version="0.2.3" date="2026-09-20">
       <description>
         <p>Unified Infiltrator, AppStream and Flatpak discovery with live repository inventory and integrated source addition.</p>

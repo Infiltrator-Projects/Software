@@ -1,3 +1,13 @@
+infiltrator-software (0.2.4) unstable; urgency=medium
+
+  * Keep host AppStream ingestion focused on native distribution applications.
+  * Isolate Flatpak catalogue enumeration behind the flatpak CLI instead of loading Flatpak metadata through the in-process AppStream pool.
+  * Preserve one merged Discover view across Infiltrator, APT/AppStream and configured Flatpak remotes.
+  * Keep the integrated Repositories/Add Source workflow from 0.2.3 unchanged.
+  * Retain the graphical launch smoke gate after fixing the AppStream/Flatpak catalogue crash path.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Sun, 20 Sep 2026 15:12:00 +1000
+
 infiltrator-software (0.2.3) unstable; urgency=medium
 
   * Merge host AppStream applications and configured Flatpak metadata into Discover.

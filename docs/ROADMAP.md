@@ -8,7 +8,7 @@ One shell with Discover, Installed, Updates, System, Repositories, History and R
 
 ## 0.2 — Discover, system catalogues and source management
 
-Implemented: asynchronous Infiltrator-Repository refresh; first-party application-record validation; canonical icon digest/cache pipeline; offline metadata fallback; host AppStream application ingestion; configured Flatpak catalogue ingestion; merged search/categories/details; APT and Flatpak installed-state reconciliation; live APT/Flatpak source inventory; and an integrated Add Source workflow.
+Implemented: asynchronous Infiltrator-Repository refresh; first-party application-record validation; canonical icon digest/cache pipeline; offline metadata fallback; host AppStream application ingestion; configured Flatpak catalogue ingestion isolated behind the flatpak CLI; merged search/categories/details; APT and Flatpak installed-state reconciliation; live APT/Flatpak source inventory; and an integrated Add Source workflow.
 
 APT source addition is isolated behind a constrained Polkit-authorized helper that writes modern HTTPS-only Deb822 `.sources` records. User Flatpak remotes are added without elevating the GUI. Package installation/removal/update remains deferred until transaction planning is complete.
 

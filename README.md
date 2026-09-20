@@ -8,7 +8,7 @@ Infiltrator Software is the software-management application for the Infiltrator 
 
 The application presents one authoritative view of software discovery, installation, removal, updates, system components, repositories, release channels, history and repair while keeping privileged package operations isolated behind backend interfaces.
 
-**Current source version:** 0.2.3  
+**Current source version:** 0.2.4  
 **Language:** C++17 application/core with native GTK4 Linux shell; C11 Common foundation  
 **Shared foundation:** Common 1.19.10  
 **Initial package backend:** APT/.deb  
@@ -98,7 +98,7 @@ The project follows the same rule as the rest of the family: Common is used when
 src/
 ├── app/                 Native application shell
 ├── core/                Product model and transaction model
-├── catalogue/           Infiltrator + system AppStream/Flatpak catalogue sources
+├── catalogue/           Infiltrator + native AppStream + isolated Flatpak catalogue sources
 ├── sources/             APT/Flatpak source inventory
 ├── helper/              Narrow privileged APT-source writer
 ├── backend/             Backend-neutral package-management contracts
@@ -125,7 +125,7 @@ Version 0.2 establishes a functional discovery/source-management foundation. Pac
 
 1. the application shell exposes the seven product areas;
 2. package/application identity is represented once in the core;
-3. separate catalogue sources merge verified first-party records with host AppStream metadata and configured Flatpak metadata without teaching the UI repository mechanics;
+3. separate catalogue sources merge verified first-party records with host AppStream metadata and configured Flatpak remotes without teaching the UI repository mechanics; native AppStream stays in-process while Flatpak enumeration is isolated through its CLI;
 4. Discover provides asynchronous live refresh, offline first-party cache fallback, search, categories and details; first-party catalogue metadata renders immediately while SHA-256-verified icons hydrate independently in the background;
 5. APT enumerates installed package state through the backend contract, Flatpak installed state is reconciled from its deployment roots, and Discover merges those states into the application catalogue;
 6. Repositories inventories Infiltrator, APT and Flatpak sources and can add HTTPS APT `.sources` entries through a constrained Polkit helper or add user Flatpak remotes without privilege;
