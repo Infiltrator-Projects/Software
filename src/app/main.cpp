@@ -160,6 +160,16 @@ struct DiscoverTaskData {
     unsigned int generation{0U};
 };
 
+struct IconHydrationResult {
+    std::vector<PackageRecord> records;
+    std::string warning;
+};
+
+struct IconHydrationTaskData {
+    unsigned int generation{0U};
+    std::vector<PackageRecord> records;
+};
+
 std::string folded(const std::string_view value)
 {
     gchar *text = g_utf8_casefold(
@@ -525,6 +535,119 @@ void discover_worker(
         });
 }
 
+void discover_icons_worker(
+    GTask *task,
+    gpointer,
+    gpointer task_data,
+    GCancellable *)
+{
+    auto *data = static_cast<IconHydrationTaskData *>(task_data);
+    auto *result = new IconHydrationResult{};
+    if (data != nullptr) {
+        result->records = data->records;
+    }
+
+    RepositoryCatalogue catalogue;
+    catalogue.hydrate_icons(result->records, result->warning);
+
+    g_task_return_pointer(
+        task,
+        result,
+        [](gpointer value) {
+            delete static_cast<IconHydrationResult *>(value);
+        });
+}
+
+void discover_icons_complete(
+    GObject *source_object,
+    GAsyncResult *async_result,
+    gpointer)
+{
+    auto *window = GTK_WINDOW(source_object);
+    auto *state = static_cast<WindowState *>(
+        g_object_get_data(
+            G_OBJECT(window), "infiltrator-window-state"));
+    if (state == nullptr) {
+        return;
+    }
+
+    auto *task_data = static_cast<IconHydrationTaskData *>(
+        g_task_get_task_data(G_TASK(async_result)));
+    GError *error = nullptr;
+    auto *result = static_cast<IconHydrationResult *>(
+        g_task_propagate_pointer(G_TASK(async_result), &error));
+
+    if (error != nullptr) {
+        g_clear_error(&error);
+        return;
+    }
+    if (result == nullptr || task_data == nullptr ||
+        task_data->generation != state->discover_generation) {
+        delete result;
+        return;
+    }
+
+    state->discover_records = std::move(result->records);
+    rebuild_discover(state);
+
+    if (!result->warning.empty() &&
+        state->discover_status != nullptr) {
+        const std::string message =
+            "Applications are available; some icons could not be verified: " +
+            result->warning;
+        gtk_label_set_text(
+            GTK_LABEL(state->discover_status), message.c_str());
+    }
+
+    delete result;
+}
+
+void start_discover_icon_hydration(
+    WindowState *state,
+    const unsigned int generation)
+{
+    if (state == nullptr || state->window == nullptr ||
+        state->discover_records.empty()) {
+        return;
+    }
+
+    bool has_remote_icons = false;
+    for (const PackageRecord &record : state->discover_records) {
+        if (!record.icon_url.empty()) {
+            has_remote_icons = true;
+            break;
+        }
+    }
+    if (!has_remote_icons) {
+        return;
+    }
+
+    if (state->discover_status != nullptr) {
+        const std::string message =
+            std::to_string(state->discover_records.size()) +
+            " applications loaded; verifying icons in the background…";
+        gtk_label_set_text(
+            GTK_LABEL(state->discover_status), message.c_str());
+    }
+
+    GTask *task = g_task_new(
+        G_OBJECT(state->window),
+        nullptr,
+        discover_icons_complete,
+        nullptr);
+    auto *task_data = new IconHydrationTaskData{};
+    task_data->generation = generation;
+    task_data->records = state->discover_records;
+    g_task_set_task_data(
+        task,
+        task_data,
+        [](gpointer value) {
+            delete static_cast<IconHydrationTaskData *>(value);
+        });
+    g_task_run_in_thread(task, discover_icons_worker);
+    g_object_unref(task);
+}
+
 void discover_complete(
     GObject *source_object,
     GAsyncResult *async_result,
@@ -609,6 +732,8 @@ void discover_complete(
     }
 
     rebuild_discover(state);
+    start_discover_icon_hydration(
+        state, task_data->generation);
     delete result;
 }
 
