@@ -1,3 +1,20 @@
+infiltrator-software (0.3.0) unstable; urgency=medium
+
+  * Replace the Updates placeholder with live asynchronous APT update inventory.
+  * Resolve and present the complete APT transaction before update execution.
+  * Add a narrow Polkit-authorized update helper restricted to exact-version
+    upgrades of packages that are already installed, with removals prohibited.
+  * Add privileged package-list refresh and integrated Install all updates flow.
+  * Add a Mint-native XApp panel update indicator with distinct up-to-date,
+    orange update-available, checking, installing and red error states.
+  * Autostart the panel indicator, keep it single-instance and start it when
+    Software opens so existing installations do not require a new login.
+  * Open Software directly on Updates from the panel indicator.
+  * Package and verify the updater helper, Polkit policy, autostart entry,
+    XApp runtime dependency and complete status-icon set in CI and releases.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Sun, 20 Sep 2026 16:10:00 +1000
+
 infiltrator-software (0.2.5) unstable; urgency=medium
 
   * Fix AppStream component-box ownership after the merged system catalogue load.
