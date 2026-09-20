@@ -2765,6 +2765,26 @@ void destroy_window_state(gpointer data)
     delete state;
 }
 
+void ensure_update_indicator()
+{
+    gchar *program = g_find_program_in_path("infiltrator-software-tray");
+    if (program == nullptr) {
+        return;
+    }
+    g_free(program);
+
+    GError *error = nullptr;
+    if (!g_spawn_command_line_async(
+            "infiltrator-software-tray", &error)) {
+        if (error != nullptr) {
+            g_warning(
+                "Unable to start software update indicator: %s",
+                error->message);
+            g_error_free(error);
+        }
+    }
+}
+
 void activate(GtkApplication *application, gpointer)
 {
     GtkWidget *window = gtk_application_window_new(application);
@@ -2775,6 +2795,7 @@ void activate(GtkApplication *application, gpointer)
     auto *state = new WindowState{};
     state->window = GTK_WINDOW(window);
     state->theme.initialise();
+    ensure_update_indicator();
 
     g_object_set_data_full(
         G_OBJECT(window), "infiltrator-window-state",
