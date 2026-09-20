@@ -83,7 +83,7 @@ struct WindowState {
 };
 
 void refresh_repositories(WindowState *state);
-void refresh_updates(WindowState *state);
+void refresh_updates(WindowState *state, bool refresh_metadata = false);
 
 GtkWidget *make_icon(const char *name, int size)
 {
@@ -1118,12 +1118,14 @@ GtkWidget *make_installed_page(WindowState *state)
 
 struct UpdatesResult {
     unsigned int generation{0U};
+    bool refreshed_metadata{false};
     std::vector<PackageRecord> records;
     std::string error;
 };
 
 struct UpdatesTaskData {
     unsigned int generation{0U};
+    bool refresh_metadata{false};
 };
 
 struct UpdatePlanResult {
@@ -1314,6 +1316,18 @@ void updates_worker(
     result->generation = data == nullptr ? 0U : data->generation;
 
     AptBackend backend;
+    if (data != nullptr && data->refresh_metadata) {
+        result->refreshed_metadata = true;
+        if (!backend.refresh_metadata(result->error)) {
+            g_task_return_pointer(
+                task,
+                result,
+                [](gpointer pointer) {
+                    delete static_cast<UpdatesResult *>(pointer);
+                });
+            return;
+        }
+    }
     result->records = backend.list_updates(result->error);
 
     g_task_return_pointer(
@@ -1345,6 +1359,7 @@ void updates_complete(
 
     state->updates_busy = false;
     state->update_records = std::move(result->records);
+    const bool refreshed_metadata = result->refreshed_metadata;
     const std::string error = result->error;
     delete result;
 
@@ -1353,7 +1368,11 @@ void updates_complete(
     if (state->updates_status != nullptr) {
         if (!error.empty()) {
             const std::string message =
-                "Unable to check for updates: " + one_line(error);
+                std::string(
+                    refreshed_metadata
+                        ? "Unable to refresh package metadata: "
+                        : "Unable to check for updates: ") +
+                one_line(error);
             gtk_label_set_text(
                 GTK_LABEL(state->updates_status), message.c_str());
         } else if (state->update_records.empty()) {
@@ -1388,7 +1407,7 @@ void updates_complete(
     }
 }
 
-void refresh_updates(WindowState *state)
+void refresh_updates(WindowState *state, const bool refresh_metadata)
 {
     if (state == nullptr || state->updates_list == nullptr ||
         state->updates_busy) {
@@ -1402,7 +1421,9 @@ void refresh_updates(WindowState *state)
     if (state->updates_status != nullptr) {
         gtk_label_set_text(
             GTK_LABEL(state->updates_status),
-            "Checking installed versions and available updates…");
+            refresh_metadata
+                ? "Refreshing repository metadata without administrator access…"
+                : "Checking installed versions and available updates…");
     }
     if (state->updates_install != nullptr) {
         gtk_widget_set_sensitive(state->updates_install, false);
@@ -1413,7 +1434,8 @@ void refresh_updates(WindowState *state)
 
     set_update_runtime_state("checking");
 
-    auto *data = new UpdatesTaskData{state->updates_generation};
+    auto *data = new UpdatesTaskData{
+        state->updates_generation, refresh_metadata};
     GTask *task = g_task_new(
         nullptr, nullptr, updates_complete, state);
     g_task_set_task_data(
@@ -1597,26 +1619,14 @@ void update_refresh_clicked(GtkButton *, gpointer user_data)
         return;
     }
 
-    state->updates_busy = true;
-    if (state->updates_status != nullptr) {
-        gtk_label_set_text(
-            GTK_LABEL(state->updates_status),
-            "Refreshing package lists…");
-    }
-    if (state->updates_install != nullptr) {
-        gtk_widget_set_sensitive(state->updates_install, false);
-    }
-    if (state->updates_refresh != nullptr) {
-        gtk_widget_set_sensitive(state->updates_refresh, false);
-    }
-    set_update_runtime_state("checking");
-
-    start_update_process(
-        state,
-        {"pkexec",
-         "/usr/libexec/infiltrator-software-update-helper",
-         "refresh"},
-        "refresh");
+    /*
+     * Refresh is read-only. Keep it entirely in the user's session so checking
+     * for updates never produces a Polkit/admin prompt. The APT compatibility
+     * backend uses its own verified user-writable metadata cache during the
+     * 0.3 -> native-engine migration. Authorization remains an execution-only
+     * boundary when the user actually installs updates.
+     */
+    refresh_updates(state, true);
 }
 
 void begin_apply_updates(WindowState *state)
