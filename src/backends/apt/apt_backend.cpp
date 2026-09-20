@@ -13,29 +13,44 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
 namespace infiltrator::software {
 namespace {
 
-bool run_dpkg_query(std::string &output, std::string &error)
+bool run_command(
+    const std::vector<std::string> &arguments,
+    std::string &output,
+    std::string &error)
 {
-    int pipe_fd[2]{};
-    if (pipe(pipe_fd) != 0) {
-        error = "Unable to create dpkg-query pipe.";
+    output.clear();
+    error.clear();
+    if (arguments.empty()) {
+        error = "No command was supplied.";
         return false;
     }
 
-    const std::string format =
-        "--showformat=${binary:Package}\t${Version}\t${Installed-Size}"
-        "\t${db:Status-Abbrev}\n";
+    std::vector<char *> argv;
+    argv.reserve(arguments.size() + 1U);
+    for (const std::string &argument : arguments) {
+        argv.push_back(const_cast<char *>(argument.c_str()));
+    }
+    argv.push_back(nullptr);
+
+    int pipe_fd[2]{};
+    if (pipe(pipe_fd) != 0) {
+        error = "Unable to create package-manager pipe.";
+        return false;
+    }
 
     const pid_t child = fork();
     if (child < 0) {
         close(pipe_fd[0]);
         close(pipe_fd[1]);
-        error = "Unable to start dpkg-query.";
+        error = "Unable to start package-manager command.";
         return false;
     }
 
@@ -46,8 +61,7 @@ bool run_dpkg_query(std::string &output, std::string &error)
             _exit(127);
         }
         close(pipe_fd[1]);
-        execlp("dpkg-query", "dpkg-query", "--show", format.c_str(),
-               static_cast<char *>(nullptr));
+        execvp(argv[0], argv.data());
         _exit(127);
     }
 
@@ -66,7 +80,7 @@ bool run_dpkg_query(std::string &output, std::string &error)
             continue;
         }
         close(pipe_fd[0]);
-        error = "Unable to read dpkg-query output.";
+        error = "Unable to read package-manager output.";
         int ignored_status = 0;
         (void)waitpid(child, &ignored_status, 0);
         return false;
@@ -78,22 +92,32 @@ bool run_dpkg_query(std::string &output, std::string &error)
         if (errno == EINTR) {
             continue;
         }
-        error = "Unable to collect dpkg-query status.";
+        error = "Unable to collect package-manager status.";
         return false;
     }
 
     if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
-        error = output.empty() ? "dpkg-query failed." : output;
+        error = output.empty() ? "Package-manager command failed." : output;
         return false;
     }
 
     return true;
 }
 
+bool run_dpkg_query(std::string &output, std::string &error)
+{
+    const std::string format =
+        "--showformat=${binary:Package}\t${Version}\t${Installed-Size}"
+        "\t${db:Status-Abbrev}\n";
+    return run_command(
+        {"env", "LC_ALL=C", "dpkg-query", "--show", format},
+        output, error);
+}
+
 std::vector<std::string_view> split_tabs(const std::string_view line)
 {
     std::vector<std::string_view> fields;
-    std::size_t start = 0;
+    std::size_t start = 0U;
     for (;;) {
         const std::size_t tab = line.find('\t', start);
         if (tab == std::string_view::npos) {
@@ -101,16 +125,18 @@ std::vector<std::string_view> split_tabs(const std::string_view line)
             return fields;
         }
         fields.emplace_back(line.substr(start, tab - start));
-        start = tab + 1;
+        start = tab + 1U;
     }
 }
 
 std::uint64_t kib_to_bytes(const std::string_view text)
 {
-    std::uint64_t kib = 0;
-    const auto result = std::from_chars(text.data(), text.data() + text.size(), kib);
-    if (result.ec != std::errc{} || result.ptr != text.data() + text.size()) {
-        return 0;
+    std::uint64_t kib = 0U;
+    const auto result =
+        std::from_chars(text.data(), text.data() + text.size(), kib);
+    if (result.ec != std::errc{} ||
+        result.ptr != text.data() + text.size()) {
+        return 0U;
     }
     if (kib > std::numeric_limits<std::uint64_t>::max() / 1024U) {
         return std::numeric_limits<std::uint64_t>::max();
@@ -118,27 +144,79 @@ std::uint64_t kib_to_bytes(const std::string_view text)
     return kib * 1024U;
 }
 
+std::string package_key(std::string value)
+{
+    const std::size_t colon = value.find(':');
+    if (colon != std::string::npos) {
+        value.erase(colon);
+    }
+    return value;
+}
+
 void classify(PackageRecord &package)
 {
-    const std::string_view id = package.id;
+    const std::string_view id = package_key(package.id);
 
-    if (id.rfind("linux-image", 0) == 0 ||
-        id.rfind("linux-modules", 0) == 0) {
+    if (id.rfind("linux-image", 0U) == 0U ||
+        id.rfind("linux-modules", 0U) == 0U ||
+        id.rfind("linux-headers", 0U) == 0U) {
         package.kind = PackageKind::kernel;
         package.system_critical = true;
         return;
     }
 
     if (id == "apt" || id == "dpkg" || id == "systemd" ||
-        id.rfind("libc6", 0) == 0) {
+        id.rfind("libc6", 0U) == 0U ||
+        id.rfind("linux-base", 0U) == 0U) {
         package.kind = PackageKind::system;
         package.system_critical = true;
         return;
     }
 
-    if (id.rfind("lib", 0) == 0) {
+    if (id.rfind("lib", 0U) == 0U) {
         package.kind = PackageKind::library;
+        return;
     }
+
+    package.kind = PackageKind::application;
+}
+
+std::string candidate_version(const std::string_view line)
+{
+    const std::size_t open = line.find('(');
+    if (open == std::string_view::npos || open + 1U >= line.size()) {
+        return {};
+    }
+    const std::size_t end = line.find_first_of(" )", open + 1U);
+    if (end == std::string_view::npos || end <= open + 1U) {
+        return {};
+    }
+    return std::string(line.substr(open + 1U, end - open - 1U));
+}
+
+std::string package_token(
+    const std::string_view line, const std::string_view prefix)
+{
+    if (line.rfind(prefix, 0U) != 0U) {
+        return {};
+    }
+    const std::size_t start = prefix.size();
+    const std::size_t end = line.find(' ', start);
+    if (end == std::string_view::npos || end <= start) {
+        return {};
+    }
+    return std::string(line.substr(start, end - start));
+}
+
+std::unordered_map<std::string, PackageRecord> installed_map(
+    std::vector<PackageRecord> installed)
+{
+    std::unordered_map<std::string, PackageRecord> result;
+    result.reserve(installed.size());
+    for (PackageRecord &record : installed) {
+        result.emplace(package_key(record.package_name), std::move(record));
+    }
+    return result;
 }
 
 } // namespace
@@ -150,14 +228,21 @@ std::string_view AptBackend::name() const noexcept
 
 bool AptBackend::available() const noexcept
 {
-    return access("/usr/bin/dpkg-query", X_OK) == 0 ||
-           access("/bin/dpkg-query", X_OK) == 0;
+    const bool dpkg =
+        access("/usr/bin/dpkg-query", X_OK) == 0 ||
+        access("/bin/dpkg-query", X_OK) == 0;
+    const bool apt =
+        access("/usr/bin/apt-get", X_OK) == 0 ||
+        access("/bin/apt-get", X_OK) == 0;
+    return dpkg && apt;
 }
 
 BackendCapabilities AptBackend::capabilities() const noexcept
 {
     BackendCapabilities result;
     result.installed_inventory = available();
+    result.update_inventory = available();
+    result.transaction_planning = available();
     return result;
 }
 
@@ -171,7 +256,7 @@ std::vector<PackageRecord> AptBackend::list_installed(std::string &error)
         return packages;
     }
 
-    std::size_t start = 0;
+    std::size_t start = 0U;
     while (start < output.size()) {
         const std::size_t end = output.find('\n', start);
         const std::string_view line{
@@ -179,7 +264,7 @@ std::vector<PackageRecord> AptBackend::list_installed(std::string &error)
             (end == std::string::npos ? output.size() : end) - start};
 
         const auto fields = split_tabs(line);
-        if (fields.size() == 4U && fields[3].rfind("ii", 0) == 0) {
+        if (fields.size() == 4U && fields[3].rfind("ii", 0U) == 0U) {
             PackageRecord package;
             package.id.assign(fields[0]);
             package.name = package.id;
@@ -187,7 +272,7 @@ std::vector<PackageRecord> AptBackend::list_installed(std::string &error)
             package.installed_version.assign(fields[1]);
             package.available_version = package.installed_version;
             package.installed_size_bytes = kib_to_bytes(fields[2]);
-            package.source = "dpkg";
+            package.source = "APT";
             package.state = InstallState::installed;
             classify(package);
 
@@ -199,34 +284,196 @@ std::vector<PackageRecord> AptBackend::list_installed(std::string &error)
         if (end == std::string::npos) {
             break;
         }
-        start = end + 1;
+        start = end + 1U;
     }
 
-    std::sort(packages.begin(), packages.end(),
-              [](const PackageRecord &left, const PackageRecord &right) {
-                  return left.name < right.name;
-              });
+    std::sort(
+        packages.begin(), packages.end(),
+        [](const PackageRecord &left, const PackageRecord &right) {
+            return left.name < right.name;
+        });
     return packages;
 }
 
 std::vector<PackageRecord> AptBackend::search(
     const std::string_view, std::string &error)
 {
-    error = "APT catalogue search is provided by the repository catalogue layer.";
+    error =
+        "APT catalogue search is provided by the repository catalogue layer.";
     return {};
 }
 
 std::vector<PackageRecord> AptBackend::list_updates(std::string &error)
 {
-    error = "APT update inventory is not enabled yet.";
-    return {};
+    error.clear();
+
+    std::string installed_error;
+    auto installed =
+        installed_map(list_installed(installed_error));
+    if (!installed_error.empty()) {
+        error = installed_error;
+        return {};
+    }
+
+    std::string output;
+    if (!run_command(
+            {"env", "LC_ALL=C", "apt-get", "-s",
+             "-o", "Debug::NoLocking=1", "dist-upgrade"},
+            output, error)) {
+        return {};
+    }
+
+    std::vector<PackageRecord> updates;
+    std::unordered_set<std::string> seen;
+
+    std::size_t start = 0U;
+    while (start < output.size()) {
+        const std::size_t end = output.find('\n', start);
+        const std::string_view line{
+            output.data() + start,
+            (end == std::string::npos ? output.size() : end) - start};
+
+        const std::string token = package_token(line, "Inst ");
+        if (!token.empty()) {
+            const std::string key = package_key(token);
+            const auto found = installed.find(key);
+            const std::string candidate = candidate_version(line);
+            if (found != installed.end() && !candidate.empty() &&
+                candidate != found->second.installed_version &&
+                seen.insert(key).second) {
+                PackageRecord package = found->second;
+                package.id = token;
+                package.package_name = token;
+                package.name = token;
+                package.available_version = candidate;
+                package.state = InstallState::upgradable;
+                package.source = "APT";
+                classify(package);
+                updates.emplace_back(std::move(package));
+            }
+        }
+
+        if (end == std::string::npos) {
+            break;
+        }
+        start = end + 1U;
+    }
+
+    std::sort(
+        updates.begin(), updates.end(),
+        [](const PackageRecord &left, const PackageRecord &right) {
+            if (left.system_critical != right.system_critical) {
+                return left.system_critical > right.system_critical;
+            }
+            if (left.kind != right.kind) {
+                return static_cast<int>(left.kind) <
+                       static_cast<int>(right.kind);
+            }
+            return left.name < right.name;
+        });
+    return updates;
 }
 
 std::optional<TransactionPlan> AptBackend::plan(
-    const TransactionRequest &, std::string &error)
+    const TransactionRequest &request, std::string &error)
 {
-    error = "APT transaction planning is not enabled yet.";
-    return std::nullopt;
+    error.clear();
+    if (request.action != TransactionAction::upgrade) {
+        error = "APT planning currently supports upgrades only.";
+        return std::nullopt;
+    }
+    if (request.package_ids.empty()) {
+        error = "No packages were selected for upgrade.";
+        return std::nullopt;
+    }
+
+    std::string installed_error;
+    auto installed =
+        installed_map(list_installed(installed_error));
+    if (!installed_error.empty()) {
+        error = installed_error;
+        return std::nullopt;
+    }
+
+    std::vector<std::string> arguments{
+        "env", "LC_ALL=C", "apt-get", "-s",
+        "-o", "Debug::NoLocking=1",
+        "--no-remove", "--only-upgrade", "install"};
+    arguments.insert(
+        arguments.end(),
+        request.package_ids.begin(), request.package_ids.end());
+
+    std::string output;
+    if (!run_command(arguments, output, error)) {
+        return std::nullopt;
+    }
+
+    TransactionPlan plan;
+    std::unordered_set<std::string> seen;
+
+    std::size_t start = 0U;
+    while (start < output.size()) {
+        const std::size_t end = output.find('\n', start);
+        const std::string_view line{
+            output.data() + start,
+            (end == std::string::npos ? output.size() : end) - start};
+
+        std::string token = package_token(line, "Inst ");
+        if (!token.empty()) {
+            const std::string key = package_key(token);
+            if (seen.insert("I:" + key).second) {
+                TransactionItem item;
+                item.package_id = token;
+                const auto found = installed.find(key);
+                if (found != installed.end()) {
+                    item.action = TransactionAction::upgrade;
+                    item.from_version = found->second.installed_version;
+                } else {
+                    item.action = TransactionAction::install;
+                }
+                item.to_version = candidate_version(line);
+
+                PackageRecord classification;
+                classification.id = token;
+                classification.name = token;
+                classify(classification);
+                item.system_critical = classification.system_critical;
+                plan.touches_system =
+                    plan.touches_system || item.system_critical;
+                plan.items.emplace_back(std::move(item));
+            }
+        } else {
+            token = package_token(line, "Remv ");
+            if (!token.empty()) {
+                const std::string key = package_key(token);
+                if (seen.insert("R:" + key).second) {
+                    TransactionItem item;
+                    item.package_id = token;
+                    item.action = TransactionAction::remove;
+                    const auto found = installed.find(key);
+                    if (found != installed.end()) {
+                        item.from_version = found->second.installed_version;
+                    }
+                    item.system_critical = true;
+                    plan.touches_system = true;
+                    plan.items.emplace_back(std::move(item));
+                }
+            }
+        }
+
+        if (end == std::string::npos) {
+            break;
+        }
+        start = end + 1U;
+    }
+
+    if (plan.items.empty()) {
+        error =
+            "APT produced no transaction changes for the selected updates.";
+        return std::nullopt;
+    }
+
+    return plan;
 }
 
 } // namespace infiltrator::software
