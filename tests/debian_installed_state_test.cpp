@@ -10,9 +10,9 @@ int main()
     using namespace infiltrator::software;
 
     const std::string fixture =
-        "Package: alpha\n"
+        "package: alpha\n"
         "Status: install ok installed\n"
-        "Architecture: amd64\n"
+        "architecture: amd64\n"
         "Version: 1:2.3-4\n"
         "Installed-Size: 123\n"
         "Description: Alpha package\n"
@@ -58,6 +58,19 @@ int main()
     assert(packages[2].id == "libmulti:i386");
     assert(packages[2].architecture == "i386");
     assert(packages[2].installed_size_bytes == 4U * 1024U);
+
+    const auto whitespace_separator = DebianInstalledState::parse(
+        "Package: one\nStatus: install ok installed\nVersion: 1\n   \n"
+        "Package: two\nStatus: install ok installed\nVersion: 2\n",
+        error);
+    assert(error.empty());
+    assert(whitespace_separator.size() == 2U);
+
+    const auto duplicate = DebianInstalledState::parse(
+        "Package: one\npackage: two\nStatus: install ok installed\nVersion: 1\n",
+        error);
+    assert(duplicate.empty());
+    assert(!error.empty());
 
     return 0;
 }
