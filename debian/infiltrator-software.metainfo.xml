@@ -33,6 +33,11 @@
   <url type="homepage">https://github.com/Infiltrator-Projects/Software</url>
 
   <releases>
+    <release version="0.2.1" date="2026-09-20">
+      <description>
+        <p>Discover now renders catalogue metadata immediately and hydrates verified icons asynchronously.</p>
+      </description>
+    </release>
     <release version="0.2.0" date="2026-09-20">
       <description>
         <p>Real Discover catalogue with verified repository metadata, search, categories, icon caching and application details.</p>

@@ -8,7 +8,7 @@ Infiltrator Software is the software-management application for the Infiltrator 
 
 The application presents one authoritative view of software discovery, installation, removal, updates, system components, repositories, release channels, history and repair while keeping privileged package operations isolated behind backend interfaces.
 
-**Current source version:** 0.2.0  
+**Current source version:** 0.2.1  
 **Language:** C++17 application/core with native GTK4 Linux shell; C11 Common foundation  
 **Shared foundation:** Common 1.19.10  
 **Initial package backend:** APT/.deb  
@@ -124,7 +124,7 @@ Version 0.2 retains the proven read-only architecture and makes Discover functio
 1. the application shell exposes the seven product areas;
 2. package/application identity is represented once in the core;
 3. a separate catalogue source refreshes verified first-party repository metadata without teaching the UI repository mechanics;
-4. Discover provides asynchronous live refresh, offline cache fallback, search, categories, details and SHA-256-verified icons;
+4. Discover provides asynchronous live refresh, offline cache fallback, search, categories and details; catalogue metadata renders immediately while SHA-256-verified icons hydrate independently in the background;
 5. APT enumerates installed package state through the backend contract and Discover merges that state by canonical package identity;
 6. transaction planning remains the required gate before privileged installation/removal;
 7. tests enforce the catalogue/backend/core boundaries and CI builds the exact Common-pinned source.

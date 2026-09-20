@@ -42,7 +42,7 @@ The privileged component will accept a validated transaction description rather 
 
 ## Concurrency
 
-Repository/network operations must not block the GTK main loop. Discover refresh runs through GTask worker execution and publishes only the newest generation back to GTK. Live HTTPS metadata is atomically cached; a network failure can fall back to the last valid cached document without converting cache data into an authoritative source.
+Repository/network operations must not block the GTK main loop. Discover uses a two-stage GTask pipeline: catalogue metadata and installed-state reconciliation publish first, then icon verification/caching runs as a separate generation-checked background task. This prevents slow or failed icon downloads from withholding the catalogue UI. Live HTTPS metadata is atomically cached; a network failure can fall back to the last valid cached document without converting cache data into an authoritative source.
 
 ## Failure model
 

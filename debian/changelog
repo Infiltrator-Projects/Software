@@ -1,3 +1,12 @@
+infiltrator-software (0.2.1) unstable; urgency=medium
+
+  * Render Discover catalogue metadata immediately instead of waiting for icon downloads.
+  * Move repository icon verification into a second generation-checked background task.
+  * Keep application cards usable with category fallback icons while verified icons load.
+  * Prevent slow or failed icon downloads from leaving Discover stuck at 0 applications / Loading.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Sun, 20 Sep 2026 10:40:00 +1000
+
 infiltrator-software (0.2.0) unstable; urgency=medium
 
   * Implement Discover using the published Infiltrator application catalogue.
