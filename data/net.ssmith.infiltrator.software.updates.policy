@@ -8,7 +8,7 @@
 
   <action id="net.ssmith.infiltrator.software.manage-updates">
     <description>Manage software updates</description>
-    <message>Authentication is required to refresh or install system software updates.</message>
+    <message>Authentication is required to install system software updates.</message>
     <defaults>
       <allow_any>no</allow_any>
       <allow_inactive>no</allow_inactive>
