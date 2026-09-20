@@ -116,7 +116,8 @@ add_library(software-core STATIC src/core/model.cpp)
 target_include_directories(software-core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
 
 add_library(software-engine STATIC
-    src/engine/debian_installed_state.cpp)
+    src/engine/debian_installed_state.cpp
+    src/engine/debian_package_index.cpp)
 target_include_directories(software-engine PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_link_libraries(software-engine PUBLIC software-core)
@@ -202,6 +203,13 @@ if(BUILD_TESTING)
     add_test(
         NAME software-debian-installed-test
         COMMAND software-debian-installed-test)
+
+    add_executable(software-debian-index-test
+        tests/debian_package_index_test.cpp)
+    target_link_libraries(software-debian-index-test PRIVATE software-engine)
+    add_test(
+        NAME software-debian-index-test
+        COMMAND software-debian-index-test)
 
     add_executable(software-apt-test tests/apt_backend_test.cpp)
     target_link_libraries(software-apt-test PRIVATE software-apt)
