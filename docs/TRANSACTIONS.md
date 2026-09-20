@@ -2,14 +2,71 @@
 
 # Transaction contract
 
-Package writes are intentionally disabled in the initial milestone.
+Package mutation is a first-class Software capability. The contract is backend-neutral even while the current 0.3 implementation uses APT internally and the 0.4 target uses the native Debian-compatibility engine.
 
-A mutating operation progresses through explicit phases: Refresh, Resolve, Present, Authorize, Stage, Checkpoint, Execute, Verify, Record and Recover.
+## Phases
 
-The backend resolves the complete change set before authorization. The UI presents installs, upgrades, removals, download bytes, disk delta and system-critical impact.
+A mutating operation progresses through explicit phases:
 
-The privileged executor never interprets arbitrary human shell commands. It receives a typed resolved plan tied to known package/repository state. If that state changes materially before execution, the operation is resolved again.
+    Refresh → Resolve → Present → Authorize → Stage
+            → Checkpoint → Execute → Verify → Record → Recover
 
-Transactions touching kernels, the package engine, init/system services, libc or another backend-classified critical component are visibly distinguished. This is a higher-risk transaction class inside the same application, not a second updater program.
+No phase may be silently skipped merely because a backend can perform the entire operation in one command.
 
-When InfiltratorFS is available, qualifying system transactions may request a pre-change filesystem checkpoint. Package history stores the checkpoint identity, but filesystem rollback remains owned by a recovery service rather than by the package backend itself.
+## Resolve before authorization
+
+The engine resolves the complete intended change set before asking for privilege.
+
+The plan contains exact package identities and versions, installs, upgrades, removals, dependency-driven changes, download bytes, estimated disk delta, repository/source provenance, trust/signature state, system-critical classification and the state generation used for the calculation.
+
+The GUI presents the meaningful consequences before authorization.
+
+## Immutable execution request
+
+The privileged executor receives a typed resolved plan, not an arbitrary command line.
+
+Every privileged request is tied to a package-state generation. If authoritative state changes enough to invalidate the plan, execution stops and the operation is resolved again.
+
+The executor rejects requests outside its supported transaction schema.
+
+## Staging
+
+Downloads occur before privileged execution where safely possible.
+
+Every downloaded object is verified against repository metadata before it is eligible for execution.
+
+A partially downloaded or failed staging operation does not mutate the installed system.
+
+## System-critical transactions
+
+Transactions touching kernels, boot integration, libc, the package engine, init/system services or another engine-classified critical component are visually distinguished.
+
+This is a higher-risk transaction class inside the same Software application, not a second update manager.
+
+## Execution boundary
+
+During the Debian-compatibility phase, final .deb payload application may be delegated to dpkg by the constrained privileged executor.
+
+The UI and package engine do not call dpkg directly.
+
+The executor boundary is intentionally narrow so a future native installer can replace dpkg without changing the transaction contract.
+
+## Progress
+
+Execution emits structured progress events: phase, package, completed/total work, human status, technical detail and cancellability.
+
+The GUI renders these events as graphical progress. Technical output is available under a Details disclosure with Copy support; users are not sent to a terminal.
+
+## Verification and history
+
+After execution, the unprivileged engine re-reads authoritative installed state and verifies the intended result.
+
+History records transaction identity, start/end time, requested operation, resolved before/after versions, source provenance, outcome, failure detail and recovery/checkpoint linkage where applicable.
+
+## Recovery
+
+When InfiltratorFS is available, qualifying system transactions may request a pre-change filesystem checkpoint.
+
+The package engine records checkpoint identity, but rollback is owned by a recovery service rather than package-format code.
+
+An interrupted transaction appears in Repair with an explicit diagnosis and safe graphical recovery actions.

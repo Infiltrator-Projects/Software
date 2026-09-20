@@ -2,57 +2,152 @@
 
 # Architecture
 
-Infiltrator Software is one user-facing application with deliberately separated internal responsibilities. The historic separation between a software catalogue and an update manager is not reproduced as a product boundary.
+Infiltrator Software is one graphical product with separated internal responsibilities. The historic split between a software catalogue and an update manager is not reproduced as a product boundary.
+
+This document defines the target architecture beginning with the 0.4 line. The 0.3 implementation still contains an APT-backed compatibility layer; that implementation is transitional.
+
+## Architectural rule
+
+Debian repositories and .deb packages are supported data formats and ecosystems. APT command-line programs are not part of the target architecture.
+
+The UI, panel indicator and future tools consume one Infiltrator package-engine API. They do not independently scan packages and they do not invoke package-manager executables.
 
 ## Layers
 
-The native shell owns navigation, interaction, accessibility, platform appearance detection and rendering. It never invokes APT, dpkg or another package engine directly.
+    ┌──────────────────────────────────────────────┐
+    │ GTK4 Software UI                             │
+    │ XApp update indicator                       │
+    │ future graphical/system clients             │
+    └───────────────────┬──────────────────────────┘
+                        │ typed local API / events
+                        ▼
+    ┌──────────────────────────────────────────────┐
+    │ Infiltrator package engine                   │
+    │                                              │
+    │ canonical package/application model          │
+    │ installed/available state                    │
+    │ Debian version and dependency resolution     │
+    │ transaction planning                         │
+    │ repository health/trust                      │
+    │ download and verification                    │
+    │ state publication                            │
+    └──────────────┬──────────────┬────────────────┘
+                   │              │
+                   ▼              ▼
+       Debian repository      Flatpak/AppStream
+          metadata              integrations
+                   │
+                   ▼
+           derived local DB
+                   │
+                   ▼
+         privileged executor
+                   │
+                   ▼
+              dpkg temporarily
 
-The core owns package/application identity, classification, channels, installed/available state, transaction requests and transaction plans. These types are package-manager-neutral.
+## Native shell
 
-A backend translates one native package ecosystem into the core model. Capabilities are explicit so the UI never assumes that a backend supports mutation merely because it can inventory packages.
+The GTK4 shell owns navigation, interaction, accessibility, appearance and rendering.
 
-APT/.deb is the first package backend. Installed-package inventory remains read-only. Discover is deliberately separate from package mechanics: one catalogue source reads authoritative Infiltrator application records, while a system catalogue source consumes the host AppStream pool including configured Flatpak metadata. These records are merged by application/package identity and reconciled with local APT and Flatpak installed state. Update calculation and transaction planning remain required before package mutation.
+The shell must be able to present an interactive first window without waiting for package inventory, repository parsing, update calculation, network access, Flatpak enumeration, AppStream loading, dependency resolution or icon downloads.
 
-Common 1.19.10 owns reusable project-family facilities such as semantic theme design and other product-neutral mechanisms. Software's appearance controller consumes Common's System/Day/Night mode policy, semantic palettes, typography roles and structural metrics. Follow OS listens for GTK desktop-theme changes and resolves System dynamically. The selected mode is stored atomically through Common's POSIX durability API. Package semantics remain local to Software.
+Inactive pages are created or hydrated lazily.
 
-## Dependency rule
+## Product core
 
-```text
-native shell
-    |                 |
-    v                 v
-product core      catalogue sources <---- Infiltrator Repository
-    |                    ^
-    |                    +---- host AppStream / Flatpak metadata
-    v
-backend contract <---- APT implementation
-    |
-    +---- source inventory <---- /etc/apt + Flatpak remotes
-    |
-    +---- Common product-neutral facilities
-```
+The core owns package/application identity, classifications, channels, installed/available state, repository provenance, transaction requests and transaction plans.
 
-No dependency points from the core into APT.
+Core types are package-manager-neutral. No core type exposes an APT process, command string or APT-private cache format.
+
+## Package engine
+
+The package engine is the only component that reconciles Debian package/repository state.
+
+It directly understands supported Debian repository metadata and installed dpkg state. It maintains a fast derived database, computes candidate versions, resolves dependencies, builds plans and publishes changes to clients.
+
+The engine does not use apt, apt-get, apt-cache, or APT's private binary cache files as authoritative state.
+
+The 0.3 backends/apt implementation remains legacy migration code until the native engine reaches parity and is deleted.
+
+See [Package Engine](PACKAGE_ENGINE.md).
+
+## Flatpak and AppStream
+
+Flatpak remains a separate ecosystem normalized into the same application model.
+
+The target integration uses structured library/API access rather than spawning the flatpak command for ordinary inventory or mutation.
+
+AppStream remains the application-metadata normalization layer for host and third-party software where appropriate.
+
+## State ownership
+
+One engine owns package/repository reconciliation.
+
+    package engine
+         │
+      ┌──┼──┐
+      ▼  ▼  ▼
+    GUI tray future client
+
+Clients subscribe to snapshots and change events. They do not perform duplicate update calculations.
+
+The derived state database is disposable. Authoritative state remains repository metadata, configured repository policy and installed package state.
+
+See [State](STATE.md).
 
 ## Privilege model
 
-The graphical process never runs as root. Catalogue loading, installed inventory, APT source inventory and Flatpak user-remote management remain unprivileged.
+The graphical application never runs as root.
 
-System APT source addition is the first privileged operation. It is isolated in `/usr/libexec/infiltrator-software-helper`, authorized by a dedicated Polkit action, accepts only a fixed `add-apt-source` operation, validates every argument, requires HTTPS, rejects newline/whitespace injection, restricts optional `Signed-By` paths to standard keyring directories and writes a single modern Deb822 `.sources` file atomically. The helper does not accept arbitrary commands or shell text.
+Unprivileged work includes reading cached/derived state, reading repository metadata, resolving versions and dependencies, planning transactions, downloading into a staging area, verifying signatures/checksums and presenting every proposed change.
 
-Future package mutation remains a separate design: unprivileged planning, explicit authorization, a minimal transaction executor, then unprivileged verification/history presentation.
+Privilege is requested only for the narrow operation that actually changes protected system state.
+
+The privileged executor receives a typed, immutable transaction plan tied to a known state generation. It does not accept arbitrary shell commands or free-form package-manager text.
+
+During the Debian-compatibility phase, the final payload application may use dpkg. That boundary is deliberately narrow so dpkg can later be replaced without redesigning the UI or resolver.
 
 ## Concurrency
 
-Repository/network operations must not block the GTK main loop. Discover performs Infiltrator HTTPS catalogue refresh, host AppStream/Flatpak catalogue loading and installed-state reconciliation off the GTK thread. Catalogue results publish first; verified first-party icon hydration remains a separate generation-checked background task so slow icons cannot withhold the catalogue UI. Live first-party HTTPS metadata is atomically cached; a network failure can fall back to the last valid cached document without converting cache data into an authoritative source.
+No repository, package or network operation may block the GTK main loop.
 
-## Ownership
+The engine owns workers and cancellation. Results are generation-tagged so stale background work cannot overwrite newer state.
 
-AppStream component collections returned by an AsPool remain pool-owned. Software borrows those collections for enumeration and releases only the pool, preventing double-unref teardown faults in asynchronous Discover refreshes.
+The first frame is independent of engine refresh completion.
+
+See [Performance](PERFORMANCE.md).
 
 ## Failure model
 
-Backend failures are data, not crashes. Every operation returns either a typed result or an explicit error. Partial state must not be silently represented as authoritative complete state.
+Failures are typed state, not crashes and not terminal instructions.
 
-The verification pipeline includes a real GTK launch smoke test under Xvfb. It must keep the application alive through the asynchronous Discover catalogue callback window; an unexpected exit, abort or segmentation fault fails CI. The test captures stdout/stderr and obtains a debugger backtrace on failure.
+The GUI exposes the affected operation, a human-readable explanation, technical details, retry/repair actions where safe and copyable diagnostic information.
+
+Partial state is visibly partial and is never silently represented as complete authoritative state.
+
+## Common
+
+Common 1.19.10 remains the project-family foundation for mechanisms that are genuinely product-neutral: appearance, semantic colours, typography roles, structural metrics and durable generic utilities.
+
+Package formats, dependency resolution, repository semantics and transaction policy remain in Software rather than being pushed into Common merely for reuse.
+
+## Dependency rule
+
+    UI / tray
+        │
+        ▼
+    product core
+        │
+        ▼
+    package engine ────> Debian repository formats
+        │               dpkg installed-state format
+        │               Flatpak/AppStream integrations
+        │
+        └──────────────> Common generic facilities
+
+    privileged executor <── immutable resolved transaction
+        │
+        └──────────────> dpkg during compatibility phase
+
+No dependency points from the core or UI into APT executables.
