@@ -124,9 +124,7 @@ int main()
     assert(plan->download_bytes == 150U);
     assert(plan->touches_system);
 
-    std::filesystem::rename(
-        database_path,
-        database_path.string() + ".gone");
+    std::filesystem::remove_all(directory);
     assert(!core.reload(error));
     assert(!error.empty());
 

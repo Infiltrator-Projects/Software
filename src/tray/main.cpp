@@ -29,6 +29,8 @@ struct TrayState {
     bool checking{false};
     std::size_t update_count{0U};
     std::string last_error;
+    bool opening_software{false};
+    guint opening_reset_id{0U};
 };
 
 int acquire_single_instance_lock()
@@ -234,30 +236,55 @@ gboolean state_tick(gpointer user_data)
     return G_SOURCE_CONTINUE;
 }
 
-void open_software()
+gboolean clear_opening_software(gpointer user_data)
 {
+    auto *state = static_cast<TrayState *>(user_data);
+    if (state != nullptr) {
+        state->opening_software = false;
+        state->opening_reset_id = 0U;
+    }
+    return G_SOURCE_REMOVE;
+}
+
+void open_software(TrayState *state)
+{
+    if (state == nullptr || state->opening_software) {
+        return;
+    }
+
+    state->opening_software = true;
     GError *error = nullptr;
     if (!g_spawn_command_line_async(
             "infiltrator-software --updates", &error)) {
+        state->opening_software = false;
         if (error != nullptr) {
             g_warning("Unable to launch Software: %s", error->message);
             g_error_free(error);
         }
+        return;
     }
+
+    state->opening_reset_id =
+        g_timeout_add(
+            2500U,
+            clear_opening_software,
+            state);
 }
 
 void icon_activated(
     XAppStatusIcon *,
     guint,
     guint,
-    gpointer)
+    gpointer user_data)
 {
-    open_software();
+    open_software(
+        static_cast<TrayState *>(user_data));
 }
 
-void open_menu_item(GtkMenuItem *, gpointer)
+void open_menu_item(GtkMenuItem *, gpointer user_data)
 {
-    open_software();
+    open_software(
+        static_cast<TrayState *>(user_data));
 }
 
 void check_menu_item(GtkMenuItem *, gpointer user_data)
@@ -331,6 +358,9 @@ int main(int argc, char **argv)
 
     gtk_main();
 
+    if (state.opening_reset_id != 0U) {
+        g_source_remove(state.opening_reset_id);
+    }
     g_object_unref(state.icon);
     close(lock_fd);
     return 0;

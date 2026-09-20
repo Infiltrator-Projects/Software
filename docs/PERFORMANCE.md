@@ -84,3 +84,12 @@ Automated graphical testing must verify that:
 Useful local development measurements include process-start-to-window-mapped time, cached-page population time, selected-page reconciliation duration, package database generation duration, resolver duration, repository refresh duration and icon hydration duration.
 
 No performance path requires external telemetry.
+
+
+## Single-window activation and cache-first startup
+
+Software is a single-instance GtkApplication. Repeated desktop or tray activation must present the existing window rather than construct another window, and `--updates` must be forwarded to the primary instance so the existing window switches to Updates.
+
+Page construction is UI-only. Opening the application does not refresh every page. The first window is presented before selected-page reconciliation starts, and navigation lazily loads Discover, Installed, Updates and Repositories only when first visited. The global refresh control refreshes only the visible page.
+
+The Infiltrator catalogue is cache-first with a freshness window. A recently verified catalogue is reused on repeat opens rather than issuing another network request; stale metadata may be refreshed in the background after the window is already interactive. Application package payloads are never downloaded merely because Software was opened.

@@ -74,6 +74,12 @@ struct WindowState {
     std::vector<PackageRecord> update_records;
     unsigned int updates_generation{0U};
     bool updates_busy{false};
+
+    bool window_presented{false};
+    bool discover_loaded{false};
+    bool installed_loaded{false};
+    bool updates_loaded{false};
+    bool repositories_loaded{false};
 };
 
 void refresh_repositories(WindowState *state);
@@ -839,6 +845,7 @@ void refresh_discover(WindowState *state)
         return;
     }
 
+    state->discover_loaded = true;
     ++state->discover_generation;
     gtk_label_set_text(
         GTK_LABEL(state->discover_state), "Loading");
@@ -957,7 +964,6 @@ GtkWidget *make_discover_page(WindowState *state)
         state->discover_flow);
     gtk_box_append(GTK_BOX(page), scroll);
 
-    refresh_discover(state);
     return page;
 }
 
@@ -1002,6 +1008,7 @@ void refresh_installed(WindowState *state)
         return;
     }
 
+    state->installed_loaded = true;
     while (g_list_model_get_n_items(G_LIST_MODEL(state->installed_strings)) > 0U) {
         gtk_string_list_remove(state->installed_strings, 0U);
     }
@@ -1104,7 +1111,6 @@ GtkWidget *make_installed_page(WindowState *state)
     gtk_box_append(GTK_BOX(card), scroll);
     gtk_box_append(GTK_BOX(page), card);
 
-    refresh_installed(state);
     return page;
 }
 
@@ -1389,6 +1395,7 @@ void refresh_updates(WindowState *state)
         return;
     }
 
+    state->updates_loaded = true;
     state->updates_busy = true;
     ++state->updates_generation;
 
@@ -1924,7 +1931,6 @@ GtkWidget *make_updates_page(WindowState *state)
 
     gtk_box_append(GTK_BOX(page), card);
 
-    refresh_updates(state);
     return page;
 }
 
@@ -2381,6 +2387,8 @@ void refresh_repositories(WindowState *state)
         return;
     }
 
+    state->repositories_loaded = true;
+
     GtkWidget *child =
         gtk_widget_get_first_child(state->repository_flow);
     while (child != nullptr) {
@@ -2510,7 +2518,6 @@ GtkWidget *make_repositories_page(WindowState *state)
         state->repository_flow);
     gtk_box_append(GTK_BOX(page), scroll);
 
-    refresh_repositories(state);
     return page;
 }
 
@@ -2533,6 +2540,38 @@ GtkWidget *make_nav_row(
     return row;
 }
 
+void refresh_page_if_needed(WindowState *state, const int index)
+{
+    if (state == nullptr || !state->window_presented) {
+        return;
+    }
+
+    switch (index) {
+    case 0:
+        if (!state->discover_loaded) {
+            refresh_discover(state);
+        }
+        break;
+    case 1:
+        if (!state->installed_loaded) {
+            refresh_installed(state);
+        }
+        break;
+    case 2:
+        if (!state->updates_loaded) {
+            refresh_updates(state);
+        }
+        break;
+    case 4:
+        if (!state->repositories_loaded) {
+            refresh_repositories(state);
+        }
+        break;
+    default:
+        break;
+    }
+}
+
 void navigation_changed(
     GtkListBox *, GtkListBoxRow *row, gpointer user_data)
 {
@@ -2552,6 +2591,7 @@ void navigation_changed(
 
     auto *state = static_cast<WindowState *>(user_data);
     gtk_stack_set_visible_child_name(state->stack, page_names[index]);
+    refresh_page_if_needed(state, index);
 }
 
 GtkWidget *make_navigation(WindowState *state)
@@ -2639,10 +2679,25 @@ void theme_clicked(GtkButton *, gpointer user_data)
 void refresh_clicked(GtkButton *, gpointer user_data)
 {
     auto *state = static_cast<WindowState *>(user_data);
-    refresh_installed(state);
-    refresh_discover(state);
-    refresh_repositories(state);
-    refresh_updates(state);
+    if (state == nullptr || state->stack == nullptr) {
+        return;
+    }
+
+    const char *page =
+        gtk_stack_get_visible_child_name(state->stack);
+    if (page == nullptr) {
+        return;
+    }
+
+    if (std::strcmp(page, "discover") == 0) {
+        refresh_discover(state);
+    } else if (std::strcmp(page, "installed") == 0) {
+        refresh_installed(state);
+    } else if (std::strcmp(page, "updates") == 0) {
+        refresh_updates(state);
+    } else if (std::strcmp(page, "repositories") == 0) {
+        refresh_repositories(state);
+    }
 }
 
 void about_clicked(GtkButton *, gpointer user_data)
@@ -2780,8 +2835,48 @@ void ensure_update_indicator()
     }
 }
 
+void select_page(WindowState *state, const int index)
+{
+    if (state == nullptr || state->navigation_list == nullptr ||
+        index < 0 || index >= 7) {
+        return;
+    }
+
+    GtkListBoxRow *row =
+        gtk_list_box_get_row_at_index(
+            state->navigation_list, index);
+    if (row != nullptr) {
+        gtk_list_box_select_row(
+            state->navigation_list, row);
+    }
+}
+
 void activate(GtkApplication *application, gpointer)
 {
+    const bool open_updates =
+        g_object_get_data(
+            G_OBJECT(application),
+            "infiltrator-open-updates") != nullptr;
+
+    GtkWindow *existing =
+        gtk_application_get_active_window(application);
+    if (existing != nullptr) {
+        auto *state =
+            static_cast<WindowState *>(
+                g_object_get_data(
+                    G_OBJECT(existing),
+                    "infiltrator-window-state"));
+        if (open_updates && state != nullptr) {
+            select_page(state, 2);
+        }
+        gtk_window_present(existing);
+        g_object_set_data(
+            G_OBJECT(application),
+            "infiltrator-open-updates",
+            nullptr);
+        return;
+    }
+
     GtkWidget *window = gtk_application_window_new(application);
     gtk_window_set_title(GTK_WINDOW(window), "Infiltrator Software");
     gtk_window_set_icon_name(GTK_WINDOW(window), "net.ssmith.infiltrator.software");
@@ -2821,17 +2916,14 @@ void activate(GtkApplication *application, gpointer)
         state->stack,
         make_discover_page(state),
         "discover");
-
     gtk_stack_add_named(
         state->stack,
         make_installed_page(state),
         "installed");
-
     gtk_stack_add_named(
         state->stack,
         make_updates_page(state),
         "updates");
-
     gtk_stack_add_named(
         state->stack,
         make_foundation_page(
@@ -2843,12 +2935,10 @@ void activate(GtkApplication *application, gpointer)
             "distinct without forcing a second updater application.",
             "page-system"),
         "system");
-
     gtk_stack_add_named(
         state->stack,
         make_repositories_page(state),
         "repositories");
-
     gtk_stack_add_named(
         state->stack,
         make_foundation_page(
@@ -2860,7 +2950,6 @@ void activate(GtkApplication *application, gpointer)
             "source provenance and recovery linkage.",
             "page-history"),
         "history");
-
     gtk_stack_add_named(
         state->stack,
         make_foundation_page(
@@ -2873,56 +2962,107 @@ void activate(GtkApplication *application, gpointer)
             "page-repair"),
         "repair");
 
-    const int initial_page = g_object_get_data(
-        G_OBJECT(application), "infiltrator-open-updates") != nullptr
-            ? 2
-            : 0;
+    const int initial_page = open_updates ? 2 : 0;
     gtk_stack_set_visible_child_name(
-        state->stack, initial_page == 2 ? "updates" : "discover");
-    if (state->navigation_list != nullptr) {
-        GtkListBoxRow *first = gtk_list_box_get_row_at_index(
-            state->navigation_list, initial_page);
-        gtk_list_box_select_row(state->navigation_list, first);
-    }
+        state->stack,
+        initial_page == 2 ? "updates" : "discover");
+    select_page(state, initial_page);
     gtk_box_append(GTK_BOX(root), make_status_bar());
 
     gtk_window_present(GTK_WINDOW(window));
+    state->window_presented = true;
+
+    g_idle_add_full(
+        G_PRIORITY_DEFAULT_IDLE,
+        [](gpointer data) -> gboolean {
+            auto *window = GTK_WINDOW(data);
+            auto *state =
+                static_cast<WindowState *>(
+                    g_object_get_data(
+                        G_OBJECT(window),
+                        "infiltrator-window-state"));
+            if (state != nullptr && state->navigation_list != nullptr) {
+                GtkListBoxRow *selected =
+                    gtk_list_box_get_selected_row(
+                        state->navigation_list);
+                if (selected != nullptr) {
+                    refresh_page_if_needed(
+                        state,
+                        gtk_list_box_row_get_index(selected));
+                }
+            }
+            return G_SOURCE_REMOVE;
+        },
+        g_object_ref(window),
+        [](gpointer data) {
+            g_object_unref(data);
+        });
+
+    g_object_set_data(
+        G_OBJECT(application),
+        "infiltrator-open-updates",
+        nullptr);
+}
+
+int command_line(
+    GApplication *application,
+    GApplicationCommandLine *command_line,
+    gpointer)
+{
+    GVariantDict *options =
+        g_application_command_line_get_options_dict(command_line);
+    const bool open_updates =
+        options != nullptr &&
+        g_variant_dict_contains(options, "updates");
+
+    g_object_set_data(
+        G_OBJECT(application),
+        "infiltrator-open-updates",
+        open_updates ? GINT_TO_POINTER(1) : nullptr);
+    g_application_activate(application);
+    return 0;
 }
 
 } // namespace
 
 int main(int argc, char **argv)
 {
-    bool open_updates = false;
-    std::vector<char *> filtered_arguments;
-    filtered_arguments.reserve(static_cast<std::size_t>(argc) + 1U);
-    if (argc > 0) {
-        filtered_arguments.push_back(argv[0]);
-    }
-    for (int index = 1; index < argc; ++index) {
-        if (std::strcmp(argv[index], "--updates") == 0) {
-            open_updates = true;
-        } else {
-            filtered_arguments.push_back(argv[index]);
-        }
-    }
-    filtered_arguments.push_back(nullptr);
-
     GtkApplication *application = gtk_application_new(
-        "net.ssmith.infiltrator.software", G_APPLICATION_DEFAULT_FLAGS);
-    if (open_updates) {
-        g_object_set_data(
-            G_OBJECT(application),
-            "infiltrator-open-updates",
-            GINT_TO_POINTER(1));
-    }
-    g_signal_connect(application, "activate", G_CALLBACK(activate), nullptr);
+        "net.ssmith.infiltrator.software",
+        G_APPLICATION_HANDLES_COMMAND_LINE);
+
+    static const GOptionEntry options[] = {
+        {
+            "updates",
+            0,
+            0,
+            G_OPTION_ARG_NONE,
+            nullptr,
+            "Open the Updates page",
+            nullptr
+        },
+        {nullptr, 0, 0, G_OPTION_ARG_NONE, nullptr, nullptr, nullptr}
+    };
+    g_application_add_main_option_entries(
+        G_APPLICATION(application),
+        options);
+
+    g_signal_connect(
+        application,
+        "activate",
+        G_CALLBACK(activate),
+        nullptr);
+    g_signal_connect(
+        application,
+        "command-line",
+        G_CALLBACK(command_line),
+        nullptr);
 
     const int status =
         g_application_run(
             G_APPLICATION(application),
-            static_cast<int>(filtered_arguments.size() - 1U),
-            filtered_arguments.data());
+            argc,
+            argv);
     g_object_unref(application);
     return status;
 }
