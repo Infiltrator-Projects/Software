@@ -25,7 +25,7 @@
   <provides>
     <binary>infiltrator-software</binary>
   </provides>
-  <icon type="stock">infiltrator-software</icon>
+  <icon type="stock">net.ssmith.infiltrator.software</icon>
 
   <categories>
     <category>System</category>
