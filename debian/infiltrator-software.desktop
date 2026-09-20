@@ -6,4 +6,5 @@ Exec=infiltrator-software
 Icon=infiltrator-software
 Terminal=false
 Categories=System;PackageManager;GTK;
+StartupWMClass=net.ssmith.infiltrator.software
 StartupNotify=true
