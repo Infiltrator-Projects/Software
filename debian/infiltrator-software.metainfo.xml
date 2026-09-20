@@ -33,6 +33,11 @@
   <url type="homepage">https://github.com/Infiltrator-Projects/Software</url>
 
   <releases>
+    <release version="0.2.2" date="2026-09-20">
+      <description>
+        <p>Fixes the Discover startup model-lifetime crash and adds a permanent graphical launch smoke test.</p>
+      </description>
+    </release>
     <release version="0.2.1" date="2026-09-20">
       <description>
         <p>Discover now renders catalogue metadata immediately and hydrates verified icons asynchronously.</p>

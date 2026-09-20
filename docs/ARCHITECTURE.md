@@ -47,3 +47,5 @@ Repository/network operations must not block the GTK main loop. Discover uses a 
 ## Failure model
 
 Backend failures are data, not crashes. Every operation returns either a typed result or an explicit error. Partial state must not be silently represented as authoritative complete state.
+
+The verification pipeline includes a real GTK launch smoke test under Xvfb. It must keep the application alive through the asynchronous Discover catalogue callback window; an unexpected exit, abort or segmentation fault fails CI. The test captures stdout/stderr and obtains a debugger backtrace on failure.

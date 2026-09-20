@@ -1,3 +1,13 @@
+infiltrator-software (0.2.2) unstable; urgency=medium
+
+  * Fix a Discover startup SIGSEGV caused by replacing a dropped GtkDropDown model.
+  * Keep the Discover category GtkStringList alive for the lifetime of the window and mutate it in place.
+  * Delay initial Discover navigation selection until all GtkStack pages exist.
+  * Add a permanent 20-second Xvfb launch smoke test so startup/runtime crashes fail CI.
+  * Capture an automatic debugger backtrace if the launch smoke test fails.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Sun, 20 Sep 2026 11:38:00 +1000
+
 infiltrator-software (0.2.1) unstable; urgency=medium
 
   * Render Discover catalogue metadata immediately instead of waiting for icon downloads.
