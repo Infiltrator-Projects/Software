@@ -1,0 +1,3 @@
+[D-BUS Service]
+Name=net.ssmith.infiltrator.software.Engine
+Exec=/usr/libexec/infiltrator-software-engine
