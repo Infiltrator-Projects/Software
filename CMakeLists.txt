@@ -114,6 +114,7 @@ pkg_check_modules(JSON_GLIB REQUIRED IMPORTED_TARGET json-glib-1.0)
 pkg_check_modules(GLIB REQUIRED IMPORTED_TARGET glib-2.0)
 pkg_check_modules(ZLIB REQUIRED IMPORTED_TARGET zlib)
 pkg_check_modules(LZMA REQUIRED IMPORTED_TARGET liblzma)
+pkg_check_modules(SQLITE3 REQUIRED IMPORTED_TARGET sqlite3)
 
 add_library(software-core STATIC src/core/model.cpp)
 target_include_directories(software-core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
@@ -124,12 +125,14 @@ add_library(software-engine STATIC
     src/engine/debian_version.cpp
     src/engine/debian_candidate.cpp
     src/engine/debian_dependency.cpp
-    src/engine/debian_repository.cpp)
+    src/engine/debian_repository.cpp
+    src/engine/package_state_store.cpp)
 target_include_directories(software-engine PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_link_libraries(software-engine PUBLIC software-core
     PRIVATE InfiltratrCommon::Common
-            PkgConfig::CURL PkgConfig::GLIB PkgConfig::ZLIB PkgConfig::LZMA)
+            PkgConfig::CURL PkgConfig::GLIB PkgConfig::ZLIB PkgConfig::LZMA
+            PkgConfig::SQLITE3)
 
 add_library(software-apt STATIC src/backends/apt/apt_backend.cpp)
 target_include_directories(software-apt PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
@@ -247,6 +250,13 @@ if(BUILD_TESTING)
     add_test(
         NAME software-debian-repository-test
         COMMAND software-debian-repository-test)
+
+    add_executable(software-package-state-test
+        tests/package_state_store_test.cpp)
+    target_link_libraries(software-package-state-test PRIVATE software-engine)
+    add_test(
+        NAME software-package-state-test
+        COMMAND software-package-state-test)
 
     add_executable(software-apt-test tests/apt_backend_test.cpp)
     target_link_libraries(software-apt-test PRIVATE software-apt)

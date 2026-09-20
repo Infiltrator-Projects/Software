@@ -20,9 +20,7 @@ The system package engine owns system-wide derived state under the Infiltrator s
 
 User-specific presentation/cache data belongs under standard per-user data/cache locations.
 
-The implementation may use SQLite in WAL mode or another transactional embedded store that provides equivalent crash-safety, indexing and atomic publication properties.
-
-The storage technology is an implementation choice; the schema contract is not.
+The implementation now uses SQLite in WAL mode with synchronous durable commits. The schema is explicitly versioned, indexed and rebuildable. SQLite is an implementation mechanism rather than package authority.
 
 ## Generations
 
@@ -83,3 +81,7 @@ Unprivileged clients may read presentation state and request plans.
 They cannot forge authoritative package state or privileged execution results.
 
 The privileged executor does not accept database rows as implicit authority; it receives a validated immutable transaction tied to a known generation.
+
+## Implemented generation store
+
+The native engine now has a PackageStateStore that publishes installed and repository package state as immutable SQLite generations. Publication uses a single immediate transaction: generation rows, installed records, repository records and the current-generation pointer commit together or not at all. The current and immediately previous generations are retained so readers never need to observe a partially written refresh and a failed publish leaves the previous generation intact.
