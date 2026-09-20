@@ -98,8 +98,8 @@ jobs:
           grep -qx './usr/share/icons/hicolor/scalable/status/infiltrator-software-checking-symbolic.svg' package-files.txt
           grep -qx './usr/share/icons/hicolor/scalable/status/infiltrator-software-installing-symbolic.svg' package-files.txt
           grep -qx './usr/share/icons/hicolor/scalable/status/infiltrator-software-error-symbolic.svg' package-files.txt
-          grep -qx './usr/share/applications/infiltrator-software.desktop' package-files.txt
-          grep -qx 'StartupWMClass=net.ssmith.infiltrator.software' debian/infiltrator-software.desktop
+          grep -qx './usr/share/applications/net.ssmith.infiltrator.software.desktop' package-files.txt
+          grep -qx 'StartupWMClass=net.ssmith.infiltrator.software' debian/net.ssmith.infiltrator.software.desktop
           grep -Fq 'gtk_window_set_icon_name(GTK_WINDOW(window), "infiltrator-software")' src/app/main.cpp
           grep -Fq 'gtk_about_dialog_set_logo_icon_name(' src/app/main.cpp
           grep -qx './usr/share/icons/hicolor/scalable/apps/infiltrator-software.svg' package-files.txt
