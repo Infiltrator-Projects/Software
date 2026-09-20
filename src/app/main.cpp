@@ -2663,6 +2663,9 @@ void about_clicked(GtkButton *, gpointer user_data)
     GtkWidget *dialog = gtk_about_dialog_new();
     gtk_about_dialog_set_program_name(
         GTK_ABOUT_DIALOG(dialog), "Infiltrator Software");
+    gtk_about_dialog_set_logo_icon_name(
+        GTK_ABOUT_DIALOG(dialog), "infiltrator-software");
+    gtk_window_set_icon_name(GTK_WINDOW(dialog), "infiltrator-software");
     gtk_about_dialog_set_version(
         GTK_ABOUT_DIALOG(dialog), INFILTRATOR_SOFTWARE_VERSION);
     gtk_about_dialog_set_comments(
@@ -2789,6 +2792,7 @@ void activate(GtkApplication *application, gpointer)
 {
     GtkWidget *window = gtk_application_window_new(application);
     gtk_window_set_title(GTK_WINDOW(window), "Infiltrator Software");
+    gtk_window_set_icon_name(GTK_WINDOW(window), "infiltrator-software");
     gtk_window_set_default_size(GTK_WINDOW(window), 1220, 780);
     gtk_widget_set_size_request(window, 940, 620);
 
