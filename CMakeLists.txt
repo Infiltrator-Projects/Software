@@ -106,6 +106,8 @@ endforeach()
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GTK4 REQUIRED IMPORTED_TARGET gtk4>=4.6)
+pkg_check_modules(GTK3 REQUIRED IMPORTED_TARGET gtk+-3.0)
+pkg_check_modules(XAPP REQUIRED IMPORTED_TARGET xapp)
 pkg_check_modules(APPSTREAM REQUIRED IMPORTED_TARGET appstream)
 pkg_check_modules(CURL REQUIRED IMPORTED_TARGET libcurl)
 pkg_check_modules(JSON_GLIB REQUIRED IMPORTED_TARGET json-glib-1.0)
@@ -134,6 +136,14 @@ target_include_directories(software-sources PUBLIC
 add_executable(infiltrator-software-helper
     src/helper/source_helper.cpp)
 
+add_executable(infiltrator-software-update-helper
+    src/helper/update_helper.cpp)
+
+add_executable(infiltrator-software-tray
+    src/tray/main.cpp)
+target_link_libraries(infiltrator-software-tray PRIVATE
+    software-apt PkgConfig::GTK3 PkgConfig::XAPP)
+
 add_executable(infiltrator-software
     src/app/main.cpp
     src/app/theme.cpp)
@@ -144,17 +154,31 @@ target_link_libraries(infiltrator-software PRIVATE
 target_compile_definitions(infiltrator-software PRIVATE
     INFILTRATOR_SOFTWARE_VERSION="${PROJECT_VERSION}")
 
-install(TARGETS infiltrator-software RUNTIME DESTINATION bin)
-install(TARGETS infiltrator-software-helper RUNTIME DESTINATION libexec)
-install(FILES data/net.ssmith.infiltrator.software.policy
+install(TARGETS infiltrator-software infiltrator-software-tray
+    RUNTIME DESTINATION bin)
+install(TARGETS
+    infiltrator-software-helper
+    infiltrator-software-update-helper
+    RUNTIME DESTINATION libexec)
+install(FILES
+    data/net.ssmith.infiltrator.software.policy
+    data/net.ssmith.infiltrator.software.updates.policy
     DESTINATION share/polkit-1/actions)
+install(FILES
+    data/status/infiltrator-software-up-to-date-symbolic.svg
+    data/status/infiltrator-software-updates-available-symbolic.svg
+    data/status/infiltrator-software-checking-symbolic.svg
+    data/status/infiltrator-software-installing-symbolic.svg
+    data/status/infiltrator-software-error-symbolic.svg
+    DESTINATION share/icons/hicolor/scalable/status)
 install(FILES ${SOFTWARE_FONT_FILES}
     DESTINATION share/fonts/truetype/infiltrator-software)
 install(FILES LICENSE DESTINATION share/doc/infiltrator-software)
 
 foreach(target IN ITEMS
         software-core software-apt software-catalogue software-sources
-        infiltrator-software-helper infiltrator-software)
+        infiltrator-software-helper infiltrator-software-update-helper
+        infiltrator-software-tray infiltrator-software)
     if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
         target_compile_options(${target} PRIVATE
             -Wall -Wextra -Wpedantic -Wshadow -Wconversion -Wsign-conversion)
