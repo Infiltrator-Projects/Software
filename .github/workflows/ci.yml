@@ -83,6 +83,7 @@ jobs:
           test -f "$package"
           test "$(dpkg-deb -f "$package" Package)" = "infiltrator-software"
           dpkg-deb -f "$package" Depends | grep -Eq '(^|, )pkexec([, ]|$)'
+          dpkg-deb -f "$package" Depends | grep -Eq 'libxapp'
           dpkg-deb -f "$package" Recommends | grep -Eq '(^|, )flatpak([, ]|$)'
           dpkg-deb --fsys-tarfile "$package" | tar -tf - > package-files.txt
           grep -qx './usr/bin/infiltrator-software' package-files.txt
