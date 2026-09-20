@@ -1,3 +1,12 @@
+infiltrator-software (0.3.2) unstable; urgency=medium
+
+  * Stop requesting administrator credentials when the user refreshes package metadata.
+  * Refresh transitional APT metadata into an isolated per-user cache and use that cache for update inventory and preflight planning.
+  * Keep authorization at the mutation boundary only: the privileged installer refreshes root-owned system metadata after approval, then applies the exact requested versions.
+  * Update the Polkit message and add regression checks preventing a privileged refresh path from returning.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Sun, 20 Sep 2026 19:05:00 +1000
+
 infiltrator-software (0.3.1) unstable; urgency=medium
 
   * Bind the GTK application window explicitly to the canonical
