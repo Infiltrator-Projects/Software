@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "backends/apt/apt_backend.hpp"
+#include "engine/debian_installed_state.hpp"
 
 #include <algorithm>
 #include <array>
@@ -104,44 +105,10 @@ bool run_command(
     return true;
 }
 
-bool run_dpkg_query(std::string &output, std::string &error)
+bool apt_get_available() noexcept
 {
-    const std::string format =
-        "--showformat=${binary:Package}\t${Version}\t${Installed-Size}"
-        "\t${db:Status-Abbrev}\n";
-    return run_command(
-        {"env", "LC_ALL=C", "dpkg-query", "--show", format},
-        output, error);
-}
-
-std::vector<std::string_view> split_tabs(const std::string_view line)
-{
-    std::vector<std::string_view> fields;
-    std::size_t start = 0U;
-    for (;;) {
-        const std::size_t tab = line.find('\t', start);
-        if (tab == std::string_view::npos) {
-            fields.emplace_back(line.substr(start));
-            return fields;
-        }
-        fields.emplace_back(line.substr(start, tab - start));
-        start = tab + 1U;
-    }
-}
-
-std::uint64_t kib_to_bytes(const std::string_view text)
-{
-    std::uint64_t kib = 0U;
-    const auto result =
-        std::from_chars(text.data(), text.data() + text.size(), kib);
-    if (result.ec != std::errc{} ||
-        result.ptr != text.data() + text.size()) {
-        return 0U;
-    }
-    if (kib > std::numeric_limits<std::uint64_t>::max() / 1024U) {
-        return std::numeric_limits<std::uint64_t>::max();
-    }
-    return kib * 1024U;
+    return access("/usr/bin/apt-get", X_OK) == 0 ||
+           access("/bin/apt-get", X_OK) == 0;
 }
 
 std::string package_key(std::string value)
@@ -228,70 +195,26 @@ std::string_view AptBackend::name() const noexcept
 
 bool AptBackend::available() const noexcept
 {
-    const bool dpkg =
-        access("/usr/bin/dpkg-query", X_OK) == 0 ||
-        access("/bin/dpkg-query", X_OK) == 0;
-    const bool apt =
-        access("/usr/bin/apt-get", X_OK) == 0 ||
-        access("/bin/apt-get", X_OK) == 0;
-    return dpkg && apt;
+    return DebianInstalledState::available();
 }
 
 BackendCapabilities AptBackend::capabilities() const noexcept
 {
     BackendCapabilities result;
-    result.installed_inventory = available();
-    result.update_inventory = available();
-    result.transaction_planning = available();
+    result.installed_inventory = DebianInstalledState::available();
+    result.update_inventory =
+        result.installed_inventory && apt_get_available();
+    result.transaction_planning = result.update_inventory;
     return result;
 }
 
 std::vector<PackageRecord> AptBackend::list_installed(std::string &error)
 {
-    error.clear();
-    std::vector<PackageRecord> packages;
-
-    std::string output;
-    if (!run_dpkg_query(output, error)) {
-        return packages;
+    std::vector<PackageRecord> packages =
+        DebianInstalledState::read(error);
+    for (PackageRecord &package : packages) {
+        classify(package);
     }
-
-    std::size_t start = 0U;
-    while (start < output.size()) {
-        const std::size_t end = output.find('\n', start);
-        const std::string_view line{
-            output.data() + start,
-            (end == std::string::npos ? output.size() : end) - start};
-
-        const auto fields = split_tabs(line);
-        if (fields.size() == 4U && fields[3].rfind("ii", 0U) == 0U) {
-            PackageRecord package;
-            package.id.assign(fields[0]);
-            package.name = package.id;
-            package.package_name = package.id;
-            package.installed_version.assign(fields[1]);
-            package.available_version = package.installed_version;
-            package.installed_size_bytes = kib_to_bytes(fields[2]);
-            package.source = "APT";
-            package.state = InstallState::installed;
-            classify(package);
-
-            if (valid_identity(package)) {
-                packages.emplace_back(std::move(package));
-            }
-        }
-
-        if (end == std::string::npos) {
-            break;
-        }
-        start = end + 1U;
-    }
-
-    std::sort(
-        packages.begin(), packages.end(),
-        [](const PackageRecord &left, const PackageRecord &right) {
-            return left.name < right.name;
-        });
     return packages;
 }
 

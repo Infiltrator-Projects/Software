@@ -39,6 +39,8 @@ Required outcomes:
 - existing .deb, Debian repository, AppStream and Flatpak functionality retained;
 - constrained privileged execution remains isolated from the GUI.
 
+Initial 0.4 slice implemented: Installed inventory now parses /var/lib/dpkg/status directly in-process, including architecture, Multi-Arch identity, installed version and size. It no longer spawns dpkg-query. APT remains temporarily for update candidate calculation and transaction planning until the later 0.4 slices replace those paths.
+
 See [Package Engine](PACKAGE_ENGINE.md), [Performance](PERFORMANCE.md) and [State](STATE.md).
 
 ## 0.5 — Complete graphical package management

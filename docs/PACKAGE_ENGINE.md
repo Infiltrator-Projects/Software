@@ -89,6 +89,8 @@ The long-term native payload installer can replace this boundary without changin
 
 ## Migration from 0.3
 
+The first native slice reads installed package state directly from /var/lib/dpkg/status and no longer spawns dpkg-query for Installed inventory. Architecture and Multi-Arch identity are retained in the normalized record.
+
 Migration is complete only when normal operation no longer spawns APT programs.
 
 During migration:

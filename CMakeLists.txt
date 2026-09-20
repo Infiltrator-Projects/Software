@@ -115,9 +115,15 @@ pkg_check_modules(JSON_GLIB REQUIRED IMPORTED_TARGET json-glib-1.0)
 add_library(software-core STATIC src/core/model.cpp)
 target_include_directories(software-core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
 
+add_library(software-engine STATIC
+    src/engine/debian_installed_state.cpp)
+target_include_directories(software-engine PUBLIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_link_libraries(software-engine PUBLIC software-core)
+
 add_library(software-apt STATIC src/backends/apt/apt_backend.cpp)
 target_include_directories(software-apt PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
-target_link_libraries(software-apt PUBLIC software-core)
+target_link_libraries(software-apt PUBLIC software-engine)
 
 add_library(software-catalogue STATIC
     src/catalogue/repository_catalogue.cpp
@@ -176,7 +182,7 @@ install(FILES ${SOFTWARE_FONT_FILES}
 install(FILES LICENSE DESTINATION share/doc/infiltrator-software)
 
 foreach(target IN ITEMS
-        software-core software-apt software-catalogue software-sources
+        software-core software-engine software-apt software-catalogue software-sources
         infiltrator-software-helper infiltrator-software-update-helper
         infiltrator-software-tray infiltrator-software)
     if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
@@ -189,6 +195,13 @@ if(BUILD_TESTING)
     add_executable(software-model-test tests/model_test.cpp)
     target_link_libraries(software-model-test PRIVATE software-core)
     add_test(NAME software-model-test COMMAND software-model-test)
+
+    add_executable(software-debian-installed-test
+        tests/debian_installed_state_test.cpp)
+    target_link_libraries(software-debian-installed-test PRIVATE software-engine)
+    add_test(
+        NAME software-debian-installed-test
+        COMMAND software-debian-installed-test)
 
     add_executable(software-apt-test tests/apt_backend_test.cpp)
     target_link_libraries(software-apt-test PRIVATE software-apt)

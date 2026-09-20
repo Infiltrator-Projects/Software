@@ -17,8 +17,7 @@ int main()
 
     const BackendCapabilities caps = backend.capabilities();
     assert(caps.installed_inventory);
-    assert(caps.update_inventory);
-    assert(caps.transaction_planning);
+    assert(caps.transaction_planning == caps.update_inventory);
     assert(!caps.transaction_execution);
 
     std::string error;
@@ -31,15 +30,17 @@ int main()
         assert(package.state == InstallState::installed);
     }
 
-    error.clear();
-    const auto updates = backend.list_updates(error);
-    assert(error.empty());
-    for (const auto &package : updates) {
-        assert(valid_identity(package));
-        assert(package.state == InstallState::upgradable);
-        assert(!package.installed_version.empty());
-        assert(!package.available_version.empty());
-        assert(package.installed_version != package.available_version);
+    if (caps.update_inventory) {
+        error.clear();
+        const auto updates = backend.list_updates(error);
+        assert(error.empty());
+        for (const auto &package : updates) {
+            assert(valid_identity(package));
+            assert(package.state == InstallState::upgradable);
+            assert(!package.installed_version.empty());
+            assert(!package.available_version.empty());
+            assert(package.installed_version != package.available_version);
+        }
     }
 
     error.clear();

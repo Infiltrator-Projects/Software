@@ -1030,7 +1030,7 @@ void refresh_installed(WindowState *state)
             message << "Installed inventory unavailable: " << error;
         } else {
             message << packages.size()
-                    << " installed packages reported by the read-only APT backend.";
+                    << " installed packages read directly from Debian package state.";
         }
         gtk_label_set_text(
             GTK_LABEL(state->installed_status), message.str().c_str());
