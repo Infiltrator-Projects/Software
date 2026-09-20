@@ -111,6 +111,9 @@ pkg_check_modules(XAPP REQUIRED IMPORTED_TARGET xapp)
 pkg_check_modules(APPSTREAM REQUIRED IMPORTED_TARGET appstream)
 pkg_check_modules(CURL REQUIRED IMPORTED_TARGET libcurl)
 pkg_check_modules(JSON_GLIB REQUIRED IMPORTED_TARGET json-glib-1.0)
+pkg_check_modules(GLIB REQUIRED IMPORTED_TARGET glib-2.0)
+pkg_check_modules(ZLIB REQUIRED IMPORTED_TARGET zlib)
+pkg_check_modules(LZMA REQUIRED IMPORTED_TARGET liblzma)
 
 add_library(software-core STATIC src/core/model.cpp)
 target_include_directories(software-core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
@@ -120,10 +123,12 @@ add_library(software-engine STATIC
     src/engine/debian_package_index.cpp
     src/engine/debian_version.cpp
     src/engine/debian_candidate.cpp
-    src/engine/debian_dependency.cpp)
+    src/engine/debian_dependency.cpp
+    src/engine/debian_repository.cpp)
 target_include_directories(software-engine PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/src")
-target_link_libraries(software-engine PUBLIC software-core)
+target_link_libraries(software-engine PUBLIC software-core
+    PRIVATE PkgConfig::CURL PkgConfig::GLIB PkgConfig::ZLIB PkgConfig::LZMA)
 
 add_library(software-apt STATIC src/backends/apt/apt_backend.cpp)
 target_include_directories(software-apt PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
@@ -234,6 +239,13 @@ if(BUILD_TESTING)
     add_test(
         NAME software-debian-dependency-test
         COMMAND software-debian-dependency-test)
+
+    add_executable(software-debian-repository-test
+        tests/debian_repository_test.cpp)
+    target_link_libraries(software-debian-repository-test PRIVATE software-engine)
+    add_test(
+        NAME software-debian-repository-test
+        COMMAND software-debian-repository-test)
 
     add_executable(software-apt-test tests/apt_backend_test.cpp)
     target_link_libraries(software-apt-test PRIVATE software-apt)

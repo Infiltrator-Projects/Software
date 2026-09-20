@@ -2,17 +2,17 @@ Source: infiltrator-software
 Section: admin
 Priority: optional
 Maintainer: Shannon Smith <infiltratr@yandex.com>
-Build-Depends: debhelper-compat (= 13), cmake, g++, libappstream-dev, libcurl4-openssl-dev, libgtk-3-dev, libgtk-4-dev, libjson-glib-dev, libxapp-dev, pkg-config
+Build-Depends: debhelper-compat (= 13), cmake, g++, libappstream-dev, libcurl4-openssl-dev, libgtk-3-dev, libgtk-4-dev, libjson-glib-dev, liblzma-dev, libxapp-dev, pkg-config, zlib1g-dev
 Standards-Version: 4.7.0
 Rules-Requires-Root: no
 Homepage: https://github.com/Infiltrator-Projects/Software
 
 Package: infiltrator-software
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, pkexec
+Depends: ${shlibs:Depends}, ${misc:Depends}, gpgv, pkexec
 Recommends: flatpak
 Description: unified Infiltrator software manager and updater
  Infiltrator Software provides one graphical surface for software discovery,
  installed applications, updates, system components, repositories, history
- and repair. The first backend targets APT/.deb while keeping the application
- architecture package-manager-neutral.
+ and repair. The native Debian compatibility engine is replacing APT command
+ dependencies while retaining Debian repositories and .deb compatibility.
