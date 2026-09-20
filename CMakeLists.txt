@@ -106,6 +106,7 @@ endforeach()
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GTK4 REQUIRED IMPORTED_TARGET gtk4>=4.6)
+pkg_check_modules(APPSTREAM REQUIRED IMPORTED_TARGET appstream)
 pkg_check_modules(CURL REQUIRED IMPORTED_TARGET libcurl)
 pkg_check_modules(JSON_GLIB REQUIRED IMPORTED_TARGET json-glib-1.0)
 
@@ -117,18 +118,24 @@ target_include_directories(software-apt PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src"
 target_link_libraries(software-apt PUBLIC software-core)
 
 add_library(software-catalogue STATIC
-    src/catalogue/repository_catalogue.cpp)
+    src/catalogue/repository_catalogue.cpp
+    src/catalogue/system_catalogue.cpp)
 target_include_directories(software-catalogue PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_link_libraries(software-catalogue PUBLIC
     software-core InfiltratrCommon::Common
-    PkgConfig::CURL PkgConfig::JSON_GLIB)
+    PkgConfig::APPSTREAM PkgConfig::CURL PkgConfig::JSON_GLIB)
+
+add_library(software-sources STATIC
+    src/sources/source_inventory.cpp)
+target_include_directories(software-sources PUBLIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/src")
 
 add_executable(infiltrator-software
     src/app/main.cpp
     src/app/theme.cpp)
 target_link_libraries(infiltrator-software PRIVATE
-    software-core software-apt software-catalogue
+    software-core software-apt software-catalogue software-sources
     InfiltratrCommon::Common PkgConfig::GTK4)
 
 target_compile_definitions(infiltrator-software PRIVATE
@@ -140,7 +147,8 @@ install(FILES ${SOFTWARE_FONT_FILES}
 install(FILES LICENSE DESTINATION share/doc/infiltrator-software)
 
 foreach(target IN ITEMS
-        software-core software-apt software-catalogue infiltrator-software)
+        software-core software-apt software-catalogue software-sources
+        infiltrator-software)
     if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
         target_compile_options(${target} PRIVATE
             -Wall -Wextra -Wpedantic -Wshadow -Wconversion -Wsign-conversion)
@@ -159,4 +167,8 @@ if(BUILD_TESTING)
     add_executable(software-catalogue-test tests/catalogue_test.cpp)
     target_link_libraries(software-catalogue-test PRIVATE software-catalogue)
     add_test(NAME software-catalogue-test COMMAND software-catalogue-test)
+
+    add_executable(software-sources-test tests/source_inventory_test.cpp)
+    target_link_libraries(software-sources-test PRIVATE software-sources)
+    add_test(NAME software-sources-test COMMAND software-sources-test)
 endif()

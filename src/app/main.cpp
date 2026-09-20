@@ -2,7 +2,9 @@
 #include "app/theme.hpp"
 #include "backends/apt/apt_backend.hpp"
 #include "catalogue/repository_catalogue.hpp"
+#include "catalogue/system_catalogue.hpp"
 #include "core/model.hpp"
+#include "sources/source_inventory.hpp"
 
 #include <gtk/gtk.h>
 
@@ -12,6 +14,7 @@
 #include <sstream>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -25,7 +28,11 @@ using infiltrator::software::AptBackend;
 using infiltrator::software::CatalogueSnapshot;
 using infiltrator::software::PackageRecord;
 using infiltrator::software::RepositoryCatalogue;
+using infiltrator::software::SourceInventory;
+using infiltrator::software::SourceRecord;
+using infiltrator::software::SystemCatalogue;
 using infiltrator::software::ThemeController;
+using infiltrator::software::source_kind_name;
 
 struct WindowState {
     GtkWindow *window{};
@@ -48,6 +55,10 @@ struct WindowState {
     GtkWidget *discover_state{};
     std::vector<PackageRecord> discover_records;
     unsigned int discover_generation{0U};
+
+    GtkWidget *repository_flow{};
+    GtkWidget *repository_count{};
+    GtkWidget *repository_status{};
 };
 
 GtkWidget *make_icon(const char *name, int size)
@@ -208,6 +219,15 @@ const char *category_icon(const std::string_view category) noexcept
     if (category == "Filesystems") return "drive-harddisk-symbolic";
     if (category == "Development") return "applications-development-symbolic";
     if (category == "Infrastructure") return "network-workgroup-symbolic";
+    if (category == "Accessories") return "applications-accessories-symbolic";
+    if (category == "Games") return "applications-games-symbolic";
+    if (category == "Graphics") return "applications-graphics-symbolic";
+    if (category == "Internet") return "applications-internet-symbolic";
+    if (category == "Office") return "applications-office-symbolic";
+    if (category == "Programming") return "applications-development-symbolic";
+    if (category == "Science & Education") return "applications-science-symbolic";
+    if (category == "Sound & Video") return "applications-multimedia-symbolic";
+    if (category == "System Tools") return "applications-system-symbolic";
     return "application-x-executable-symbolic";
 }
 
@@ -216,6 +236,8 @@ GtkWidget *catalogue_icon(const PackageRecord &record, const int size)
     GtkWidget *icon = nullptr;
     if (!record.cached_icon_path.empty()) {
         icon = gtk_image_new_from_file(record.cached_icon_path.c_str());
+    } else if (!record.icon_name.empty()) {
+        icon = gtk_image_new_from_icon_name(record.icon_name.c_str());
     } else {
         icon = gtk_image_new_from_icon_name(category_icon(record.category));
     }
@@ -301,6 +323,9 @@ void discover_details_clicked(GtkButton *button, gpointer user_data)
         detail_row("Publisher", record->publisher));
     gtk_box_append(
         GTK_BOX(card),
+        detail_row("Source", record->source));
+    gtk_box_append(
+        GTK_BOX(card),
         detail_row("Download", display_size(record->download_size_bytes)));
     gtk_box_append(
         GTK_BOX(card),
@@ -352,9 +377,15 @@ GtkWidget *make_discover_card(
     GtkWidget *identity = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
     gtk_widget_set_hexpand(identity, true);
     GtkWidget *name = make_label(record.name.c_str(), "discover-name");
+    std::string meta_text = record.category;
+    if (!record.available_version.empty()) {
+        meta_text += "  •  " + record.available_version;
+    }
+    if (!record.source.empty()) {
+        meta_text += "  •  " + record.source;
+    }
     GtkWidget *meta = make_label(
-        (record.category + "  •  " + record.available_version).c_str(),
-        "discover-meta");
+        meta_text.c_str(), "discover-meta");
     gtk_box_append(GTK_BOX(identity), name);
     gtk_box_append(GTK_BOX(identity), meta);
     gtk_box_append(GTK_BOX(header), identity);
@@ -448,7 +479,8 @@ void rebuild_discover(WindowState *state)
         if (!query.empty()) {
             const std::string haystack = folded(
                 record.name + "\n" + record.description + "\n" +
-                record.category + "\n" + record.package_name);
+                record.category + "\n" + record.package_name + "\n" +
+                record.source);
             if (haystack.find(query) == std::string::npos) {
                 continue;
             }
@@ -498,7 +530,54 @@ void discover_worker(
     auto *result = new DiscoverResult{};
 
     RepositoryCatalogue catalogue;
-    result->snapshot = catalogue.refresh(result->warning);
+    std::string infiltrator_warning;
+    result->snapshot = catalogue.refresh(infiltrator_warning);
+
+    SystemCatalogue system_catalogue;
+    std::string system_warning;
+    CatalogueSnapshot system_snapshot =
+        system_catalogue.refresh(system_warning);
+
+    std::unordered_set<std::string> native_packages;
+    native_packages.reserve(result->snapshot.records.size());
+    for (const PackageRecord &record : result->snapshot.records) {
+        if (!record.package_name.empty()) {
+            native_packages.insert(
+                package_key(record.package_name));
+        }
+    }
+
+    for (PackageRecord &record : system_snapshot.records) {
+        const bool native_duplicate =
+            record.id.rfind("apt:", 0U) == 0U &&
+            native_packages.find(package_key(record.package_name)) !=
+                native_packages.end();
+        if (!native_duplicate) {
+            result->snapshot.records.emplace_back(std::move(record));
+        }
+    }
+
+    std::sort(
+        result->snapshot.records.begin(),
+        result->snapshot.records.end(),
+        [](const PackageRecord &left, const PackageRecord &right) {
+            if (left.name != right.name) {
+                return left.name < right.name;
+            }
+            return left.source < right.source;
+        });
+
+    result->snapshot.source = "Infiltrator + system";
+    if (!infiltrator_warning.empty()) {
+        result->warning = infiltrator_warning;
+    }
+    if (!system_warning.empty()) {
+        if (!result->warning.empty()) {
+            result->warning += " ";
+        }
+        result->warning +=
+            "System catalogue: " + system_warning;
+    }
 
     AptBackend apt;
     std::string apt_error;
@@ -514,6 +593,9 @@ void discover_worker(
     }
 
     for (PackageRecord &record : result->snapshot.records) {
+        if (record.id.rfind("flatpak:", 0U) == 0U) {
+            continue;
+        }
         const auto found =
             versions.find(package_key(record.package_name));
         if (found != versions.end()) {
@@ -721,7 +803,7 @@ void discover_complete(
     if (state->discover_source != nullptr) {
         gtk_label_set_text(
             GTK_LABEL(state->discover_source),
-            result->snapshot.from_cache ? "Repository cache" : "Repository live");
+            "Infiltrator + system");
     }
     if (state->discover_state != nullptr) {
         gtk_label_set_text(
@@ -754,7 +836,7 @@ void refresh_discover(WindowState *state)
     if (state->discover_status != nullptr) {
         gtk_label_set_text(
             GTK_LABEL(state->discover_status),
-            "Refreshing verified repository metadata…");
+            "Refreshing Infiltrator, system and Flatpak metadata…");
     }
 
     GTask *task = g_task_new(
@@ -785,7 +867,7 @@ GtkWidget *make_discover_page(WindowState *state)
         make_page_intro(
             "system-search-symbolic",
             "Discover",
-            "Browse verified applications from the Infiltrator repository."));
+            "Browse Infiltrator, system repository and Flatpak applications."));
 
     GtkWidget *stats = gtk_grid_new();
     gtk_grid_set_column_spacing(GTK_GRID(stats), 10);
@@ -837,7 +919,7 @@ GtkWidget *make_discover_page(WindowState *state)
     gtk_box_append(GTK_BOX(page), controls);
 
     state->discover_status = make_label(
-        "Refreshing verified repository metadata…",
+        "Refreshing Infiltrator, system and Flatpak metadata…",
         "discover-status");
     gtk_box_append(GTK_BOX(page), state->discover_status);
 
@@ -1017,6 +1099,199 @@ GtkWidget *make_installed_page(WindowState *state)
     return page;
 }
 
+
+const char *source_icon(const SourceRecord &source) noexcept
+{
+    switch (source.kind) {
+    case infiltrator::software::SourceKind::infiltrator:
+        return "emblem-default-symbolic";
+    case infiltrator::software::SourceKind::apt:
+        return "package-x-generic-symbolic";
+    case infiltrator::software::SourceKind::flatpak:
+        return "package-x-generic-symbolic";
+    }
+    return "network-workgroup-symbolic";
+}
+
+GtkWidget *make_source_card(const SourceRecord &source)
+{
+    GtkWidget *card = gtk_box_new(GTK_ORIENTATION_VERTICAL, 7);
+    gtk_widget_add_css_class(card, "source-card");
+
+    GtkWidget *header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    GtkWidget *icon = make_icon(source_icon(source), 24);
+    gtk_widget_add_css_class(icon, "source-icon");
+    gtk_box_append(GTK_BOX(header), icon);
+
+    GtkWidget *identity = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
+    gtk_widget_set_hexpand(identity, true);
+    gtk_box_append(
+        GTK_BOX(identity),
+        make_label(source.name.c_str(), "source-name"));
+
+    std::string type =
+        std::string(source_kind_name(source.kind));
+    if (!source.scope.empty()) {
+        type += "  •  " + source.scope;
+    }
+    gtk_box_append(
+        GTK_BOX(identity),
+        make_label(type.c_str(), "source-meta"));
+    gtk_box_append(GTK_BOX(header), identity);
+
+    GtkWidget *state = make_label(
+        source.enabled ? "Enabled" : "Disabled",
+        source.enabled ? "state-installed" : "state-available");
+    gtk_box_append(GTK_BOX(header), state);
+    gtk_box_append(GTK_BOX(card), header);
+
+    GtkWidget *location =
+        make_label(source.location.c_str(), "source-location");
+    gtk_label_set_wrap(GTK_LABEL(location), true);
+    gtk_box_append(GTK_BOX(card), location);
+
+    if (!source.detail.empty()) {
+        GtkWidget *detail =
+            make_label(source.detail.c_str(), "source-detail");
+        gtk_label_set_wrap(GTK_LABEL(detail), true);
+        gtk_box_append(GTK_BOX(card), detail);
+    }
+
+    if (!source.backing_file.empty()) {
+        GtkWidget *file =
+            make_label(source.backing_file.c_str(), "source-file");
+        gtk_label_set_ellipsize(
+            GTK_LABEL(file), PANGO_ELLIPSIZE_MIDDLE);
+        gtk_box_append(GTK_BOX(card), file);
+    }
+
+    return card;
+}
+
+void refresh_repositories(WindowState *state)
+{
+    if (state == nullptr || state->repository_flow == nullptr) {
+        return;
+    }
+
+    GtkWidget *child =
+        gtk_widget_get_first_child(state->repository_flow);
+    while (child != nullptr) {
+        GtkWidget *next = gtk_widget_get_next_sibling(child);
+        gtk_flow_box_remove(
+            GTK_FLOW_BOX(state->repository_flow), child);
+        child = next;
+    }
+
+    SourceInventory inventory;
+    std::string error;
+    const std::vector<SourceRecord> sources =
+        inventory.list(error);
+
+    std::size_t enabled = 0U;
+    for (const SourceRecord &source : sources) {
+        gtk_flow_box_append(
+            GTK_FLOW_BOX(state->repository_flow),
+            make_source_card(source));
+        if (source.enabled) {
+            ++enabled;
+        }
+    }
+
+    if (state->repository_count != nullptr) {
+        const std::string count = std::to_string(sources.size());
+        gtk_label_set_text(
+            GTK_LABEL(state->repository_count), count.c_str());
+    }
+
+    if (state->repository_status != nullptr) {
+        if (!error.empty()) {
+            gtk_label_set_text(
+                GTK_LABEL(state->repository_status),
+                error.c_str());
+        } else {
+            std::ostringstream status;
+            status << enabled << " enabled source"
+                   << (enabled == 1U ? "" : "s")
+                   << " detected. APT sources and Flatpak remotes feed Discover.";
+            gtk_label_set_text(
+                GTK_LABEL(state->repository_status),
+                status.str().c_str());
+        }
+    }
+}
+
+GtkWidget *make_repositories_page(WindowState *state)
+{
+    GtkWidget *page =
+        gtk_box_new(GTK_ORIENTATION_VERTICAL, 16);
+    gtk_widget_add_css_class(page, "content");
+    gtk_widget_add_css_class(page, "page-repositories");
+
+    gtk_box_append(
+        GTK_BOX(page),
+        make_page_intro(
+            "network-workgroup-symbolic",
+            "Repositories",
+            "Software sources feeding Discover."));
+
+    GtkWidget *stats = gtk_grid_new();
+    gtk_grid_set_column_spacing(GTK_GRID(stats), 10);
+    gtk_grid_set_column_homogeneous(GTK_GRID(stats), true);
+    gtk_grid_attach(
+        GTK_GRID(stats),
+        make_stat_card(
+            "SOURCES", "0", "stat-info",
+            &state->repository_count),
+        0, 0, 1, 1);
+    gtk_grid_attach(
+        GTK_GRID(stats),
+        make_stat_card(
+            "APT", "System sources", "stat-operation"),
+        1, 0, 1, 1);
+    gtk_grid_attach(
+        GTK_GRID(stats),
+        make_stat_card(
+            "FLATPAK", "User + system", "stat-success"),
+        2, 0, 1, 1);
+    gtk_box_append(GTK_BOX(page), stats);
+
+    state->repository_status = make_label(
+        "Reading configured software sources…",
+        "discover-status");
+    gtk_box_append(
+        GTK_BOX(page), state->repository_status);
+
+    state->repository_flow = gtk_flow_box_new();
+    gtk_flow_box_set_selection_mode(
+        GTK_FLOW_BOX(state->repository_flow),
+        GTK_SELECTION_NONE);
+    gtk_flow_box_set_row_spacing(
+        GTK_FLOW_BOX(state->repository_flow), 10U);
+    gtk_flow_box_set_column_spacing(
+        GTK_FLOW_BOX(state->repository_flow), 10U);
+    gtk_flow_box_set_min_children_per_line(
+        GTK_FLOW_BOX(state->repository_flow), 1U);
+    gtk_flow_box_set_max_children_per_line(
+        GTK_FLOW_BOX(state->repository_flow), 2U);
+    gtk_widget_set_valign(
+        state->repository_flow, GTK_ALIGN_START);
+
+    GtkWidget *scroll = gtk_scrolled_window_new();
+    gtk_widget_set_vexpand(scroll, true);
+    gtk_scrolled_window_set_policy(
+        GTK_SCROLLED_WINDOW(scroll),
+        GTK_POLICY_NEVER,
+        GTK_POLICY_AUTOMATIC);
+    gtk_scrolled_window_set_child(
+        GTK_SCROLLED_WINDOW(scroll),
+        state->repository_flow);
+    gtk_box_append(GTK_BOX(page), scroll);
+
+    refresh_repositories(state);
+    return page;
+}
+
 GtkWidget *make_nav_row(
     const char *icon_name, const char *text, const char *semantic_class)
 {
@@ -1144,6 +1419,7 @@ void refresh_clicked(GtkButton *, gpointer user_data)
     auto *state = static_cast<WindowState *>(user_data);
     refresh_installed(state);
     refresh_discover(state);
+    refresh_repositories(state);
 }
 
 void about_clicked(GtkButton *, gpointer user_data)
@@ -1329,14 +1605,7 @@ void activate(GtkApplication *application, gpointer)
 
     gtk_stack_add_named(
         state->stack,
-        make_foundation_page(
-            "network-workgroup-symbolic",
-            "Repositories",
-            "Sources, priorities and Stable/Beta/Alpha channels.",
-            "Repository policy",
-            "Repository and channel management will be exposed here without "
-            "requiring manual editing of package-source files.",
-            "page-repositories"),
+        make_repositories_page(state),
         "repositories");
 
     gtk_stack_add_named(
