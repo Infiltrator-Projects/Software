@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "engine/debian_package_index.hpp"
 
+#include <algorithm>
 #include <charconv>
 #include <cctype>
 #include <cstdint>
@@ -38,6 +39,16 @@ std::string trim(const std::string_view value)
     return std::string(value.substr(first, last - first));
 }
 
+std::string field_key(std::string value)
+{
+    std::transform(
+        value.begin(), value.end(), value.begin(),
+        [](const unsigned char character) {
+            return static_cast<char>(std::tolower(character));
+        });
+    return value;
+}
+
 std::uint64_t parse_unsigned(
     const std::string_view text,
     const std::uint64_t multiplier = 1U)
@@ -65,7 +76,7 @@ std::string field(
     const Fields &fields,
     const std::string_view name)
 {
-    const auto found = fields.find(std::string(name));
+    const auto found = fields.find(field_key(std::string(name)));
     return found == fields.end() ? std::string{} : found->second;
 }
 
@@ -81,9 +92,9 @@ void append_record(
     std::vector<DebianPackageVersion> &packages)
 {
     DebianPackageVersion package;
-    package.package = field(fields, "Package");
-    package.version = field(fields, "Version");
-    package.architecture = field(fields, "Architecture");
+    package.package = field(fields, "package");
+    package.version = field(fields, "version");
+    package.architecture = field(fields, "architecture");
 
     if (package.package.empty() ||
         package.version.empty() ||
@@ -91,26 +102,26 @@ void append_record(
         return;
     }
 
-    package.filename = field(fields, "Filename");
-    package.sha256 = field(fields, "SHA256");
+    package.filename = field(fields, "filename");
+    package.sha256 = field(fields, "sha256");
     package.source = source_id.empty()
-        ? field(fields, "Source")
+        ? field(fields, "source")
         : std::string(source_id);
-    package.priority = field(fields, "Priority");
-    package.multi_arch = field(fields, "Multi-Arch");
-    package.depends = field(fields, "Depends");
-    package.pre_depends = field(fields, "Pre-Depends");
-    package.recommends = field(fields, "Recommends");
-    package.provides = field(fields, "Provides");
-    package.conflicts = field(fields, "Conflicts");
-    package.breaks = field(fields, "Breaks");
-    package.replaces = field(fields, "Replaces");
-    package.description = field(fields, "Description");
+    package.priority = field(fields, "priority");
+    package.multi_arch = field(fields, "multi-arch");
+    package.depends = field(fields, "depends");
+    package.pre_depends = field(fields, "pre-depends");
+    package.recommends = field(fields, "recommends");
+    package.provides = field(fields, "provides");
+    package.conflicts = field(fields, "conflicts");
+    package.breaks = field(fields, "breaks");
+    package.replaces = field(fields, "replaces");
+    package.description = field(fields, "description");
     package.size_bytes =
-        parse_unsigned(field(fields, "Size"));
+        parse_unsigned(field(fields, "size"));
     package.installed_size_bytes =
-        parse_unsigned(field(fields, "Installed-Size"), 1024U);
-    package.essential = yes(field(fields, "Essential"));
+        parse_unsigned(field(fields, "installed-size"), 1024U);
+    package.essential = yes(field(fields, "essential"));
 
     packages.emplace_back(std::move(package));
 }
@@ -169,7 +180,7 @@ std::vector<DebianPackageVersion> DebianPackageIndex::parse(
             line.remove_suffix(1U);
         }
 
-        if (line.empty()) {
+        if (line.find_first_not_of(" \t") == std::string_view::npos) {
             flush();
         } else if (
             (line.front() == ' ' || line.front() == '\t') &&
@@ -181,12 +192,22 @@ std::vector<DebianPackageVersion> DebianPackageIndex::parse(
         } else {
             const std::size_t colon = line.find(':');
             if (colon == std::string_view::npos) {
-                current_key.clear();
+                error = "Malformed Debian control line without a field separator.";
+                return {};
             } else {
-                current_key = trim(line.substr(0U, colon));
-                if (!current_key.empty()) {
-                    fields[current_key] =
-                        trim(line.substr(colon + 1U));
+                current_key =
+                    field_key(trim(line.substr(0U, colon)));
+                if (current_key.empty()) {
+                    error = "Debian control field name is empty.";
+                    return {};
+                }
+                const auto inserted = fields.emplace(
+                    current_key, trim(line.substr(colon + 1U)));
+                if (!inserted.second) {
+                    error =
+                        "Duplicate Debian control field: " +
+                        current_key;
+                    return {};
                 }
             }
         }
