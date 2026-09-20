@@ -12,4 +12,10 @@ override_dh_auto_test:
 
 override_dh_install:
 	dh_install
-	install -D -m 0644 debian/infiltrator-software.svg 		"$(CURDIR)/debian/infiltrator-software/usr/share/app-install/icons/infiltrator-software.svg"
+	# One source asset, installed under the GTK application ID plus legacy/package aliases.
+	install -D -m 0644 debian/infiltrator-software.svg \
+		"$(CURDIR)/debian/infiltrator-software/usr/share/icons/hicolor/scalable/apps/net.ssmith.infiltrator.software.svg"
+	install -D -m 0644 debian/infiltrator-software.svg \
+		"$(CURDIR)/debian/infiltrator-software/usr/share/icons/hicolor/scalable/apps/infiltrator-software.svg"
+	install -D -m 0644 debian/infiltrator-software.svg \
+		"$(CURDIR)/debian/infiltrator-software/usr/share/app-install/icons/infiltrator-software.svg"
