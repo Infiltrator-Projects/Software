@@ -1,3 +1,14 @@
+infiltrator-software (0.3.4) unstable; urgency=medium
+
+  * Add one typed D-Bus client for the shared native package engine.
+  * Make Installed and ordinary Updates inventory consume shared engine generations first.
+  * Move Installed inventory work off the GTK main thread and retain a safe direct Debian-state fallback while native state publication is completed.
+  * Use native engine transaction planning whenever the displayed update inventory came from the shared engine.
+  * Make the XApp panel indicator consume engine update state and react to StateChanged and HealthChanged signals instead of independently resolving the same generation.
+  * Preserve the unprivileged APT compatibility refresh path until native source reconciliation owns repository refresh end to end.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Mon, 21 Sep 2026 18:55:00 +1000
+
 infiltrator-software (0.3.3) unstable; urgency=medium
 
   * Make sidebar navigation switch GtkStack pages atomically instead of crossfading old and new page contents.

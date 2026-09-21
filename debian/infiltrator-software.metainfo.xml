@@ -34,6 +34,11 @@
   <url type="homepage">https://github.com/Infiltrator-Projects/Software</url>
 
   <releases>
+    <release version="0.3.4" date="2026-09-21">
+      <description>
+        <p>Migrates Software and the panel updater toward one shared D-Bus package-engine generation, including engine-first inventory, native planning and event-driven tray updates.</p>
+      </description>
+    </release>
     <release version="0.3.3" date="2026-09-21">
       <description>
         <p>Makes navigation atomic and paints Discover before starting its lazy catalogue refresh, preventing mixed History/Discover transition frames.</p>

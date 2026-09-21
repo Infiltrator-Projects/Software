@@ -46,7 +46,7 @@ Software and the panel indicator are clients.
 
 The initial D-Bus service is now implemented. It exposes `GetStatus`, `ListInstalled`, `ListUpdates`, `PlanTransaction` and `ReloadState` on `net.ssmith.infiltrator.software.Engine`, with `StateChanged` and `HealthChanged` signals. Package-state database reads are read-only and do not require clients to own or mutate the database. The service caches update state per generation so multiple clients consume the same calculation.
 
-The indicator therefore displays the same update count/state as Software rather than running its own solver once client migration is complete.
+The indicator now subscribes to StateChanged and HealthChanged and reads ListUpdates from the same engine generation used by Software. Software's Installed and ordinary Updates paths likewise prefer the service, and engine-backed update transactions use PlanTransaction. During the remaining migration window, a compatibility fallback is retained when no native generation has yet been published; that fallback is removed once the native reconciliation publisher owns configured-source refresh.
 
 ## Startup
 

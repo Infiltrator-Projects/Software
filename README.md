@@ -6,7 +6,7 @@
 
 Infiltrator Software is the software-management application for the Infiltrator project family. It presents software discovery, installation, removal, updates, system components, repositories, release channels, history and repair as one coherent graphical product.
 
-**Current source version:** 0.3.3  
+**Current source version:** 0.3.4  
 **Language:** C++17 application/core with native GTK4 Linux shell; C11 Common foundation  
 **Shared foundation:** Common 1.19.10  
 **Current package compatibility:** Debian repositories and .deb packages; Flatpak and AppStream catalogue integration  
@@ -145,6 +145,10 @@ See [UI Design](docs/UI_DESIGN.md).
 0.3/0.3.1 made Updates operational using an APT-backed implementation and added the Mint-style panel status process.
 
 0.4 replaces the APT process dependency with the native Debian-compatibility engine, introduces shared package state, removes duplicate update scans, makes page loading lazy, and establishes measurable startup/performance requirements. Existing Debian repositories, .deb packages, AppStream and Flatpak support remain.
+
+The first client cutover is now implemented: Installed, ordinary Updates inventory and native update planning use the shared D-Bus engine when a published generation is available, while the panel indicator subscribes to engine state/health changes instead of owning a second resolver. The direct Debian installed-state reader remains a no-process fallback, and explicit repository refresh/update inventory retains the 0.3 compatibility path until native reconciliation publishes complete source state.
+
+The next 0.4 slice is the native reconciliation publisher that turns configured repository sources plus installed dpkg state into the shared generation automatically. Once that owns refresh end to end, the remaining APT compatibility inventory paths can be deleted rather than merely bypassed.
 
 The 0.4 design is documented before implementation so code cannot accidentally preserve the startup and coupling problems exposed by 0.3.
 
