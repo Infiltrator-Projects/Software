@@ -18,7 +18,8 @@ constexpr const char *kObjectPath =
     "/net/ssmith/infiltrator/software/Engine";
 constexpr const char *kInterfaceName =
     "net.ssmith.infiltrator.software.Engine";
-constexpr int kCallTimeoutMs = 10000;
+constexpr int kInventoryCallTimeoutMs = 750;
+constexpr int kControlCallTimeoutMs = 5000;
 
 std::string consume_error(GError *error)
 {
@@ -39,6 +40,7 @@ GVariant *call_engine(
     const char *method,
     GVariant *parameters,
     const GVariantType *reply_type,
+    const int timeout_ms,
     std::string &error)
 {
     error.clear();
@@ -64,7 +66,7 @@ GVariant *call_engine(
             parameters,
             reply_type,
             G_DBUS_CALL_FLAGS_NONE,
-            kCallTimeoutMs,
+            timeout_ms,
             nullptr,
             &gerror);
     g_object_unref(connection);
@@ -282,6 +284,7 @@ bool EngineClient::list_installed(
             "ListInstalled",
             nullptr,
             G_VARIANT_TYPE("(aa{sv})"),
+            kInventoryCallTimeoutMs,
             error);
     return reply != nullptr &&
            parse_packages_reply(
@@ -297,6 +300,7 @@ bool EngineClient::list_updates(
             "ListUpdates",
             nullptr,
             G_VARIANT_TYPE("(aa{sv})"),
+            kInventoryCallTimeoutMs,
             error);
     return reply != nullptr &&
            parse_packages_reply(
@@ -330,6 +334,7 @@ std::optional<TransactionPlan> EngineClient::plan(
                 action.c_str(),
                 ids.data()),
             G_VARIANT_TYPE("(a{sv})"),
+            kControlCallTimeoutMs,
             error);
     if (reply == nullptr) {
         return std::nullopt;
@@ -404,6 +409,7 @@ bool EngineClient::reload(std::string &error) const
             "ReloadState",
             nullptr,
             G_VARIANT_TYPE("(a{sv})"),
+            kControlCallTimeoutMs,
             error);
     if (reply == nullptr) {
         return false;
