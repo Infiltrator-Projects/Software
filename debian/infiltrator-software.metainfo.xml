@@ -34,6 +34,11 @@
   <url type="homepage">https://github.com/Infiltrator-Projects/Software</url>
 
   <releases>
+    <release version="0.3.5" date="2026-09-21">
+      <description>
+        <p>Makes cached Discover paint immediately and performs package-engine installed-state and icon enrichment only after the catalogue is visible.</p>
+      </description>
+    </release>
     <release version="0.3.4" date="2026-09-21">
       <description>
         <p>Migrates Software and the panel updater toward one shared D-Bus package-engine generation, including engine-first inventory, native planning and event-driven tray updates.</p>

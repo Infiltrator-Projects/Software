@@ -1,3 +1,13 @@
+infiltrator-software (0.3.5) unstable; urgency=medium
+
+  * Render the saved Discover catalogue immediately instead of waiting for package-engine installed-state reconciliation.
+  * Move Discover installed-state reconciliation into a second background task after the first usable page paint.
+  * Merge asynchronous icon hydration into the current catalogue instead of replacing records and racing installed-state updates.
+  * Eliminate the multi-second blank Discover window seen on close/reopen with the 0.3.4 shared-engine migration.
+  * Include the suite-standard About dialog/build-profile identity update.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Mon, 21 Sep 2026 19:42:00 +1000
+
 infiltrator-software (0.3.4) unstable; urgency=medium
 
   * Add one typed D-Bus client for the shared native package engine.
