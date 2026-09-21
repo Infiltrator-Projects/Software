@@ -10,6 +10,13 @@ endif()
 project(InfiltratorSoftware VERSION "${SOFTWARE_VERSION}" LANGUAGES C CXX)
 include(CTest)
 
+set(SOFTWARE_BUILD_PROFILE "cmake" CACHE STRING
+    "Common build-profile identity for this Software build")
+set_property(CACHE SOFTWARE_BUILD_PROFILE PROPERTY STRINGS cmake generic native)
+if(NOT SOFTWARE_BUILD_PROFILE MATCHES "^(cmake|generic|native)$")
+    message(FATAL_ERROR "Unsupported SOFTWARE_BUILD_PROFILE")
+endif()
+
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS OFF)
@@ -188,7 +195,8 @@ target_link_libraries(infiltrator-software PRIVATE
     InfiltratrCommon::Common PkgConfig::GTK4)
 
 target_compile_definitions(infiltrator-software PRIVATE
-    INFILTRATOR_SOFTWARE_VERSION="${PROJECT_VERSION}")
+    INFILTRATOR_SOFTWARE_VERSION="${PROJECT_VERSION}"
+    INFILTRATOR_SOFTWARE_BUILD_PROFILE="${SOFTWARE_BUILD_PROFILE}")
 
 install(TARGETS infiltrator-software infiltrator-software-tray
     RUNTIME DESTINATION bin)

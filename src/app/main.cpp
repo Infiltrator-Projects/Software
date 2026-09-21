@@ -3171,6 +3171,13 @@ void about_clicked(GtkButton *, gpointer user_data)
     }
 
     GtkWidget *dialog = gtk_about_dialog_new();
+    const char *profile = INFILTRATOR_SOFTWARE_BUILD_PROFILE;
+    char comments[512];
+    std::snprintf(
+        comments, sizeof(comments),
+        "Unified software management and updates for the Infiltrator project family.\n\nBuild: %s",
+        infiltratr_build_profile_label(profile));
+
     gtk_about_dialog_set_program_name(
         GTK_ABOUT_DIALOG(dialog), "Infiltrator Software");
     gtk_about_dialog_set_logo_icon_name(
@@ -3178,16 +3185,27 @@ void about_clicked(GtkButton *, gpointer user_data)
     gtk_window_set_icon_name(GTK_WINDOW(dialog), "net.ssmith.infiltrator.software");
     gtk_about_dialog_set_version(
         GTK_ABOUT_DIALOG(dialog), INFILTRATOR_SOFTWARE_VERSION);
-    gtk_about_dialog_set_comments(
-        GTK_ABOUT_DIALOG(dialog),
-        "Unified software management and updates for the Infiltrator project family.");
+    gtk_about_dialog_set_comments(GTK_ABOUT_DIALOG(dialog), comments);
     gtk_about_dialog_set_website(
         GTK_ABOUT_DIALOG(dialog),
         "https://github.com/Infiltrator-Projects/Software");
+    gtk_about_dialog_set_website_label(GTK_ABOUT_DIALOG(dialog), "Website");
+    gtk_about_dialog_set_copyright(
+        GTK_ABOUT_DIALOG(dialog), "Copyright © 2026 Shannon Smith");
     gtk_about_dialog_set_license_type(
-        GTK_ABOUT_DIALOG(dialog), GTK_LICENSE_GPL_3_0);
+        GTK_ABOUT_DIALOG(dialog), GTK_LICENSE_CUSTOM);
+    gtk_about_dialog_set_license(
+        GTK_ABOUT_DIALOG(dialog),
+        "Infiltrator Software is free software licensed under the GNU General "
+        "Public License version 3 or, at your option, any later version "
+        "(GPL-3.0-or-later).\n\n"
+        "See LICENSE in the source package for the complete licence text.");
+    gtk_about_dialog_set_wrap_license(GTK_ABOUT_DIALOG(dialog), true);
 
-    static const char *authors[] = {"Shannon Smith", nullptr};
+    static const char *authors[] = {
+        "Shannon Smith — Author and project maintainer",
+        nullptr
+    };
     gtk_about_dialog_set_authors(GTK_ABOUT_DIALOG(dialog), authors);
 
     gtk_window_set_transient_for(GTK_WINDOW(dialog), state->window);
