@@ -1,3 +1,19 @@
+infiltrator-software (0.3.8) unstable; urgency=medium
+
+  * Keep Updates fresh after the first automatic refresh instead of freezing
+    repository metadata for the rest of the Software process lifetime.
+  * Refresh repository metadata automatically when the user re-enters Updates
+    after one minute and while the Updates page remains open and stale.
+  * Keep all refresh work asynchronous and unprivileged; package mutation still
+    crosses the existing authorization boundary only after a transaction plan.
+  * Add regression coverage proving Debian-managed hardware-native builds such
+    as Calendar +nativepgo packages remain visible in installed state and
+    compare correctly against later generic repository releases.
+  * Document that Calendar's native .run installer already installs a real
+    Debian package; no parallel unmanaged-install receipt is required.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Mon, 21 Sep 2026 21:15:00 +1000
+
 infiltrator-software (0.3.7) unstable; urgency=medium
 
   * Replace Discover's eager GtkFlowBox with a virtualized GtkGridView so only visible application cards are constructed.

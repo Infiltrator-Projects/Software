@@ -35,14 +35,20 @@ int main()
         "Architecture: i386\n"
         "Multi-Arch: same\n"
         "Version: 2.0-1\n"
-        "Installed-Size: 4\n";
+        "Installed-Size: 4\n"
+        "\n"
+        "Package: infiltrator-calendar\n"
+        "Status: install ok installed\n"
+        "Architecture: amd64\n"
+        "Version: 1.0.45+nativepgo1\n"
+        "Installed-Size: 1024\n";
 
     std::string error;
     const auto packages =
         DebianInstalledState::parse(fixture, error);
 
     assert(error.empty());
-    assert(packages.size() == 3U);
+    assert(packages.size() == 4U);
 
     assert(packages[0].id == "alpha");
     assert(packages[0].architecture == "amd64");
@@ -55,9 +61,14 @@ int main()
     assert(packages[1].id == "held-package");
     assert(packages[1].installed_size_bytes == 0U);
 
-    assert(packages[2].id == "libmulti:i386");
-    assert(packages[2].architecture == "i386");
-    assert(packages[2].installed_size_bytes == 4U * 1024U);
+    assert(packages[2].id == "infiltrator-calendar");
+    assert(packages[2].architecture == "amd64");
+    assert(packages[2].installed_version == "1.0.45+nativepgo1");
+    assert(packages[2].state == InstallState::installed);
+
+    assert(packages[3].id == "libmulti:i386");
+    assert(packages[3].architecture == "i386");
+    assert(packages[3].installed_size_bytes == 4U * 1024U);
 
     const auto whitespace_separator = DebianInstalledState::parse(
         "Package: one\nStatus: install ok installed\nVersion: 1\n   \n"

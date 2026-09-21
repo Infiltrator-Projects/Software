@@ -124,7 +124,9 @@ pkg_check_modules(ZLIB REQUIRED IMPORTED_TARGET zlib)
 pkg_check_modules(LZMA REQUIRED IMPORTED_TARGET liblzma)
 pkg_check_modules(SQLITE3 REQUIRED IMPORTED_TARGET sqlite3)
 
-add_library(software-core STATIC src/core/model.cpp)
+add_library(software-core STATIC
+    src/core/model.cpp
+    src/core/update_freshness.cpp)
 target_include_directories(software-core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
 
 add_library(software-engine STATIC
@@ -241,6 +243,12 @@ if(BUILD_TESTING)
     add_executable(software-model-test tests/model_test.cpp)
     target_link_libraries(software-model-test PRIVATE software-core)
     add_test(NAME software-model-test COMMAND software-model-test)
+
+    add_executable(software-update-freshness-test
+        tests/update_freshness_test.cpp)
+    target_link_libraries(software-update-freshness-test PRIVATE software-core)
+    add_test(NAME software-update-freshness-test
+        COMMAND software-update-freshness-test)
 
     add_executable(software-debian-installed-test
         tests/debian_installed_state_test.cpp)

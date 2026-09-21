@@ -119,3 +119,19 @@ The catalogue UI is now virtualized. Discover no longer creates a complete GTK w
 Installed inventory replacement is one GtkStringList splice rather than thousands of remove/append model notifications. Repository source discovery runs on a worker task. Read-only shared-engine inventory calls have a short fail-fast timeout because their compatibility fallbacks are local and safe; transaction planning and engine control retain longer timeouts.
 
 These changes make UI latency proportional to the visible interface rather than the full package catalogue and prevent optional backend availability from dominating navigation time.
+
+
+## Update-page freshness
+
+The Updates page may paint cached state immediately, but cached state is never
+treated as indefinitely current. A successful repository metadata refresh has
+a one-minute freshness budget while the Updates page is in active use.
+
+Re-entering Updates after that budget starts a background unprivileged metadata
+refresh. If the user leaves Updates open, a lightweight one-minute timer checks
+the same freshness rule and refreshes only when due. The timer never performs
+package mutation and never blocks the GTK thread.
+
+This closes the former session-lifetime gap where one successful automatic
+refresh could leave an open Software process unaware of releases published
+later in the same session.

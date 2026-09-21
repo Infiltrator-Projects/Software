@@ -54,7 +54,9 @@ int main()
         installed("held", "1.0"),
         installed("multi:i386", "2.0", "i386"),
         installed("low-priority", "1.0"),
-        installed("same", "2.0")
+        installed("same", "2.0"),
+        installed("infiltrator-calendar", "1.0.45+nativepgo1"),
+        installed("native-current", "1.0.46+nativepgo1")
     };
 
     std::vector<DebianPackageVersion> repository{
@@ -68,7 +70,9 @@ int main()
         available("multi", "2.3", "foreign", "arm64"),
         available("low-priority", "2.0", "low"),
         available("same", "2.0", "stable", "all"),
-        available("same", "2.0", "testing", "amd64")
+        available("same", "2.0", "testing", "amd64"),
+        available("infiltrator-calendar", "1.0.46", "stable"),
+        available("native-current", "1.0.46", "stable")
     };
 
     DebianCandidatePolicy policy;
@@ -135,6 +139,17 @@ int main()
     assert(same.candidate->source == "stable");
     assert(!same.upgrade_available);
     assert(!same.downgrade_selected);
+
+    const auto &native_upgrade = find("infiltrator-calendar");
+    assert(native_upgrade.candidate.has_value());
+    assert(native_upgrade.candidate->version == "1.0.46");
+    assert(native_upgrade.upgrade_available);
+    assert(!native_upgrade.downgrade_selected);
+
+    const auto &native_current = find("native-current");
+    assert(!native_current.candidate.has_value());
+    assert(!native_current.upgrade_available);
+    assert(!native_current.downgrade_selected);
 
     return 0;
 }

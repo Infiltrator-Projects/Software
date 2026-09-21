@@ -87,3 +87,21 @@ The privileged executor does not accept database rows as implicit authority; it 
 ## Implemented generation store
 
 The native engine now has a PackageStateStore that publishes installed and repository package state as immutable SQLite generations. Publication uses a single immediate transaction: generation rows, installed records, repository records and the current-generation pointer commit together or not at all. The current and immediately previous generations are retained so readers never need to observe a partially written refresh and a failed publish leaves the previous generation intact.
+
+
+## Externally installed first-party native builds
+
+First-party native `.run` installers that produce and install a Debian package
+remain ordinary installed-package state. Calendar is the reference case: its
+local hardware-native builder emits an `infiltrator-calendar` package with a
+version such as `1.0.45+nativepgo1` and installs that package through the
+Debian package database.
+
+Software must therefore discover such builds from authoritative dpkg state;
+they do not require a separate private installation receipt. Debian candidate
+comparison remains authoritative: a later release such as `1.0.46` is newer
+than `1.0.45+nativepgo1`, while a same-release generic `1.0.46` is not
+allowed to silently downgrade `1.0.46+nativepgo1`.
+
+Regression fixtures cover both installed-state parsing and those version-order
+semantics.

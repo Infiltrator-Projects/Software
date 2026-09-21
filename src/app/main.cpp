@@ -6,6 +6,7 @@
 #include "catalogue/system_catalogue.hpp"
 #include "client/engine_client.hpp"
 #include "core/model.hpp"
+#include "core/update_freshness.hpp"
 #include "sources/source_inventory.hpp"
 
 #include <gtk/gtk.h>
@@ -42,6 +43,7 @@ using infiltrator::software::SourceRecord;
 using infiltrator::software::SystemCatalogue;
 using infiltrator::software::ThemeController;
 using infiltrator::software::source_kind_name;
+using infiltrator::software::update_metadata_refresh_due;
 
 struct WindowState {
     GtkWindow *window{};
@@ -87,6 +89,8 @@ struct WindowState {
     bool updates_busy{false};
     bool updates_from_engine{false};
     bool updates_auto_refresh_pending{true};
+    gint64 updates_last_metadata_refresh_us{0};
+    guint updates_refresh_timer_id{0U};
 
     bool window_presented{false};
     bool discover_loaded{false};
@@ -1958,6 +1962,11 @@ void updates_complete(
     const std::string error = result->error;
     delete result;
 
+    if (refreshed_metadata && error.empty()) {
+        state->updates_last_metadata_refresh_us =
+            g_get_monotonic_time();
+    }
+
     /*
      * Cached compatibility metadata is useful for the first paint but it must
      * not become an indefinite source of truth.  After showing the cached
@@ -3292,6 +3301,29 @@ GtkWidget *make_nav_row(
     return row;
 }
 
+gboolean periodic_updates_refresh(gpointer user_data)
+{
+    auto *state = static_cast<WindowState *>(user_data);
+    if (state == nullptr || state->stack == nullptr ||
+        !state->updates_loaded || state->updates_busy) {
+        return G_SOURCE_CONTINUE;
+    }
+
+    const char *visible =
+        gtk_stack_get_visible_child_name(state->stack);
+    if (visible == nullptr || std::strcmp(visible, "updates") != 0) {
+        return G_SOURCE_CONTINUE;
+    }
+
+    if (update_metadata_refresh_due(
+            g_get_monotonic_time(),
+            state->updates_last_metadata_refresh_us,
+            state->updates_busy)) {
+        refresh_updates(state, true);
+    }
+    return G_SOURCE_CONTINUE;
+}
+
 void refresh_page_if_needed(WindowState *state, const int index)
 {
     if (state == nullptr || !state->window_presented) {
@@ -3312,6 +3344,11 @@ void refresh_page_if_needed(WindowState *state, const int index)
     case 2:
         if (!state->updates_loaded) {
             refresh_updates(state);
+        } else if (update_metadata_refresh_due(
+                       g_get_monotonic_time(),
+                       state->updates_last_metadata_refresh_us,
+                       state->updates_busy)) {
+            refresh_updates(state, true);
         }
         break;
     case 4:
@@ -3624,6 +3661,10 @@ void destroy_window_state(gpointer data)
         g_object_unref(state->discover_visible);
         state->discover_visible = nullptr;
     }
+    if (state->updates_refresh_timer_id != 0U) {
+        g_source_remove(state->updates_refresh_timer_id);
+        state->updates_refresh_timer_id = 0U;
+    }
     delete state;
 }
 
@@ -3707,6 +3748,15 @@ void activate(GtkApplication *application, gpointer)
     g_object_set_data_full(
         G_OBJECT(window), "infiltrator-window-state",
         state, destroy_window_state);
+
+    /*
+     * Keep the Updates page current while it remains open.  This timer does
+     * not block the UI and only starts an unprivileged metadata refresh when
+     * the last successful refresh is stale.
+     */
+    state->updates_refresh_timer_id =
+        g_timeout_add_seconds(
+            60U, periodic_updates_refresh, state);
 
     GtkWidget *header = make_header_bar(state);
     gtk_window_set_titlebar(GTK_WINDOW(window), header);
