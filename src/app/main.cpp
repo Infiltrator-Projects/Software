@@ -209,6 +209,15 @@ struct DiscoverTaskData {
     bool force_refresh{false};
 };
 
+struct DiscoverInstalledResult {
+    std::vector<PackageRecord> installed;
+    std::string warning;
+};
+
+struct DiscoverInstalledTaskData {
+    unsigned int generation{0U};
+};
+
 struct IconHydrationResult {
     std::vector<PackageRecord> records;
     std::string warning;
@@ -611,53 +620,12 @@ void discover_worker(
         if (store.load(
                 result->snapshot,
                 cache_error)) {
-            std::string apt_error;
-            const std::vector<PackageRecord> installed =
-                read_installed_packages(apt_error);
-
-            std::unordered_map<std::string, std::string>
-                versions;
-            versions.reserve(installed.size());
-            for (const PackageRecord &package :
-                 installed) {
-                versions.emplace(
-                    package_key(
-                        package.package_name),
-                    package.installed_version);
-            }
-
-            for (PackageRecord &record :
-                 result->snapshot.records) {
-                if (record.id.rfind(
-                        "flatpak:",
-                        0U) == 0U) {
-                    continue;
-                }
-
-                record.state =
-                    infiltrator::software::InstallState::
-                        not_installed;
-                record.installed_version.clear();
-
-                const auto found =
-                    versions.find(
-                        package_key(
-                            record.package_name));
-                if (found != versions.end()) {
-                    record.state =
-                        infiltrator::software::InstallState::
-                            installed;
-                    record.installed_version =
-                        found->second;
-                }
-            }
-
-            if (!apt_error.empty()) {
-                result->warning =
-                    "Saved catalogue loaded; installed-state detection failed: " +
-                    apt_error;
-            }
-
+            /*
+             * Startup must never wait for package-engine activation.  The
+             * saved catalogue is already sufficient to paint Discover, so
+             * publish it immediately and reconcile installed state in a
+             * separate background task after the page is visible.
+             */
             g_task_return_pointer(
                 task,
                 result,
@@ -732,21 +700,6 @@ void discover_worker(
     result->snapshot.source =
         "Infiltrator + system";
 
-    std::string apt_error;
-    const std::vector<PackageRecord> installed =
-        read_installed_packages(apt_error);
-
-    std::unordered_map<std::string, std::string>
-        versions;
-    versions.reserve(installed.size());
-    for (const PackageRecord &package :
-         installed) {
-        versions.emplace(
-            package_key(
-                package.package_name),
-            package.installed_version);
-    }
-
     std::unordered_map<std::string, PackageRecord>
         previous_records;
     previous_records.reserve(
@@ -782,23 +735,6 @@ void discover_worker(
                 old->second.cached_icon_path;
         }
 
-        if (record.id.rfind(
-                "flatpak:",
-                0U) == 0U) {
-            continue;
-        }
-
-        const auto found =
-            versions.find(
-                package_key(
-                    record.package_name));
-        if (found != versions.end()) {
-            record.state =
-                infiltrator::software::InstallState::
-                    installed;
-            record.installed_version =
-                found->second;
-        }
     }
 
     if (had_previous) {
@@ -839,15 +775,6 @@ void discover_worker(
             "System catalogue: " +
             system_warning;
     }
-    if (!apt_error.empty()) {
-        if (!result->warning.empty()) {
-            result->warning += " ";
-        }
-        result->warning +=
-            "Installed-state detection failed: " +
-            apt_error;
-    }
-
     g_task_return_pointer(
         task,
         result,
@@ -855,6 +782,120 @@ void discover_worker(
             delete static_cast<DiscoverResult *>(
                 pointer);
         });
+}
+
+void discover_installed_worker(
+    GTask *task,
+    gpointer,
+    gpointer,
+    GCancellable *)
+{
+    auto *result = new DiscoverInstalledResult{};
+    result->installed =
+        read_installed_packages(result->warning);
+
+    g_task_return_pointer(
+        task,
+        result,
+        [](gpointer value) {
+            delete static_cast<DiscoverInstalledResult *>(value);
+        });
+}
+
+void discover_installed_complete(
+    GObject *source_object,
+    GAsyncResult *async_result,
+    gpointer)
+{
+    auto *window = GTK_WINDOW(source_object);
+    auto *state = static_cast<WindowState *>(
+        g_object_get_data(
+            G_OBJECT(window), "infiltrator-window-state"));
+    auto *task_data =
+        static_cast<DiscoverInstalledTaskData *>(
+            g_task_get_task_data(G_TASK(async_result)));
+
+    GError *error = nullptr;
+    auto *result = static_cast<DiscoverInstalledResult *>(
+        g_task_propagate_pointer(
+            G_TASK(async_result), &error));
+    if (error != nullptr) {
+        g_clear_error(&error);
+        delete result;
+        return;
+    }
+    if (state == nullptr || result == nullptr ||
+        task_data == nullptr ||
+        task_data->generation != state->discover_generation) {
+        delete result;
+        return;
+    }
+
+    std::unordered_map<std::string, std::string> versions;
+    versions.reserve(result->installed.size());
+    for (const PackageRecord &package : result->installed) {
+        versions.emplace(
+            package_key(package.package_name),
+            package.installed_version);
+    }
+
+    for (PackageRecord &record : state->discover_records) {
+        if (record.id.rfind("flatpak:", 0U) == 0U) {
+            continue;
+        }
+
+        record.state =
+            infiltrator::software::InstallState::not_installed;
+        record.installed_version.clear();
+
+        const auto found =
+            versions.find(package_key(record.package_name));
+        if (found != versions.end()) {
+            record.state =
+                infiltrator::software::InstallState::installed;
+            record.installed_version = found->second;
+        }
+    }
+
+    rebuild_discover(state);
+
+    if (!result->warning.empty() &&
+        state->discover_status != nullptr) {
+        const std::string message =
+            "Applications loaded; installed-state detection is unavailable: " +
+            one_line(result->warning);
+        gtk_label_set_text(
+            GTK_LABEL(state->discover_status),
+            message.c_str());
+    }
+
+    delete result;
+}
+
+void start_discover_installed_hydration(
+    WindowState *state,
+    const unsigned int generation)
+{
+    if (state == nullptr || state->window == nullptr ||
+        state->discover_records.empty()) {
+        return;
+    }
+
+    GTask *task = g_task_new(
+        G_OBJECT(state->window),
+        nullptr,
+        discover_installed_complete,
+        nullptr);
+    auto *task_data = new DiscoverInstalledTaskData{};
+    task_data->generation = generation;
+    g_task_set_task_data(
+        task,
+        task_data,
+        [](gpointer value) {
+            delete static_cast<DiscoverInstalledTaskData *>(value);
+        });
+    g_task_run_in_thread(task, discover_installed_worker);
+    g_object_unref(task);
 }
 
 void discover_icons_worker(
@@ -909,7 +950,19 @@ void discover_icons_complete(
         return;
     }
 
-    state->discover_records = std::move(result->records);
+    std::unordered_map<std::string, std::string> icons;
+    icons.reserve(result->records.size());
+    for (const PackageRecord &record : result->records) {
+        if (!record.cached_icon_path.empty()) {
+            icons.emplace(record.id, record.cached_icon_path);
+        }
+    }
+    for (PackageRecord &record : state->discover_records) {
+        const auto found = icons.find(record.id);
+        if (found != icons.end()) {
+            record.cached_icon_path = found->second;
+        }
+    }
     rebuild_discover(state);
 
     if (!result->warning.empty() &&
@@ -1074,6 +1127,13 @@ void discover_complete(
     }
 
     rebuild_discover(state);
+
+    /*
+     * Installed-state and icon enrichment are deliberately second-phase.
+     * Neither is allowed to delay the first usable Discover paint.
+     */
+    start_discover_installed_hydration(
+        state, task_data->generation);
     start_discover_icon_hydration(
         state, task_data->generation);
     delete result;
