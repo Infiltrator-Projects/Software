@@ -137,6 +137,13 @@ target_link_libraries(software-engine PUBLIC software-core
             PkgConfig::CURL PkgConfig::GLIB PkgConfig::ZLIB PkgConfig::LZMA
             PkgConfig::SQLITE3)
 
+add_library(software-client STATIC
+    src/client/engine_client.cpp)
+target_include_directories(software-client PUBLIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_link_libraries(software-client PUBLIC
+    software-core PkgConfig::GIO)
+
 add_library(software-apt STATIC src/backends/apt/apt_backend.cpp)
 target_include_directories(software-apt PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_link_libraries(software-apt PUBLIC software-engine)
@@ -170,13 +177,14 @@ target_link_libraries(infiltrator-software-engine PRIVATE
 add_executable(infiltrator-software-tray
     src/tray/main.cpp)
 target_link_libraries(infiltrator-software-tray PRIVATE
-    software-apt PkgConfig::GTK3 PkgConfig::XAPP)
+    software-client software-apt PkgConfig::GTK3 PkgConfig::XAPP)
 
 add_executable(infiltrator-software
     src/app/main.cpp
     src/app/theme.cpp)
 target_link_libraries(infiltrator-software PRIVATE
-    software-core software-apt software-catalogue software-sources
+    software-core software-client software-apt
+    software-catalogue software-sources
     InfiltratrCommon::Common PkgConfig::GTK4)
 
 target_compile_definitions(infiltrator-software PRIVATE
@@ -211,7 +219,7 @@ install(FILES ${SOFTWARE_FONT_FILES}
 install(FILES LICENSE DESTINATION share/doc/infiltrator-software)
 
 foreach(target IN ITEMS
-        software-core software-engine software-apt software-catalogue software-sources
+        software-core software-engine software-client software-apt software-catalogue software-sources
         infiltrator-software-helper infiltrator-software-update-helper
         infiltrator-software-engine infiltrator-software-tray
         infiltrator-software)

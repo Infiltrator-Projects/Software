@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "backends/apt/apt_backend.hpp"
+#include "client/engine_client.hpp"
 
 #include <gtk/gtk.h>
 #include <libxapp/xapp-status-icon.h>
@@ -9,6 +10,7 @@
 #include <fcntl.h>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <sys/file.h>
 #include <unistd.h>
 #include <utility>
@@ -17,11 +19,13 @@
 namespace {
 
 using infiltrator::software::AptBackend;
+using infiltrator::software::EngineClient;
 using infiltrator::software::PackageRecord;
 
 struct CheckResult {
     std::vector<PackageRecord> updates;
     std::string error;
+    bool from_engine{false};
 };
 
 struct TrayState {
@@ -31,6 +35,9 @@ struct TrayState {
     std::string last_error;
     bool opening_software{false};
     guint opening_reset_id{0U};
+    GDBusConnection *engine_connection{};
+    guint state_signal_id{0U};
+    guint health_signal_id{0U};
 };
 
 int acquire_single_instance_lock()
@@ -169,8 +176,27 @@ void check_worker(
     GCancellable *)
 {
     auto *result = new CheckResult{};
-    AptBackend backend;
-    result->updates = backend.list_updates(result->error);
+
+    EngineClient engine;
+    std::string engine_error;
+    if (engine.list_updates(
+            result->updates,
+            engine_error)) {
+        result->from_engine = true;
+    } else {
+        AptBackend fallback;
+        result->updates =
+            fallback.list_updates(result->error);
+        if (!result->error.empty() &&
+            !engine_error.empty()) {
+            result->error =
+                "Shared engine unavailable: " +
+                engine_error +
+                " Compatibility update scan failed: " +
+                result->error;
+        }
+    }
+
     g_task_return_pointer(
         task,
         result,
@@ -222,6 +248,92 @@ void begin_check(TrayState *state)
         g_task_new(nullptr, nullptr, check_complete, state);
     g_task_run_in_thread(task, check_worker);
     g_object_unref(task);
+}
+
+void engine_signal(
+    GDBusConnection *,
+    const gchar *,
+    const gchar *,
+    const gchar *,
+    const gchar *signal_name,
+    GVariant *parameters,
+    gpointer user_data)
+{
+    auto *state = static_cast<TrayState *>(user_data);
+    if (state == nullptr || signal_name == nullptr) {
+        return;
+    }
+
+    if (std::string_view(signal_name) == "HealthChanged") {
+        gboolean healthy = FALSE;
+        const gchar *detail = nullptr;
+        g_variant_get(
+            parameters, "(b&s)", &healthy, &detail);
+        if (!healthy) {
+            state->last_error =
+                detail == nullptr || *detail == '\0'
+                    ? "Package engine state is unavailable"
+                    : detail;
+            render(state);
+            return;
+        }
+        state->last_error.clear();
+    }
+
+    /*
+     * StateChanged is the normal update path: the tray consumes the same
+     * generation as Software instead of independently scheduling another
+     * resolver. Health recovery also re-reads the shared snapshot.
+     */
+    begin_check(state);
+}
+
+void subscribe_engine(TrayState *state)
+{
+    if (state == nullptr || state->engine_connection != nullptr) {
+        return;
+    }
+
+    GError *error = nullptr;
+    state->engine_connection =
+        g_bus_get_sync(
+            G_BUS_TYPE_SESSION,
+            nullptr,
+            &error);
+    if (state->engine_connection == nullptr) {
+        if (error != nullptr) {
+            g_debug(
+                "Unable to subscribe to package-engine state: %s",
+                error->message);
+            g_error_free(error);
+        }
+        return;
+    }
+
+    state->state_signal_id =
+        g_dbus_connection_signal_subscribe(
+            state->engine_connection,
+            "net.ssmith.infiltrator.software.Engine",
+            "net.ssmith.infiltrator.software.Engine",
+            "StateChanged",
+            "/net/ssmith/infiltrator/software/Engine",
+            nullptr,
+            G_DBUS_SIGNAL_FLAGS_NONE,
+            engine_signal,
+            state,
+            nullptr);
+    state->health_signal_id =
+        g_dbus_connection_signal_subscribe(
+            state->engine_connection,
+            "net.ssmith.infiltrator.software.Engine",
+            "net.ssmith.infiltrator.software.Engine",
+            "HealthChanged",
+            "/net/ssmith/infiltrator/software/Engine",
+            nullptr,
+            G_DBUS_SIGNAL_FLAGS_NONE,
+            engine_signal,
+            state,
+            nullptr);
 }
 
 gboolean scheduled_check(gpointer user_data)
@@ -346,6 +458,7 @@ int main(int argc, char **argv)
         quit, "activate",
         G_CALLBACK(quit_menu_item), &state);
 
+    subscribe_engine(&state);
     render(&state);
     g_idle_add(
         [](gpointer data) -> gboolean {
@@ -360,6 +473,19 @@ int main(int argc, char **argv)
 
     if (state.opening_reset_id != 0U) {
         g_source_remove(state.opening_reset_id);
+    }
+    if (state.engine_connection != nullptr) {
+        if (state.state_signal_id != 0U) {
+            g_dbus_connection_signal_unsubscribe(
+                state.engine_connection,
+                state.state_signal_id);
+        }
+        if (state.health_signal_id != 0U) {
+            g_dbus_connection_signal_unsubscribe(
+                state.engine_connection,
+                state.health_signal_id);
+        }
+        g_object_unref(state.engine_connection);
     }
     g_object_unref(state.icon);
     close(lock_fd);

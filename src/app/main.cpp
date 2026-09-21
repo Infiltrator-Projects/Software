@@ -4,6 +4,7 @@
 #include "catalogue/repository_catalogue.hpp"
 #include "catalogue/catalogue_snapshot_store.hpp"
 #include "catalogue/system_catalogue.hpp"
+#include "client/engine_client.hpp"
 #include "core/model.hpp"
 #include "sources/source_inventory.hpp"
 
@@ -33,6 +34,7 @@ namespace {
 using infiltrator::software::AptBackend;
 using infiltrator::software::CatalogueSnapshot;
 using infiltrator::software::CatalogueSnapshotStore;
+using infiltrator::software::EngineClient;
 using infiltrator::software::PackageRecord;
 using infiltrator::software::RepositoryCatalogue;
 using infiltrator::software::SourceInventory;
@@ -49,7 +51,10 @@ struct WindowState {
     GtkStringList *installed_strings{};
     GtkWidget *installed_status{};
     GtkWidget *installed_count{};
+    GtkWidget *installed_backend{};
     GtkWidget *backend_state{};
+    unsigned int installed_generation{0U};
+    bool installed_busy{false};
 
     GtkWidget *discover_flow{};
     GtkWidget *discover_search{};
@@ -73,9 +78,11 @@ struct WindowState {
     GtkWidget *updates_critical{};
     GtkWidget *updates_install{};
     GtkWidget *updates_refresh{};
+    GtkWidget *updates_backend{};
     std::vector<PackageRecord> update_records;
     unsigned int updates_generation{0U};
     bool updates_busy{false};
+    bool updates_from_engine{false};
 
     bool window_presented{false};
     bool discover_loaded{false};
@@ -541,6 +548,48 @@ std::string package_key(std::string value)
     return value;
 }
 
+/*
+ * Read installed state from the shared package engine first. The compatibility
+ * fallback is deliberately limited to AptBackend::list_installed(), which is
+ * already an in-process /var/lib/dpkg/status parser and therefore does not
+ * spawn an APT process.
+ */
+std::vector<PackageRecord> read_installed_packages(
+    std::string &error,
+    bool *from_engine = nullptr)
+{
+    if (from_engine != nullptr) {
+        *from_engine = false;
+    }
+
+    EngineClient engine;
+    std::vector<PackageRecord> packages;
+    std::string engine_error;
+    if (engine.list_installed(packages, engine_error)) {
+        if (from_engine != nullptr) {
+            *from_engine = true;
+        }
+        error.clear();
+        return packages;
+    }
+
+    AptBackend fallback;
+    std::string fallback_error;
+    packages = fallback.list_installed(fallback_error);
+    if (fallback_error.empty()) {
+        error.clear();
+        return packages;
+    }
+
+    error = fallback_error;
+    if (!engine_error.empty()) {
+        error =
+            "Shared engine unavailable: " + engine_error +
+            " Direct Debian-state fallback failed: " + fallback_error;
+    }
+    return {};
+}
+
 void discover_worker(
     GTask *task,
     gpointer,
@@ -562,10 +611,9 @@ void discover_worker(
         if (store.load(
                 result->snapshot,
                 cache_error)) {
-            AptBackend apt;
             std::string apt_error;
             const std::vector<PackageRecord> installed =
-                apt.list_installed(apt_error);
+                read_installed_packages(apt_error);
 
             std::unordered_map<std::string, std::string>
                 versions;
@@ -684,10 +732,9 @@ void discover_worker(
     result->snapshot.source =
         "Infiltrator + system";
 
-    AptBackend apt;
     std::string apt_error;
     const std::vector<PackageRecord> installed =
-        apt.list_installed(apt_error);
+        read_installed_packages(apt_error);
 
     std::unordered_map<std::string, std::string>
         versions;
@@ -1201,49 +1248,156 @@ void list_item_bind(GtkSignalListItemFactory *, GtkListItem *item, gpointer)
     gtk_label_set_text(GTK_LABEL(label), text);
 }
 
-void refresh_installed(WindowState *state)
+struct InstalledResult {
+    unsigned int generation{0U};
+    std::vector<PackageRecord> records;
+    std::string error;
+    bool from_engine{false};
+};
+
+struct InstalledTaskData {
+    unsigned int generation{0U};
+};
+
+void installed_worker(
+    GTask *task,
+    gpointer,
+    gpointer task_data,
+    GCancellable *)
 {
-    if (state == nullptr || state->installed_strings == nullptr) {
+    auto *data = static_cast<InstalledTaskData *>(task_data);
+    auto *result = new InstalledResult{};
+    result->generation = data == nullptr ? 0U : data->generation;
+    result->records =
+        read_installed_packages(
+            result->error,
+            &result->from_engine);
+
+    g_task_return_pointer(
+        task,
+        result,
+        [](gpointer pointer) {
+            delete static_cast<InstalledResult *>(pointer);
+        });
+}
+
+void installed_complete(
+    GObject *source_object,
+    GAsyncResult *async_result,
+    gpointer)
+{
+    auto *window = GTK_WINDOW(source_object);
+    auto *state = static_cast<WindowState *>(
+        g_object_get_data(
+            G_OBJECT(window),
+            "infiltrator-window-state"));
+    auto *result = static_cast<InstalledResult *>(
+        g_task_propagate_pointer(
+            G_TASK(async_result), nullptr));
+
+    if (state == nullptr || result == nullptr) {
+        delete result;
+        return;
+    }
+    if (result->generation != state->installed_generation) {
+        delete result;
         return;
     }
 
-    state->installed_loaded = true;
-    while (g_list_model_get_n_items(G_LIST_MODEL(state->installed_strings)) > 0U) {
-        gtk_string_list_remove(state->installed_strings, 0U);
+    state->installed_busy = false;
+
+    while (g_list_model_get_n_items(
+               G_LIST_MODEL(state->installed_strings)) > 0U) {
+        gtk_string_list_remove(
+            state->installed_strings, 0U);
     }
-
-    AptBackend backend;
-    std::string error;
-    const std::vector<PackageRecord> packages = backend.list_installed(error);
-
-    for (const PackageRecord &package : packages) {
+    for (const PackageRecord &package : result->records) {
         const std::string row =
             package.name + "    " + package.installed_version;
-        gtk_string_list_append(state->installed_strings, row.c_str());
+        gtk_string_list_append(
+            state->installed_strings, row.c_str());
     }
 
     if (state->installed_status != nullptr) {
         std::ostringstream message;
-        if (!error.empty()) {
-            message << "Installed inventory unavailable: " << error;
+        if (!result->error.empty()) {
+            message
+                << "Installed inventory unavailable: "
+                << result->error;
         } else {
-            message << packages.size()
-                    << " installed packages read directly from Debian package state.";
+            message
+                << result->records.size()
+                << " installed packages read "
+                << (result->from_engine
+                        ? "from the shared native package engine."
+                        : "directly from Debian package state while the shared engine state is unavailable.");
         }
         gtk_label_set_text(
-            GTK_LABEL(state->installed_status), message.str().c_str());
+            GTK_LABEL(state->installed_status),
+            message.str().c_str());
     }
-
     if (state->installed_count != nullptr) {
-        const std::string count = std::to_string(packages.size());
-        gtk_label_set_text(GTK_LABEL(state->installed_count), count.c_str());
+        const std::string count =
+            std::to_string(result->records.size());
+        gtk_label_set_text(
+            GTK_LABEL(state->installed_count), count.c_str());
     }
-
+    if (state->installed_backend != nullptr) {
+        gtk_label_set_text(
+            GTK_LABEL(state->installed_backend),
+            result->from_engine
+                ? "Native engine"
+                : "Debian state");
+    }
     if (state->backend_state != nullptr) {
         gtk_label_set_text(
             GTK_LABEL(state->backend_state),
-            error.empty() ? "Ready" : "Unavailable");
+            result->error.empty()
+                ? "Ready"
+                : "Unavailable");
     }
+
+    delete result;
+}
+
+void refresh_installed(WindowState *state)
+{
+    if (state == nullptr ||
+        state->installed_strings == nullptr ||
+        state->window == nullptr ||
+        state->installed_busy) {
+        return;
+    }
+
+    state->installed_loaded = true;
+    state->installed_busy = true;
+    ++state->installed_generation;
+
+    if (state->installed_status != nullptr) {
+        gtk_label_set_text(
+            GTK_LABEL(state->installed_status),
+            "Loading installed packages from shared state…");
+    }
+    if (state->backend_state != nullptr) {
+        gtk_label_set_text(
+            GTK_LABEL(state->backend_state), "Loading");
+    }
+
+    auto *data = new InstalledTaskData{
+        state->installed_generation};
+    GTask *task = g_task_new(
+        G_OBJECT(state->window),
+        nullptr,
+        installed_complete,
+        nullptr);
+    g_task_set_task_data(
+        task,
+        data,
+        [](gpointer pointer) {
+            delete static_cast<InstalledTaskData *>(pointer);
+        });
+    g_task_run_in_thread(task, installed_worker);
+    g_object_unref(task);
 }
 
 GtkWidget *make_installed_page(WindowState *state)
@@ -1268,7 +1422,9 @@ GtkWidget *make_installed_page(WindowState *state)
         0, 0, 1, 1);
     gtk_grid_attach(
         GTK_GRID(stats),
-        make_stat_card("BACKEND", "APT/.deb", "stat-operation"),
+        make_stat_card(
+            "BACKEND", "Loading", "stat-operation",
+            &state->installed_backend),
         1, 0, 1, 1);
     gtk_grid_attach(
         GTK_GRID(stats),
@@ -1318,6 +1474,7 @@ GtkWidget *make_installed_page(WindowState *state)
 struct UpdatesResult {
     unsigned int generation{0U};
     bool refreshed_metadata{false};
+    bool from_engine{false};
     std::vector<PackageRecord> records;
     std::string error;
 };
@@ -1330,10 +1487,12 @@ struct UpdatesTaskData {
 struct UpdatePlanResult {
     std::optional<infiltrator::software::TransactionPlan> plan;
     std::string error;
+    bool from_engine{false};
 };
 
 struct UpdatePlanTaskData {
     std::vector<std::string> package_ids;
+    bool use_engine{false};
 };
 
 struct UpdateProcessRun {
@@ -1514,10 +1673,37 @@ void updates_worker(
     auto *result = new UpdatesResult{};
     result->generation = data == nullptr ? 0U : data->generation;
 
-    AptBackend backend;
-    if (data != nullptr && data->refresh_metadata) {
+    /*
+     * Normal inventory is engine-first so Software and the panel indicator
+     * consume the same generation. Explicit metadata refresh still uses the
+     * compatibility refresher until native reconciliation owns source refresh
+     * end to end.
+     */
+    if (data == nullptr || !data->refresh_metadata) {
+        EngineClient engine;
+        std::string engine_error;
+        if (engine.list_updates(
+                result->records,
+                engine_error)) {
+            result->from_engine = true;
+            result->error.clear();
+        } else {
+            AptBackend fallback;
+            result->records =
+                fallback.list_updates(result->error);
+            if (!result->error.empty() &&
+                !engine_error.empty()) {
+                result->error =
+                    "Shared engine unavailable: " +
+                    engine_error +
+                    " Compatibility update scan failed: " +
+                    result->error;
+            }
+        }
+    } else {
+        AptBackend fallback;
         result->refreshed_metadata = true;
-        if (!backend.refresh_metadata(result->error)) {
+        if (!fallback.refresh_metadata(result->error)) {
             g_task_return_pointer(
                 task,
                 result,
@@ -1526,8 +1712,9 @@ void updates_worker(
                 });
             return;
         }
+        result->records =
+            fallback.list_updates(result->error);
     }
-    result->records = backend.list_updates(result->error);
 
     g_task_return_pointer(
         task,
@@ -1558,9 +1745,19 @@ void updates_complete(
 
     state->updates_busy = false;
     state->update_records = std::move(result->records);
+    state->updates_from_engine = result->from_engine;
     const bool refreshed_metadata = result->refreshed_metadata;
+    const bool from_engine = result->from_engine;
     const std::string error = result->error;
     delete result;
+
+    if (state->updates_backend != nullptr) {
+        gtk_label_set_text(
+            GTK_LABEL(state->updates_backend),
+            from_engine
+                ? "Native engine"
+                : "APT compatibility");
+    }
 
     rebuild_updates(state);
 
@@ -1917,8 +2114,17 @@ void update_plan_worker(
             infiltrator::software::TransactionAction::upgrade;
         request.package_ids = data->package_ids;
 
-        AptBackend backend;
-        result->plan = backend.plan(request, result->error);
+        if (data->use_engine) {
+            EngineClient engine;
+            result->plan =
+                engine.plan(request, result->error);
+            result->from_engine =
+                result->plan.has_value();
+        } else {
+            AptBackend fallback;
+            result->plan =
+                fallback.plan(request, result->error);
+        }
     }
 
     g_task_return_pointer(
@@ -1968,6 +2174,7 @@ void update_plan_complete(
 
     const infiltrator::software::TransactionPlan plan =
         *result->plan;
+    const bool from_engine = result->from_engine;
     delete result;
 
     std::ostringstream secondary;
@@ -1979,9 +2186,16 @@ void update_plan_complete(
         secondary
             << "\n\nThis transaction includes system-critical components.";
     }
-    secondary
-        << "\n\nAPT is constrained to upgrade-only operation and package "
-           "removal is prohibited.";
+    if (from_engine) {
+        secondary
+            << "\n\nResolved by the shared native package engine against "
+               "state generation "
+            << plan.state_generation << ".";
+    } else {
+        secondary
+            << "\n\nAPT compatibility planning is constrained to "
+               "upgrade-only operation and package removal is prohibited.";
+    }
 
     GtkWidget *dialog = gtk_message_dialog_new(
         state->window,
@@ -2031,6 +2245,7 @@ void update_install_clicked(GtkButton *, gpointer user_data)
     set_update_runtime_state("checking");
 
     auto *data = new UpdatePlanTaskData{};
+    data->use_engine = state->updates_from_engine;
     data->package_ids.reserve(state->update_records.size());
     for (const PackageRecord &package : state->update_records) {
         data->package_ids.push_back(package.package_name);
@@ -2078,7 +2293,8 @@ GtkWidget *make_updates_page(WindowState *state)
     gtk_grid_attach(
         GTK_GRID(stats),
         make_stat_card(
-            "BACKEND", "APT/.deb", "stat-info"),
+            "BACKEND", "Loading", "stat-info",
+            &state->updates_backend),
         2, 0, 1, 1);
     gtk_box_append(GTK_BOX(page), stats);
 
