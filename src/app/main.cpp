@@ -56,7 +56,7 @@ struct WindowState {
     unsigned int installed_generation{0U};
     bool installed_busy{false};
 
-    GtkWidget *discover_flow{};
+    GtkStringList *discover_visible{};
     GtkWidget *discover_search{};
     GtkWidget *discover_category{};
     GtkStringList *discover_categories{};
@@ -66,6 +66,7 @@ struct WindowState {
     GtkWidget *discover_source{};
     GtkWidget *discover_state{};
     std::vector<PackageRecord> discover_records;
+    std::vector<std::string> discover_search_texts;
     unsigned int discover_generation{0U};
 
     GtkWidget *repository_flow{};
@@ -486,16 +487,8 @@ std::string selected_category(WindowState *state)
 
 void rebuild_discover(WindowState *state)
 {
-    if (state == nullptr || state->discover_flow == nullptr) {
+    if (state == nullptr || state->discover_visible == nullptr) {
         return;
-    }
-
-    GtkWidget *child =
-        gtk_widget_get_first_child(state->discover_flow);
-    while (child != nullptr) {
-        GtkWidget *next = gtk_widget_get_next_sibling(child);
-        gtk_flow_box_remove(GTK_FLOW_BOX(state->discover_flow), child);
-        child = next;
     }
 
     const char *search_text =
@@ -507,34 +500,135 @@ void rebuild_discover(WindowState *state)
         folded(search_text == nullptr ? "" : search_text);
     const std::string category = selected_category(state);
 
-    std::size_t visible = 0U;
-    for (const PackageRecord &record : state->discover_records) {
+    std::vector<std::string> indices;
+    indices.reserve(state->discover_records.size());
+
+    const bool cached_search_text =
+        state->discover_search_texts.size() ==
+        state->discover_records.size();
+
+    for (std::size_t index = 0U;
+         index < state->discover_records.size();
+         ++index) {
+        const PackageRecord &record =
+            state->discover_records[index];
+
         if (category != "All" && record.category != category) {
             continue;
         }
 
         if (!query.empty()) {
-            const std::string haystack = folded(
-                record.name + "\n" + record.description + "\n" +
-                record.category + "\n" + record.package_name + "\n" +
-                record.source);
+            const std::string haystack =
+                cached_search_text
+                    ? state->discover_search_texts[index]
+                    : folded(
+                          record.name + "\n" + record.description + "\n" +
+                          record.category + "\n" + record.package_name + "\n" +
+                          record.source);
             if (haystack.find(query) == std::string::npos) {
                 continue;
             }
         }
 
-        gtk_flow_box_append(
-            GTK_FLOW_BOX(state->discover_flow),
-            make_discover_card(state, record));
-        ++visible;
+        indices.emplace_back(std::to_string(index));
     }
+
+    std::vector<const char *> additions;
+    additions.reserve(indices.size() + 1U);
+    for (const std::string &index : indices) {
+        additions.push_back(index.c_str());
+    }
+    additions.push_back(nullptr);
+
+    gtk_string_list_splice(
+        state->discover_visible,
+        0U,
+        g_list_model_get_n_items(
+            G_LIST_MODEL(state->discover_visible)),
+        additions.data());
 
     if (state->discover_status != nullptr) {
         std::ostringstream status;
-        status << visible << " of " << state->discover_records.size()
+        status << indices.size() << " of "
+               << state->discover_records.size()
                << " applications shown.";
         gtk_label_set_text(
             GTK_LABEL(state->discover_status), status.str().c_str());
+    }
+}
+
+void discover_grid_setup(
+    GtkSignalListItemFactory *,
+    GtkListItem *item,
+    gpointer)
+{
+    GtkWidget *holder =
+        gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    gtk_widget_set_hexpand(holder, true);
+    gtk_widget_set_margin_top(holder, 6);
+    gtk_widget_set_margin_bottom(holder, 6);
+    gtk_widget_set_margin_start(holder, 6);
+    gtk_widget_set_margin_end(holder, 6);
+    gtk_list_item_set_child(item, holder);
+}
+
+void discover_grid_bind(
+    GtkSignalListItemFactory *,
+    GtkListItem *item,
+    gpointer user_data)
+{
+    auto *state = static_cast<WindowState *>(user_data);
+    GtkWidget *holder = gtk_list_item_get_child(item);
+    GObject *object = G_OBJECT(gtk_list_item_get_item(item));
+    if (state == nullptr || holder == nullptr ||
+        object == nullptr || !GTK_IS_STRING_OBJECT(object)) {
+        return;
+    }
+
+    GtkWidget *child = gtk_widget_get_first_child(holder);
+    while (child != nullptr) {
+        GtkWidget *next = gtk_widget_get_next_sibling(child);
+        gtk_box_remove(GTK_BOX(holder), child);
+        child = next;
+    }
+
+    const char *text =
+        gtk_string_object_get_string(GTK_STRING_OBJECT(object));
+    if (text == nullptr || *text == '\0') {
+        return;
+    }
+
+    gchar *end = nullptr;
+    const guint64 index =
+        g_ascii_strtoull(text, &end, 10);
+    if (end == text || end == nullptr || *end != '\0' ||
+        index >= state->discover_records.size()) {
+        return;
+    }
+
+    gtk_box_append(
+        GTK_BOX(holder),
+        make_discover_card(
+            state,
+            state->discover_records[
+                static_cast<std::size_t>(index)]));
+}
+
+void discover_grid_unbind(
+    GtkSignalListItemFactory *,
+    GtkListItem *item,
+    gpointer)
+{
+    GtkWidget *holder = gtk_list_item_get_child(item);
+    if (holder == nullptr) {
+        return;
+    }
+
+    GtkWidget *child = gtk_widget_get_first_child(holder);
+    while (child != nullptr) {
+        GtkWidget *next = gtk_widget_get_next_sibling(child);
+        gtk_box_remove(GTK_BOX(holder), child);
+        child = next;
     }
 }
 
@@ -1067,6 +1161,16 @@ void discover_complete(
     }
 
     state->discover_records = std::move(result->snapshot.records);
+    state->discover_search_texts.clear();
+    state->discover_search_texts.reserve(
+        state->discover_records.size());
+    for (const PackageRecord &record : state->discover_records) {
+        state->discover_search_texts.emplace_back(
+            folded(
+                record.name + "\n" + record.description + "\n" +
+                record.category + "\n" + record.package_name + "\n" +
+                record.source));
+    }
 
     std::set<std::string> categories;
     for (const PackageRecord &record : state->discover_records) {
@@ -1246,19 +1350,33 @@ GtkWidget *make_discover_page(WindowState *state)
         "discover-status");
     gtk_box_append(GTK_BOX(page), state->discover_status);
 
-    state->discover_flow = gtk_flow_box_new();
-    gtk_flow_box_set_selection_mode(
-        GTK_FLOW_BOX(state->discover_flow), GTK_SELECTION_NONE);
-    gtk_flow_box_set_row_spacing(
-        GTK_FLOW_BOX(state->discover_flow), 12U);
-    gtk_flow_box_set_column_spacing(
-        GTK_FLOW_BOX(state->discover_flow), 12U);
-    gtk_flow_box_set_min_children_per_line(
-        GTK_FLOW_BOX(state->discover_flow), 1U);
-    gtk_flow_box_set_max_children_per_line(
-        GTK_FLOW_BOX(state->discover_flow), 3U);
-    gtk_widget_set_valign(
-        state->discover_flow, GTK_ALIGN_START);
+    state->discover_visible = gtk_string_list_new(nullptr);
+
+    GtkListItemFactory *factory =
+        gtk_signal_list_item_factory_new();
+    g_signal_connect(
+        factory, "setup",
+        G_CALLBACK(discover_grid_setup), state);
+    g_signal_connect(
+        factory, "bind",
+        G_CALLBACK(discover_grid_bind), state);
+    g_signal_connect(
+        factory, "unbind",
+        G_CALLBACK(discover_grid_unbind), state);
+
+    GtkSelectionModel *selection =
+        GTK_SELECTION_MODEL(
+            gtk_no_selection_new(
+                G_LIST_MODEL(state->discover_visible)));
+    GtkWidget *grid =
+        gtk_grid_view_new(selection, factory);
+    gtk_grid_view_set_min_columns(
+        GTK_GRID_VIEW(grid), 1U);
+    gtk_grid_view_set_max_columns(
+        GTK_GRID_VIEW(grid), 3U);
+    gtk_widget_set_vexpand(grid, true);
+    gtk_widget_set_valign(grid, GTK_ALIGN_START);
+    gtk_widget_add_css_class(grid, "discover-grid");
 
     GtkWidget *scroll = gtk_scrolled_window_new();
     gtk_widget_set_vexpand(scroll, true);
@@ -1268,7 +1386,7 @@ GtkWidget *make_discover_page(WindowState *state)
         GTK_POLICY_AUTOMATIC);
     gtk_scrolled_window_set_child(
         GTK_SCROLLED_WINDOW(scroll),
-        state->discover_flow);
+        grid);
     gtk_box_append(GTK_BOX(page), scroll);
 
     return page;
@@ -1367,17 +1485,26 @@ void installed_complete(
 
     state->installed_busy = false;
 
-    while (g_list_model_get_n_items(
-               G_LIST_MODEL(state->installed_strings)) > 0U) {
-        gtk_string_list_remove(
-            state->installed_strings, 0U);
-    }
+    std::vector<std::string> installed_rows;
+    installed_rows.reserve(result->records.size());
     for (const PackageRecord &package : result->records) {
-        const std::string row =
-            package.name + "    " + package.installed_version;
-        gtk_string_list_append(
-            state->installed_strings, row.c_str());
+        installed_rows.emplace_back(
+            package.name + "    " + package.installed_version);
     }
+
+    std::vector<const char *> installed_additions;
+    installed_additions.reserve(installed_rows.size() + 1U);
+    for (const std::string &row : installed_rows) {
+        installed_additions.push_back(row.c_str());
+    }
+    installed_additions.push_back(nullptr);
+
+    gtk_string_list_splice(
+        state->installed_strings,
+        0U,
+        g_list_model_get_n_items(
+            G_LIST_MODEL(state->installed_strings)),
+        installed_additions.data());
 
     if (state->installed_status != nullptr) {
         std::ostringstream message;
@@ -3411,6 +3538,10 @@ void destroy_window_state(gpointer data)
     if (state->discover_categories != nullptr) {
         g_object_unref(state->discover_categories);
         state->discover_categories = nullptr;
+    }
+    if (state->discover_visible != nullptr) {
+        g_object_unref(state->discover_visible);
+        state->discover_visible = nullptr;
     }
     delete state;
 }
