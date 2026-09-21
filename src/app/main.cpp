@@ -1701,9 +1701,9 @@ void updates_worker(
             }
         }
     } else {
-        AptBackend fallback;
+        AptBackend backend;
         result->refreshed_metadata = true;
-        if (!fallback.refresh_metadata(result->error)) {
+        if (!backend.refresh_metadata(result->error)) {
             g_task_return_pointer(
                 task,
                 result,
@@ -1713,7 +1713,7 @@ void updates_worker(
             return;
         }
         result->records =
-            fallback.list_updates(result->error);
+            backend.list_updates(result->error);
     }
 
     g_task_return_pointer(
