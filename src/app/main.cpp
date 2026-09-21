@@ -2800,7 +2800,45 @@ void navigation_changed(
 
     auto *state = static_cast<WindowState *>(user_data);
     gtk_stack_set_visible_child_name(state->stack, page_names[index]);
-    refresh_page_if_needed(state, index);
+
+    /*
+     * Let GTK commit and paint the new page before starting its lazy refresh.
+     * The refresh itself is asynchronous, but deferring its launch until the
+     * main loop is idle guarantees that a page change cannot be visually held
+     * in an old/new mixed state by task setup or backend startup.
+     *
+     * Hold the window rather than the WindowState across the idle boundary;
+     * WindowState is window-owned and may disappear if the user closes the
+     * application before this callback runs.
+     */
+    g_idle_add_full(
+        G_PRIORITY_DEFAULT_IDLE,
+        [](gpointer data) -> gboolean {
+            auto *window = GTK_WINDOW(data);
+            auto *idle_state =
+                static_cast<WindowState *>(
+                    g_object_get_data(
+                        G_OBJECT(window),
+                        "infiltrator-window-state"));
+            if (idle_state == nullptr ||
+                idle_state->navigation_list == nullptr) {
+                return G_SOURCE_REMOVE;
+            }
+
+            GtkListBoxRow *selected =
+                gtk_list_box_get_selected_row(
+                    idle_state->navigation_list);
+            if (selected != nullptr) {
+                refresh_page_if_needed(
+                    idle_state,
+                    gtk_list_box_row_get_index(selected));
+            }
+            return G_SOURCE_REMOVE;
+        },
+        g_object_ref(state->window),
+        [](gpointer data) {
+            g_object_unref(data);
+        });
 }
 
 GtkWidget *make_navigation(WindowState *state)
@@ -3117,8 +3155,15 @@ void activate(GtkApplication *application, gpointer)
 
     GtkWidget *stack = gtk_stack_new();
     state->stack = GTK_STACK(stack);
+    /*
+     * Navigation is a state change, not a long-running visual operation.
+     * A crossfade keeps both pages mapped while the destination page starts
+     * its lazy catalogue work; if that work delays a frame, GTK can leave a
+     * half-faded source page visible for seconds.  Switch pages atomically so
+     * the user always sees exactly one page.
+     */
     gtk_stack_set_transition_type(
-        state->stack, GTK_STACK_TRANSITION_TYPE_CROSSFADE);
+        state->stack, GTK_STACK_TRANSITION_TYPE_NONE);
     gtk_widget_set_hexpand(stack, true);
     gtk_widget_set_vexpand(stack, true);
 
