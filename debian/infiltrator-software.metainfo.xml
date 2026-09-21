@@ -34,6 +34,11 @@
   <url type="homepage">https://github.com/Infiltrator-Projects/Software</url>
 
   <releases>
+    <release version="0.3.7" date="2026-09-21">
+      <description>
+        <p>Removes systemic interface stalls by virtualizing Discover cards, bulk-updating Installed, shortening failed engine reads and moving repository inventory off the GTK thread.</p>
+      </description>
+    </release>
     <release version="0.3.6" date="2026-09-21">
       <description>
         <p>Loads cached update state immediately, then refreshes repository metadata automatically in the background so newly published releases become visible without a manual refresh.</p>

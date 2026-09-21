@@ -111,3 +111,11 @@ Icon hydration merges only icon state back into the live catalogue so it cannot 
 The Updates page now follows the same cache-first principle as Discover without allowing stale metadata to masquerade as current state. Cached compatibility results are rendered first for responsiveness, then one unprivileged repository metadata refresh is scheduled in the background for the session. When that refresh completes, the visible candidate set is replaced with current repository state.
 
 This means opening Updates does not block on network/package-manager work, while a newly published release cannot remain hidden indefinitely behind an older per-user APT cache. Manual refresh remains available and suppresses the duplicate automatic pass for that session.
+
+## 0.3.7 interactive latency pass
+
+The catalogue UI is now virtualized. Discover no longer creates a complete GTK widget tree for every application whenever the catalogue loads, installed state changes, icons arrive, the category changes or the user types into Search. A GtkGridView binds only the cards required for the visible viewport, while a lightweight string model contains the filtered record indices.
+
+Installed inventory replacement is one GtkStringList splice rather than thousands of remove/append model notifications. Repository source discovery runs on a worker task. Read-only shared-engine inventory calls have a short fail-fast timeout because their compatibility fallbacks are local and safe; transaction planning and engine control retain longer timeouts.
+
+These changes make UI latency proportional to the visible interface rather than the full package catalogue and prevent optional backend availability from dominating navigation time.

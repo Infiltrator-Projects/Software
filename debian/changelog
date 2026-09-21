@@ -1,3 +1,14 @@
+infiltrator-software (0.3.7) unstable; urgency=medium
+
+  * Replace Discover's eager GtkFlowBox with a virtualized GtkGridView so only visible application cards are constructed.
+  * Cache folded Discover search text instead of rebuilding every application's search corpus on each keystroke.
+  * Bulk-update the Installed package model instead of emitting thousands of individual list changes.
+  * Fail fast when the optional shared package engine is unavailable instead of allowing read-only inventory calls to wait up to ten seconds.
+  * Move repository inventory reads completely off the GTK main thread.
+  * Remove the major UI-thread and widget-construction stalls that made navigation, Discover, Installed and Repositories feel globally slow.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Mon, 21 Sep 2026 20:40:00 +1000
+
 infiltrator-software (0.3.6) unstable; urgency=medium
 
   * Treat cached APT compatibility metadata as a fast first paint, not a permanent source of truth.
