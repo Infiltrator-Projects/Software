@@ -863,7 +863,7 @@ void discover_installed_complete(
         state->discover_status != nullptr) {
         const std::string message =
             "Applications loaded; installed-state detection is unavailable: " +
-            one_line(result->warning);
+            result->warning;
         gtk_label_set_text(
             GTK_LABEL(state->discover_status),
             message.c_str());
