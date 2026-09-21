@@ -72,6 +72,8 @@ struct WindowState {
     GtkWidget *repository_flow{};
     GtkWidget *repository_count{};
     GtkWidget *repository_status{};
+    unsigned int repositories_generation{0U};
+    bool repositories_busy{false};
 
     GtkListBox *updates_list{};
     GtkWidget *updates_status{};
@@ -3052,13 +3054,60 @@ GtkWidget *make_source_card(const SourceRecord &source)
     return card;
 }
 
-void refresh_repositories(WindowState *state)
+struct RepositoryResult {
+    unsigned int generation{0U};
+    std::vector<SourceRecord> sources;
+    std::string error;
+};
+
+struct RepositoryTaskData {
+    unsigned int generation{0U};
+};
+
+void repositories_worker(
+    GTask *task,
+    gpointer,
+    gpointer task_data,
+    GCancellable *)
 {
-    if (state == nullptr || state->repository_flow == nullptr) {
+    auto *data = static_cast<RepositoryTaskData *>(task_data);
+    auto *result = new RepositoryResult{};
+    result->generation = data == nullptr ? 0U : data->generation;
+
+    SourceInventory inventory;
+    result->sources = inventory.list(result->error);
+
+    g_task_return_pointer(
+        task,
+        result,
+        [](gpointer pointer) {
+            delete static_cast<RepositoryResult *>(pointer);
+        });
+}
+
+void repositories_complete(
+    GObject *source_object,
+    GAsyncResult *async_result,
+    gpointer)
+{
+    auto *window = GTK_WINDOW(source_object);
+    auto *state = static_cast<WindowState *>(
+        g_object_get_data(
+            G_OBJECT(window), "infiltrator-window-state"));
+    auto *result = static_cast<RepositoryResult *>(
+        g_task_propagate_pointer(
+            G_TASK(async_result), nullptr));
+
+    if (state == nullptr || result == nullptr) {
+        delete result;
+        return;
+    }
+    if (result->generation != state->repositories_generation) {
+        delete result;
         return;
     }
 
-    state->repositories_loaded = true;
+    state->repositories_busy = false;
 
     GtkWidget *child =
         gtk_widget_get_first_child(state->repository_flow);
@@ -3069,13 +3118,8 @@ void refresh_repositories(WindowState *state)
         child = next;
     }
 
-    SourceInventory inventory;
-    std::string error;
-    const std::vector<SourceRecord> sources =
-        inventory.list(error);
-
     std::size_t enabled = 0U;
-    for (const SourceRecord &source : sources) {
+    for (const SourceRecord &source : result->sources) {
         gtk_flow_box_append(
             GTK_FLOW_BOX(state->repository_flow),
             make_source_card(source));
@@ -3085,16 +3129,17 @@ void refresh_repositories(WindowState *state)
     }
 
     if (state->repository_count != nullptr) {
-        const std::string count = std::to_string(sources.size());
+        const std::string count =
+            std::to_string(result->sources.size());
         gtk_label_set_text(
             GTK_LABEL(state->repository_count), count.c_str());
     }
 
     if (state->repository_status != nullptr) {
-        if (!error.empty()) {
+        if (!result->error.empty()) {
             gtk_label_set_text(
                 GTK_LABEL(state->repository_status),
-                error.c_str());
+                result->error.c_str());
         } else {
             std::ostringstream status;
             status << enabled << " enabled source"
@@ -3105,6 +3150,42 @@ void refresh_repositories(WindowState *state)
                 status.str().c_str());
         }
     }
+
+    delete result;
+}
+
+void refresh_repositories(WindowState *state)
+{
+    if (state == nullptr || state->repository_flow == nullptr ||
+        state->window == nullptr || state->repositories_busy) {
+        return;
+    }
+
+    state->repositories_loaded = true;
+    state->repositories_busy = true;
+    ++state->repositories_generation;
+
+    if (state->repository_status != nullptr) {
+        gtk_label_set_text(
+            GTK_LABEL(state->repository_status),
+            "Reading configured software sources…");
+    }
+
+    auto *data = new RepositoryTaskData{
+        state->repositories_generation};
+    GTask *task = g_task_new(
+        G_OBJECT(state->window),
+        nullptr,
+        repositories_complete,
+        nullptr);
+    g_task_set_task_data(
+        task,
+        data,
+        [](gpointer pointer) {
+            delete static_cast<RepositoryTaskData *>(pointer);
+        });
+    g_task_run_in_thread(task, repositories_worker);
+    g_object_unref(task);
 }
 
 GtkWidget *make_repositories_page(WindowState *state)
