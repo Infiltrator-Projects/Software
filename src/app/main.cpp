@@ -83,6 +83,7 @@ struct WindowState {
     unsigned int updates_generation{0U};
     bool updates_busy{false};
     bool updates_from_engine{false};
+    bool updates_auto_refresh_pending{true};
 
     bool window_presented{false};
     bool discover_loaded{false};
@@ -1784,6 +1785,23 @@ void updates_worker(
         });
 }
 
+gboolean auto_refresh_updates_idle(gpointer user_data)
+{
+    auto *window = GTK_WINDOW(user_data);
+    if (window == nullptr) {
+        return G_SOURCE_REMOVE;
+    }
+
+    auto *state = static_cast<WindowState *>(
+        g_object_get_data(
+            G_OBJECT(window),
+            "infiltrator-window-state"));
+    if (state != nullptr && !state->updates_busy) {
+        refresh_updates(state, true);
+    }
+    return G_SOURCE_REMOVE;
+}
+
 void updates_complete(
     GObject *,
     GAsyncResult *async_result,
@@ -1811,6 +1829,28 @@ void updates_complete(
     const std::string error = result->error;
     delete result;
 
+    /*
+     * Cached compatibility metadata is useful for the first paint but it must
+     * not become an indefinite source of truth.  After showing the cached
+     * result, perform one unprivileged repository refresh per application
+     * session and then replace the view with the current candidate set.
+     *
+     * This is deliberately second-phase so opening Updates stays responsive.
+     * It also fixes the case where a newly published Software release exists
+     * in the repository but an older user APT cache incorrectly reports
+     * "Your system is up to date."
+     */
+    const bool schedule_auto_refresh =
+        !refreshed_metadata &&
+        !from_engine &&
+        error.empty() &&
+        state->updates_auto_refresh_pending;
+    if (schedule_auto_refresh) {
+        state->updates_auto_refresh_pending = false;
+    } else if (from_engine || refreshed_metadata) {
+        state->updates_auto_refresh_pending = false;
+    }
+
     if (state->updates_backend != nullptr) {
         gtk_label_set_text(
             GTK_LABEL(state->updates_backend),
@@ -1831,6 +1871,12 @@ void updates_complete(
                 one_line(error);
             gtk_label_set_text(
                 GTK_LABEL(state->updates_status), message.c_str());
+        } else if (schedule_auto_refresh) {
+            gtk_label_set_text(
+                GTK_LABEL(state->updates_status),
+                state->update_records.empty()
+                    ? "Cached package state has no updates; checking repositories for newer metadata…"
+                    : "Cached updates loaded; checking repositories for newer metadata…");
         } else if (state->update_records.empty()) {
             gtk_label_set_text(
                 GTK_LABEL(state->updates_status),
@@ -1861,6 +1907,15 @@ void updates_complete(
         set_update_runtime_state(
             "error:" + one_line(error));
     }
+
+    if (schedule_auto_refresh &&
+        state->window != nullptr) {
+        g_idle_add_full(
+            G_PRIORITY_DEFAULT_IDLE,
+            auto_refresh_updates_idle,
+            g_object_ref(state->window),
+            reinterpret_cast<GDestroyNotify>(g_object_unref));
+    }
 }
 
 void refresh_updates(WindowState *state, const bool refresh_metadata)
@@ -1868,6 +1923,10 @@ void refresh_updates(WindowState *state, const bool refresh_metadata)
     if (state == nullptr || state->updates_list == nullptr ||
         state->updates_busy) {
         return;
+    }
+
+    if (refresh_metadata) {
+        state->updates_auto_refresh_pending = false;
     }
 
     state->updates_loaded = true;
