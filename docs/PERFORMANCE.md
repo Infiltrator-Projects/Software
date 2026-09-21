@@ -105,3 +105,9 @@ A compatibility fallback remains for machines on which no native package-state g
 Cached Discover startup is now explicitly two-phase. The saved catalogue is parsed and painted first; package-engine installed-state reconciliation and remote-icon hydration begin only after the first usable catalogue is on screen. A slow or unavailable engine can therefore no longer leave Discover at 0 applications / Loading while the user waits.
 
 Icon hydration merges only icon state back into the live catalogue so it cannot overwrite a concurrent installed-state update. This preserves the fast-path rendering contract while keeping both enrichments asynchronous.
+
+## Cached update metadata
+
+The Updates page now follows the same cache-first principle as Discover without allowing stale metadata to masquerade as current state. Cached compatibility results are rendered first for responsiveness, then one unprivileged repository metadata refresh is scheduled in the background for the session. When that refresh completes, the visible candidate set is replaced with current repository state.
+
+This means opening Updates does not block on network/package-manager work, while a newly published release cannot remain hidden indefinitely behind an older per-user APT cache. Manual refresh remains available and suppresses the duplicate automatic pass for that session.

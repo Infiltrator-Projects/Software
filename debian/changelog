@@ -1,3 +1,12 @@
+infiltrator-software (0.3.6) unstable; urgency=medium
+
+  * Treat cached APT compatibility metadata as a fast first paint, not a permanent source of truth.
+  * Automatically perform one unprivileged repository refresh after cached update state is shown.
+  * Replace the cached update list with current repository candidates without blocking the Updates page.
+  * Avoid falsely reporting "Your system is up to date" indefinitely after a newer Software release has been published.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Mon, 21 Sep 2026 20:14:00 +1000
+
 infiltrator-software (0.3.5) unstable; urgency=medium
 
   * Render the saved Discover catalogue immediately instead of waiting for package-engine installed-state reconciliation.
