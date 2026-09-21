@@ -34,6 +34,16 @@
   <url type="homepage">https://github.com/Infiltrator-Projects/Software</url>
 
   <releases>
+    <release version="0.3.3" date="2026-09-21">
+      <description>
+        <p>Makes navigation atomic and paints Discover before starting its lazy catalogue refresh, preventing mixed History/Discover transition frames.</p>
+      </description>
+    </release>
+    <release version="0.3.2" date="2026-09-20">
+      <description>
+        <p>Moves package-list refresh into an isolated per-user cache and keeps administrator authorization at the actual package-mutation boundary.</p>
+      </description>
+    </release>
     <release version="0.3.1" date="2026-09-20">
       <description>
         <p>Unifies the running window, About dialog, Cinnamon taskbar and Software Manager on the canonical project-owned application icon.</p>

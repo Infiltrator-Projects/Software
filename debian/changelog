@@ -1,3 +1,11 @@
+infiltrator-software (0.3.3) unstable; urgency=medium
+
+  * Make sidebar navigation switch GtkStack pages atomically instead of crossfading old and new page contents.
+  * Defer lazy page refresh startup until the next GTK idle cycle so the destination page is painted before catalogue work begins.
+  * Prevent History and Discover widgets from appearing simultaneously during a slow Discover load.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Mon, 21 Sep 2026 18:05:00 +1000
+
 infiltrator-software (0.3.2) unstable; urgency=medium
 
   * Stop requesting administrator credentials when the user refreshes package metadata.
