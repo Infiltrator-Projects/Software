@@ -1,3 +1,17 @@
+infiltrator-software (0.3.11) unstable; urgency=high
+
+  * Re-pin Software to Common 1.19.24 at 748e089ae175329471d4cf375522c44081371bd5.
+  * Re-simulate the exact approved APT transaction after the privileged
+    repository-metadata refresh and before package mutation.
+  * Abort if refreshed metadata adds a dependency, drops an approved change,
+    changes architecture, requests removal, or otherwise differs from the
+    transaction the user reviewed.
+  * Add focused regression tests for exact transaction matching, stale plans,
+    unexpected dependencies, removals, architecture drift and duplicates.
+  * Extend CI to enforce the post-refresh validation boundary.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Tue, 22 Sep 2026 18:45:00 +1000
+
 infiltrator-software (0.3.10) unstable; urgency=high
 
   * Enable Discover installation instead of permanently presenting the
