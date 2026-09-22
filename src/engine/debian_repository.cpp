@@ -8,12 +8,12 @@
 #include <lzma.h>
 #include <zlib.h>
 #include <infiltratr/posix.h>
+#include <infiltratr/posix_io.h>
 
 #include <algorithm>
 #include <array>
 #include <charconv>
 #include <cctype>
-#include <cerrno>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -237,24 +237,7 @@ std::vector<std::string> default_keyrings()
 
 bool write_all(const int fd, const std::string_view content)
 {
-    std::size_t offset = 0U;
-    while (offset < content.size()) {
-        const ssize_t written = write(
-            fd,
-            content.data() + offset,
-            content.size() - offset);
-        if (written < 0) {
-            if (errno == EINTR) {
-                continue;
-            }
-            return false;
-        }
-        if (written == 0) {
-            return false;
-        }
-        offset += static_cast<std::size_t>(written);
-    }
-    return true;
+    return infiltratr_write_full(fd, content.data(), content.size()) == 0;
 }
 
 struct TemporaryFile {
