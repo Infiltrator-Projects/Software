@@ -96,6 +96,9 @@ bool parse_install_line(const std::string_view line, ExactPackage &package)
     package.version.assign(
         line.substr(version_open + 1U, version_end - version_open - 1U));
 
+    // APT may omit the architecture from the package token and report it in
+    // brackets. Architecture-independent packages deliberately remain
+    // architecture-less so an approved unqualified identity can match them.
     if (package.architecture.empty()) {
         const std::size_t arch_close = line.rfind(']');
         const std::size_t arch_open = line.rfind('[');
@@ -200,6 +203,9 @@ bool validate_apt_simulation(
         return false;
     }
 
+    // Authorization covers the exact simulated mutation set, not merely a
+    // subset. Mark each actual change once so missing, duplicated or newly
+    // introduced package/version changes all fail closed.
     std::vector<bool> matched(actual.size(), false);
     for (const ExactPackage &expected : approved) {
         bool found = false;
