@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+#include "apt_plan_guard.hpp"
+
 #include <cctype>
 #include <cerrno>
 #include <cstdio>
@@ -188,6 +190,68 @@ int run_apt(std::vector<std::string> arguments)
     return WEXITSTATUS(status);
 }
 
+
+int run_apt_capture(
+    std::vector<std::string> arguments,
+    std::string &output)
+{
+    output.clear();
+    const char *path = apt_get_path();
+    if (path == nullptr) {
+        std::fprintf(stderr, "apt-get is not available.\n");
+        return 127;
+    }
+    int pipe_fd[2]{};
+    if (pipe(pipe_fd) != 0) {
+        std::perror("Unable to create apt-get capture pipe");
+        return 127;
+    }
+    const pid_t child = fork();
+    if (child < 0) {
+        close(pipe_fd[0]);
+        close(pipe_fd[1]);
+        std::perror("Unable to start apt-get simulation");
+        return 127;
+    }
+    if (child == 0) {
+        close(pipe_fd[0]);
+        if (dup2(pipe_fd[1], STDOUT_FILENO) < 0) _exit(127);
+        close(pipe_fd[1]);
+        std::vector<char *> argv = apt_argv(arguments);
+        (void)setenv("DEBIAN_FRONTEND", "noninteractive", 1);
+        (void)setenv("LC_ALL", "C", 1);
+        execv(path, argv.data());
+        _exit(127);
+    }
+    close(pipe_fd[1]);
+    bool read_failed = false;
+    char buffer[4096]{};
+    for (;;) {
+        const ssize_t count = read(pipe_fd[0], buffer, sizeof(buffer));
+        if (count > 0) {
+            output.append(buffer, static_cast<std::size_t>(count));
+            continue;
+        }
+        if (count == 0) break;
+        if (errno == EINTR) continue;
+        read_failed = true;
+        break;
+    }
+    close(pipe_fd[0]);
+    int status = 0;
+    while (waitpid(child, &status, 0) < 0) {
+        if (errno == EINTR) continue;
+        std::perror("Unable to collect apt-get simulation status");
+        return 127;
+    }
+    if (read_failed) {
+        std::perror("Unable to read apt-get simulation output");
+        return 127;
+    }
+    if (!WIFEXITED(status)) return 1;
+    return WEXITSTATUS(status);
+}
+
 int execute_apt(std::vector<std::string> arguments)
 {
     const char *path = apt_get_path();
@@ -230,6 +294,9 @@ int main(int argc, char **argv)
             "install"};
         arguments.reserve(static_cast<std::size_t>(argc) + 5U);
 
+        std::vector<std::string> approved_specs;
+        approved_specs.reserve(static_cast<std::size_t>(argc - 2));
+
         for (int index = 2; index < argc; ++index) {
             const std::string spec(argv[index]);
             if (!safe_package_spec(spec) ||
@@ -256,6 +323,7 @@ int main(int argc, char **argv)
                     argv[index]);
                 return 65;
             }
+            approved_specs.push_back(spec);
             arguments.push_back(spec);
         }
 
@@ -272,6 +340,33 @@ int main(int argc, char **argv)
                 stderr,
                 "Unable to refresh system package metadata before install.\n");
             return refresh_status;
+        }
+
+        /*
+         * Repository metadata may have changed after the user approved the
+         * plan. Re-simulate the exact privileged command against the refreshed
+         * metadata and require a one-for-one match with the approved package
+         * identities and versions. Any added dependency, missing change,
+         * architecture drift or removal aborts before system mutation.
+         */
+        std::vector<std::string> simulation_arguments = arguments;
+        simulation_arguments.insert(simulation_arguments.begin(), "-s");
+
+        std::string simulation_output;
+        const int simulation_status =
+            run_apt_capture(simulation_arguments, simulation_output);
+        if (simulation_status != 0) {
+            std::fprintf(
+                stderr,
+                "Unable to validate the approved transaction against refreshed package metadata.\n");
+            return simulation_status;
+        }
+
+        std::string validation_error;
+        if (!infiltrator::software::helper::validate_apt_simulation(
+                approved_specs, simulation_output, validation_error)) {
+            std::fprintf(stderr, "%s\n", validation_error.c_str());
+            return 66;
         }
 
         return execute_apt(std::move(arguments));
