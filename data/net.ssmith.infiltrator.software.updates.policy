@@ -10,9 +10,14 @@
     <description>Manage software updates</description>
     <message>Authentication is required to install system software updates.</message>
     <defaults>
-      <allow_any>no</allow_any>
-      <allow_inactive>no</allow_inactive>
-      <allow_active>auth_admin_keep</allow_active>
+      <!--
+        Package/source mutation is permitted from local, inactive and remote
+        desktop sessions only after explicit administrator authentication.
+        Do not retain authorization: helper arguments are transaction-specific.
+      -->
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin</allow_active>
     </defaults>
     <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/infiltrator-software-update-helper</annotate>
   </action>

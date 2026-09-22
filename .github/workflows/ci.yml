@@ -56,11 +56,14 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
+          import xml.etree.ElementTree as ET
 
           app = Path("src/app/main.cpp").read_text()
           backend = Path("src/backends/apt/apt_backend.cpp").read_text()
           helper = Path("src/helper/update_helper.cpp").read_text()
-          policy = Path("data/net.ssmith.infiltrator.software.updates.policy").read_text()
+          update_policy_path = Path("data/net.ssmith.infiltrator.software.updates.policy")
+          source_policy_path = Path("data/net.ssmith.infiltrator.software.policy")
+          policy = update_policy_path.read_text()
 
           assert "refresh_updates(state, true)" in app
           assert "backend.refresh_metadata(result->error)" in app
@@ -71,6 +74,16 @@ jobs:
           assert 'strcmp(argv[1], "refresh")' not in helper
           assert 'run_apt({"update"})' in helper
           assert "Authentication is required to install system software updates." in policy
+
+          # Privileged mutations must authenticate rather than being denied
+          # merely because the desktop is remote/inactive. Never cache this
+          # authorization because helper arguments are transaction-specific.
+          for policy_path in (update_policy_path, source_policy_path):
+              defaults = ET.parse(policy_path).getroot().find(".//defaults")
+              assert defaults is not None
+              assert defaults.findtext("allow_any") == "auth_admin"
+              assert defaults.findtext("allow_inactive") == "auth_admin"
+              assert defaults.findtext("allow_active") == "auth_admin"
           PY
 
       - name: Engine service smoke test
