@@ -6,9 +6,9 @@
 
 Infiltrator Software is the software-management application for the Infiltrator project family. It presents software discovery, installation, removal, updates, system components, repositories, release channels, history and repair as one coherent graphical product.
 
-**Current source version:** 0.3.10  
+**Current source version:** 0.3.11  
 **Language:** C++17 application/core with native GTK4 Linux shell; C11 Common foundation  
-**Shared foundation:** Common 1.19.10  
+**Shared foundation:** Common 1.19.24  
 **Current package compatibility:** Debian repositories and .deb packages; Flatpak and AppStream catalogue integration  
 **0.4 direction:** native Infiltrator Debian-compatibility engine with no apt, apt-get or apt-cache process dependency  
 **Licence:** GPL-3.0-or-later
@@ -118,7 +118,7 @@ See [Transactions](docs/TRANSACTIONS.md).
 
 ## Appearance
 
-Software uses the Common 1.19.10 appearance contract. Follow OS, Day and Night modes share project-family typography, semantic colours and structural metrics.
+Software uses the Common 1.19.24 appearance contract. Follow OS, Day and Night modes share project-family typography, semantic colours and structural metrics.
 
 Discover is visual and spacious. Installed and Updates are denser working views. System separates critical components clearly. Repositories behaves like a source/settings surface. History is chronological. Repair presents health first and problems only when they exist.
 
@@ -135,7 +135,7 @@ See [UI Design](docs/UI_DESIGN.md).
     ├── tray/                XApp desktop-panel indicator
     ├── backend/             backend-neutral compatibility contracts
     ├── backends/apt/        0.3 legacy APT implementation to be retired in 0.4
-    └── infiltratr-common/   exact Common 1.19.10 gitlink
+    └── infiltratr-common/   exact Common 1.19.24 gitlink
 
     tests/                   regression and contract tests
     docs/                    architecture and product contracts
@@ -149,6 +149,8 @@ See [UI Design](docs/UI_DESIGN.md).
 The first client cutover is now implemented: Installed, ordinary Updates inventory and native update planning use the shared D-Bus engine when a published generation is available, while the panel indicator subscribes to engine state/health changes instead of owning a second resolver. The direct Debian installed-state reader remains a no-process fallback, and explicit repository refresh/update inventory retains the 0.3 compatibility path until native reconciliation publishes complete source state.
 
 Discover installation is now operational. Selecting Install resolves a complete native transaction when shared state is available, falls back to the transitional APT planner when necessary, shows every resolved package change before authorization, and executes the exact approved package/version set through the constrained privileged helper. The same exact-plan execution path is now used by Updates.
+
+0.3.11 hardens that compatibility boundary. After administrator authorization and the root-owned metadata refresh, Software performs a second non-mutating APT simulation and requires its install/upgrade set to match the approved package identities, architectures and exact versions one-for-one. Any new dependency, missing change, removal or architecture drift aborts before package mutation.
 
 The next 0.4 slice is the native reconciliation publisher that turns configured repository sources plus installed dpkg state into the shared generation automatically. Once that owns refresh end to end, the remaining APT compatibility inventory paths can be deleted rather than merely bypassed.
 
