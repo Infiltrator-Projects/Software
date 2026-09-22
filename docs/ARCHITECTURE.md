@@ -92,7 +92,7 @@ One engine owns package/repository reconciliation.
 
 Clients subscribe to snapshots and change events. They do not perform duplicate update calculations.
 
-The first shared service slice is now implemented as a session D-Bus service at `net.ssmith.infiltrator.software.Engine`. It owns the in-memory view of the latest package-state generation, caches the update calculation once per generation, exposes status/installed/update snapshots and native transaction planning, and emits generation/health changes. It is D-Bus activatable and keeps stale known-good state readable if a subsequent database reload fails. GUI and tray migration to this service is the next slice.
+The first shared service slice is implemented as a session D-Bus service at `net.ssmith.infiltrator.software.Engine`. It owns the in-memory view of the latest package-state generation, caches the update calculation once per generation, exposes status/installed/update snapshots and native transaction planning, and emits generation/health changes. It is D-Bus activatable and keeps stale known-good state readable if a subsequent database reload fails. Installed inventory and ordinary Updates already prefer this shared engine when a published generation is available, and the tray subscribes to its state and health signals instead of running a second resolver. The next slice is the native reconciliation publisher that refreshes configured repository sources plus installed dpkg state and atomically publishes complete generations, allowing the remaining APT compatibility inventory and refresh paths to be removed.
 
 The derived state database is disposable. Authoritative state remains repository metadata, configured repository policy and installed package state.
 
@@ -130,7 +130,7 @@ Partial state is visibly partial and is never silently represented as complete a
 
 ## Common
 
-Common 1.19.10 remains the project-family foundation for mechanisms that are genuinely product-neutral: appearance, semantic colours, typography roles, structural metrics and durable generic utilities.
+Common 1.19.24 remains the project-family foundation for mechanisms that are genuinely product-neutral: appearance, semantic colours, typography roles, structural metrics and durable generic utilities.
 
 Package formats, dependency resolution, repository semantics and transaction policy remain in Software rather than being pushed into Common merely for reuse.
 
