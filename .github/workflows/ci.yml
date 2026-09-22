@@ -31,8 +31,8 @@ jobs:
           version="$(tr -d '[:space:]' < VERSION)"
           [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
           grep -Fq "**Current source version:** $version" README.md
-          test "$(tr -d '[:space:]' < src/infiltratr-common/VERSION)" = "1.19.10"
-          test "$(git -C src/infiltratr-common rev-parse HEAD)" = "33e69c0a462b56d388881d89c4eb49f72fa0b0fe"
+          test "$(tr -d '[:space:]' < src/infiltratr-common/VERSION)" = "1.19.24"
+          test "$(git -C src/infiltratr-common rev-parse HEAD)" = "748e089ae175329471d4cf375522c44081371bd5"
 
       - name: Install build dependencies
         env:
@@ -61,6 +61,7 @@ jobs:
           app = Path("src/app/main.cpp").read_text()
           backend = Path("src/backends/apt/apt_backend.cpp").read_text()
           helper = Path("src/helper/update_helper.cpp").read_text()
+          guard = Path("src/helper/apt_plan_guard.cpp").read_text()
           update_policy_path = Path("data/net.ssmith.infiltrator.software.updates.policy")
           source_policy_path = Path("data/net.ssmith.infiltrator.software.policy")
           policy = update_policy_path.read_text()
@@ -76,6 +77,10 @@ jobs:
           assert 'strcmp(argv[1], "apply-plan")' in helper
           assert '"--no-remove"' in helper
           assert '"--no-install-recommends"' in helper
+          assert "validate_apt_simulation" in helper
+          assert 'simulation_arguments.insert(simulation_arguments.begin(), "-s")' in helper
+          assert "introduced an unapproved change" in guard
+          assert "would remove a package" in guard
           assert "Authentication is required to install or update system software." in policy
 
           # Discover must remain an operational planned-install surface, not a
