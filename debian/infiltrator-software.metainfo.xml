@@ -34,6 +34,11 @@
   <url type="homepage">https://github.com/Infiltrator-Projects/Software</url>
 
   <releases>
+    <release version="0.3.11" date="2026-09-22">
+      <description>
+        <p>Hardens approved package transactions by re-simulating them after the privileged metadata refresh, rejecting any dependency, architecture, removal or version drift before mutation, and updates the shared Common foundation to 1.19.24.</p>
+      </description>
+    </release>
     <release version="0.3.10" date="2026-09-22">
       <description>
         <p>Enables planned installation from Discover, displays the complete dependency transaction before authorization, and executes the exact approved package versions through the constrained privileged helper.</p>
