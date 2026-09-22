@@ -26,8 +26,8 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 set(INFILTRATR_COMMON_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src/infiltratr-common")
-set(INFILTRATR_COMMON_EXPECTED_VERSION "1.19.10")
-set(INFILTRATR_COMMON_EXPECTED_COMMIT "33e69c0a462b56d388881d89c4eb49f72fa0b0fe")
+set(INFILTRATR_COMMON_EXPECTED_VERSION "1.19.24")
+set(INFILTRATR_COMMON_EXPECTED_COMMIT "748e089ae175329471d4cf375522c44081371bd5")
 
 if(NOT EXISTS "${INFILTRATR_COMMON_DIR}/VERSION")
     message(FATAL_ERROR
@@ -172,11 +172,18 @@ add_library(software-sources STATIC
 target_include_directories(software-sources PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/src")
 
+add_library(software-apt-plan-guard STATIC
+    src/helper/apt_plan_guard.cpp)
+target_include_directories(software-apt-plan-guard PUBLIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/src")
+
 add_executable(infiltrator-software-helper
     src/helper/source_helper.cpp)
 
 add_executable(infiltrator-software-update-helper
     src/helper/update_helper.cpp)
+target_link_libraries(infiltrator-software-update-helper PRIVATE
+    software-apt-plan-guard)
 
 add_executable(infiltrator-software-engine
     src/service/main.cpp)
@@ -230,6 +237,7 @@ install(FILES LICENSE DESTINATION share/doc/infiltrator-software)
 
 foreach(target IN ITEMS
         software-core software-engine software-client software-apt software-catalogue software-sources
+        software-apt-plan-guard
         infiltrator-software-helper infiltrator-software-update-helper
         infiltrator-software-engine infiltrator-software-tray
         infiltrator-software)
@@ -316,6 +324,14 @@ if(BUILD_TESTING)
     add_executable(software-apt-test tests/apt_backend_test.cpp)
     target_link_libraries(software-apt-test PRIVATE software-apt)
     add_test(NAME software-apt-test COMMAND software-apt-test)
+
+    add_executable(software-apt-plan-guard-test
+        tests/apt_plan_guard_test.cpp)
+    target_link_libraries(software-apt-plan-guard-test PRIVATE
+        software-apt-plan-guard)
+    add_test(
+        NAME software-apt-plan-guard-test
+        COMMAND software-apt-plan-guard-test)
 
     add_executable(software-catalogue-test tests/catalogue_test.cpp)
     target_link_libraries(software-catalogue-test PRIVATE software-catalogue)
