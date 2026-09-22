@@ -216,10 +216,19 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    if (argc >= 3 && std::strcmp(argv[1], "apply") == 0) {
+    const bool legacy_upgrade =
+        argc >= 3 && std::strcmp(argv[1], "apply") == 0;
+    const bool resolved_plan =
+        argc >= 3 && std::strcmp(argv[1], "apply-plan") == 0;
+
+    if (legacy_upgrade || resolved_plan) {
         std::vector<std::string> arguments{
-            "-y", "--no-remove", "install"};
-        arguments.reserve(static_cast<std::size_t>(argc) + 3U);
+            "-y",
+            "--no-remove",
+            "--no-install-recommends",
+            "--no-install-suggests",
+            "install"};
+        arguments.reserve(static_cast<std::size_t>(argc) + 5U);
 
         for (int index = 2; index < argc; ++index) {
             const std::string spec(argv[index]);
@@ -231,11 +240,19 @@ int main(int argc, char **argv)
                     argv[index]);
                 return 64;
             }
-            if (!installed_package(spec)) {
+
+            /*
+             * The legacy entry point remains upgrade-only for compatibility
+             * with older Software clients. apply-plan is different: the GUI
+             * has already resolved the complete install/upgrade dependency
+             * graph, so new packages are expected and every package arrives
+             * here with an exact approved version.
+             */
+            if (legacy_upgrade && !installed_package(spec)) {
                 std::fprintf(
                     stderr,
                     "Refusing to install a requested package that is not "
-                    "already installed: %s\n",
+                    "already installed through the legacy upgrade path: %s\n",
                     argv[index]);
                 return 65;
             }
@@ -243,11 +260,11 @@ int main(int argc, char **argv)
         }
 
         /*
-         * Refresh the root-owned system metadata only after the user has
-         * chosen to install and Polkit has authorized this helper. The GUI's
-         * read-only refresh never needs administrator credentials; this update
-         * also ensures the exact versions approved in the preflight plan are
-         * checked against current authenticated system repository metadata.
+         * Refresh root-owned metadata only after the user has reviewed the
+         * complete plan and PolicyKit has authorized this exact execution.
+         * Every planned package is pinned to the reviewed version. Removal is
+         * prohibited and implicit Recommends/Suggests are disabled so APT
+         * cannot silently broaden the approved native dependency plan.
          */
         const int refresh_status = run_apt({"update"});
         if (refresh_status != 0) {
@@ -262,6 +279,7 @@ int main(int argc, char **argv)
 
     std::fprintf(
         stderr,
-        "Usage: infiltrator-software-update-helper apply PACKAGE[=VERSION]...\n");
+        "Usage: infiltrator-software-update-helper "
+        "apply-plan PACKAGE=VERSION...\n");
     return 64;
 }

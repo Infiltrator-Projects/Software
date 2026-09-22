@@ -1,3 +1,21 @@
+infiltrator-software (0.3.10) unstable; urgency=high
+
+  * Enable Discover installation instead of permanently presenting the
+    transaction-planner placeholder.
+  * Resolve native install/update dependency graphs asynchronously and show the
+    complete package change set before requesting administrator authorization.
+  * Fall back to the transitional APT planner when a shared native generation is
+    not yet available, while still prohibiting package removal.
+  * Execute every approved install/upgrade plan item at its exact reviewed
+    version and disable implicit Recommends/Suggests in the privileged bridge.
+  * Make Updates execute the exact resolved plan rather than reconstructing a
+    second root-only transaction after confirmation.
+  * Refresh Discover, Installed and Updates state after a successful install.
+  * Add CI regression checks preventing Discover installation from being
+    silently disabled again.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Tue, 22 Sep 2026 12:45:00 +1000
+
 infiltrator-software (0.3.9) unstable; urgency=high
 
   * Fix privileged update installation from remote or inactive graphical

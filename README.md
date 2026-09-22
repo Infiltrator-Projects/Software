@@ -6,7 +6,7 @@
 
 Infiltrator Software is the software-management application for the Infiltrator project family. It presents software discovery, installation, removal, updates, system components, repositories, release channels, history and repair as one coherent graphical product.
 
-**Current source version:** 0.3.9  
+**Current source version:** 0.3.10  
 **Language:** C++17 application/core with native GTK4 Linux shell; C11 Common foundation  
 **Shared foundation:** Common 1.19.10  
 **Current package compatibility:** Debian repositories and .deb packages; Flatpak and AppStream catalogue integration  
@@ -147,6 +147,8 @@ See [UI Design](docs/UI_DESIGN.md).
 0.4 replaces the APT process dependency with the native Debian-compatibility engine, introduces shared package state, removes duplicate update scans, makes page loading lazy, and establishes measurable startup/performance requirements. Existing Debian repositories, .deb packages, AppStream and Flatpak support remain.
 
 The first client cutover is now implemented: Installed, ordinary Updates inventory and native update planning use the shared D-Bus engine when a published generation is available, while the panel indicator subscribes to engine state/health changes instead of owning a second resolver. The direct Debian installed-state reader remains a no-process fallback, and explicit repository refresh/update inventory retains the 0.3 compatibility path until native reconciliation publishes complete source state.
+
+Discover installation is now operational. Selecting Install resolves a complete native transaction when shared state is available, falls back to the transitional APT planner when necessary, shows every resolved package change before authorization, and executes the exact approved package/version set through the constrained privileged helper. The same exact-plan execution path is now used by Updates.
 
 The next 0.4 slice is the native reconciliation publisher that turns configured repository sources plus installed dpkg state into the shared generation automatically. Once that owns refresh end to end, the remaining APT compatibility inventory paths can be deleted rather than merely bypassed.
 

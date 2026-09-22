@@ -449,12 +449,13 @@ std::optional<TransactionPlan> AptBackend::plan(
     const TransactionRequest &request, std::string &error)
 {
     error.clear();
-    if (request.action != TransactionAction::upgrade) {
-        error = "APT planning currently supports upgrades only.";
+    if (request.action == TransactionAction::remove) {
+        error =
+            "APT compatibility planning does not support package removal.";
         return std::nullopt;
     }
     if (request.package_ids.empty()) {
-        error = "No packages were selected for upgrade.";
+        error = "No packages were selected for the transaction.";
         return std::nullopt;
     }
 
@@ -487,7 +488,13 @@ std::optional<TransactionPlan> AptBackend::plan(
     }
 
     TransactionPlan plan;
+    plan.source_fingerprint = "apt-compatibility";
     std::unordered_set<std::string> seen;
+    std::unordered_set<std::string> requested;
+    requested.reserve(request.package_ids.size());
+    for (const std::string &id : request.package_ids) {
+        requested.insert(package_key(id));
+    }
 
     std::size_t start = 0U;
     while (start < output.size()) {
@@ -510,6 +517,14 @@ std::optional<TransactionPlan> AptBackend::plan(
                     item.action = TransactionAction::install;
                 }
                 item.to_version = candidate_version(line);
+                if (item.to_version.empty()) {
+                    error =
+                        "APT produced a package change without an exact target "
+                        "version: " + token + ".";
+                    return std::nullopt;
+                }
+                item.requested =
+                    requested.find(key) != requested.end();
 
                 PackageRecord classification;
                 classification.id = token;
@@ -547,7 +562,7 @@ std::optional<TransactionPlan> AptBackend::plan(
 
     if (plan.items.empty()) {
         error =
-            "APT produced no transaction changes for the selected updates.";
+            "APT produced no transaction changes for the selected packages.";
         return std::nullopt;
     }
 

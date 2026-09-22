@@ -27,6 +27,8 @@ The GUI presents the meaningful consequences before authorization.
 
 The privileged executor receives a typed resolved plan, not an arbitrary command line.
 
+During the current compatibility bridge, the GUI serializes every non-removal item from that resolved plan as an exact `package=version` specification for the constrained helper. Discover installs and Updates use the same path. The helper prohibits removal and disables implicit Recommends/Suggests so execution cannot silently broaden the reviewed native dependency plan. The legacy `apply` entry point remains upgrade-only for older clients.
+
 Every privileged request is tied to a package-state generation. If authoritative state changes enough to invalidate the plan, execution stops and the operation is resolved again.
 
 The executor rejects requests outside its supported transaction schema.

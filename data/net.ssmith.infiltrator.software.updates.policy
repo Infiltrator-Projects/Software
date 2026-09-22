@@ -7,8 +7,8 @@
   <vendor_url>https://github.com/Infiltrator-Projects/Software</vendor_url>
 
   <action id="net.ssmith.infiltrator.software.manage-updates">
-    <description>Manage software updates</description>
-    <message>Authentication is required to install system software updates.</message>
+    <description>Install or update system software</description>
+    <message>Authentication is required to install or update system software.</message>
     <defaults>
       <!--
         Package/source mutation is permitted from local, inactive and remote

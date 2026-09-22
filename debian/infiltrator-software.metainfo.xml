@@ -34,6 +34,11 @@
   <url type="homepage">https://github.com/Infiltrator-Projects/Software</url>
 
   <releases>
+    <release version="0.3.10" date="2026-09-22">
+      <description>
+        <p>Enables planned installation from Discover, displays the complete dependency transaction before authorization, and executes the exact approved package versions through the constrained privileged helper.</p>
+      </description>
+    </release>
     <release version="0.3.7" date="2026-09-21">
       <description>
         <p>Removes systemic interface stalls by virtualizing Discover cards, bulk-updating Installed, shortening failed engine reads and moving repository inventory off the GTK thread.</p>

@@ -42,6 +42,8 @@ using infiltrator::software::SourceInventory;
 using infiltrator::software::SourceRecord;
 using infiltrator::software::SystemCatalogue;
 using infiltrator::software::ThemeController;
+using infiltrator::software::TransactionAction;
+using infiltrator::software::TransactionPlan;
 using infiltrator::software::source_kind_name;
 using infiltrator::software::update_metadata_refresh_due;
 
@@ -85,6 +87,7 @@ struct WindowState {
     GtkWidget *updates_refresh{};
     GtkWidget *updates_backend{};
     std::vector<PackageRecord> update_records;
+    std::optional<TransactionPlan> pending_update_plan;
     unsigned int updates_generation{0U};
     bool updates_busy{false};
     bool updates_from_engine{false};
@@ -101,6 +104,9 @@ struct WindowState {
 
 void refresh_repositories(WindowState *state);
 void refresh_updates(WindowState *state, bool refresh_metadata = false);
+void refresh_discover(WindowState *state, bool force_refresh);
+void refresh_installed(WindowState *state);
+void discover_install_clicked(GtkButton *button, gpointer user_data);
 
 GtkWidget *make_icon(const char *name, int size)
 {
@@ -309,6 +315,169 @@ GtkWidget *detail_row(const char *caption, const std::string &value)
     return row;
 }
 
+const char *transaction_action_label(const TransactionAction action) noexcept
+{
+    switch (action) {
+    case TransactionAction::install: return "Install";
+    case TransactionAction::upgrade: return "Upgrade";
+    case TransactionAction::remove: return "Remove";
+    }
+    return "Change";
+}
+
+std::string display_disk_delta(const std::int64_t bytes)
+{
+    if (bytes == 0) return "0 B";
+    const bool negative = bytes < 0;
+    const std::uint64_t magnitude =
+        negative
+            ? static_cast<std::uint64_t>(-(bytes + 1)) + 1U
+            : static_cast<std::uint64_t>(bytes);
+    return std::string(negative ? "−" : "+") + display_size(magnitude);
+}
+
+bool exact_plan_specs(
+    const TransactionPlan &plan,
+    std::vector<std::string> &specs,
+    std::string &error)
+{
+    specs.clear();
+    error.clear();
+    if (plan.items.empty()) {
+        error = "The resolved transaction is empty.";
+        return false;
+    }
+    specs.reserve(plan.items.size());
+    for (const auto &item : plan.items) {
+        if (item.action == TransactionAction::remove) {
+            error =
+                "Package removal is not enabled in the compatibility executor.";
+            specs.clear();
+            return false;
+        }
+        if (item.package_id.empty() || item.to_version.empty()) {
+            error =
+                "The resolved transaction contains a package without an exact "
+                "target version.";
+            specs.clear();
+            return false;
+        }
+        specs.emplace_back(item.package_id + "=" + item.to_version);
+    }
+    return true;
+}
+
+std::string transaction_item_text(
+    const infiltrator::software::TransactionItem &item)
+{
+    std::ostringstream text;
+    text << transaction_action_label(item.action) << "  " << item.package_id;
+    if (item.action == TransactionAction::upgrade &&
+        !item.from_version.empty()) {
+        text << "  " << item.from_version << " → " << item.to_version;
+    } else if (item.action == TransactionAction::install &&
+               !item.to_version.empty()) {
+        text << "  → " << item.to_version;
+    } else if (item.action == TransactionAction::remove &&
+               !item.from_version.empty()) {
+        text << "  " << item.from_version << " → removed";
+    }
+    text << (item.requested ? "  [requested]" : "  [dependency]");
+    if (item.system_critical) text << "  [system-critical]";
+    if (!item.source.empty()) text << "\nSource: " << item.source;
+    return text.str();
+}
+
+GtkWidget *make_transaction_confirmation_dialog(
+    GtkWindow *parent,
+    const char *title,
+    const std::string &heading,
+    const char *accept_label,
+    const TransactionPlan &plan,
+    const bool from_engine)
+{
+    GtkWidget *dialog = gtk_dialog_new_with_buttons(
+        title,
+        parent,
+        static_cast<GtkDialogFlags>(
+            GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT),
+        "Cancel", GTK_RESPONSE_CANCEL,
+        accept_label, GTK_RESPONSE_ACCEPT,
+        nullptr);
+    gtk_window_set_default_size(GTK_WINDOW(dialog), 720, 560);
+
+    GtkWidget *content =
+        gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+    gtk_box_set_spacing(GTK_BOX(content), 12);
+    gtk_widget_set_margin_start(content, 18);
+    gtk_widget_set_margin_end(content, 18);
+    gtk_widget_set_margin_top(content, 16);
+    gtk_widget_set_margin_bottom(content, 16);
+
+    GtkWidget *heading_label = make_label(heading.c_str(), "hero-title");
+    gtk_label_set_wrap(GTK_LABEL(heading_label), true);
+    gtk_box_append(GTK_BOX(content), heading_label);
+
+    std::ostringstream summary;
+    summary << plan.items.size()
+            << (plan.items.size() == 1U
+                    ? " package change."
+                    : " package changes.");
+    if (plan.download_bytes > 0U) {
+        summary << "  Download: " << display_size(plan.download_bytes) << ".";
+    } else if (!from_engine) {
+        summary << "  Download size: not reported by the compatibility planner.";
+    }
+    if (plan.disk_delta_bytes != 0) {
+        summary << "  Disk change: "
+                << display_disk_delta(plan.disk_delta_bytes) << ".";
+    } else if (!from_engine) {
+        summary << "  Disk change: not reported by the compatibility planner.";
+    }
+    if (plan.touches_system) {
+        summary << "\nThis transaction includes system-critical components.";
+    }
+    if (from_engine) {
+        summary << "\nResolved by the native package engine against state "
+                << "generation " << plan.state_generation << ".";
+    } else {
+        summary << "\nResolved by the transitional APT compatibility planner.";
+    }
+
+    GtkWidget *summary_label =
+        make_label(summary.str().c_str(), "detail-note");
+    gtk_label_set_wrap(GTK_LABEL(summary_label), true);
+    gtk_label_set_selectable(GTK_LABEL(summary_label), true);
+    gtk_box_append(GTK_BOX(content), summary_label);
+
+    GtkWidget *changes =
+        make_label("Complete resolved change set", "card-title");
+    gtk_box_append(GTK_BOX(content), changes);
+
+    GtkWidget *scroller = gtk_scrolled_window_new();
+    gtk_scrolled_window_set_policy(
+        GTK_SCROLLED_WINDOW(scroller),
+        GTK_POLICY_AUTOMATIC,
+        GTK_POLICY_AUTOMATIC);
+    gtk_widget_set_vexpand(scroller, true);
+    gtk_widget_set_size_request(scroller, -1, 300);
+
+    GtkWidget *list = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
+    for (const auto &item : plan.items) {
+        GtkWidget *row = gtk_box_new(GTK_ORIENTATION_VERTICAL, 3);
+        gtk_widget_add_css_class(row, "card");
+        GtkWidget *label =
+            make_label(transaction_item_text(item).c_str(), "card-copy");
+        gtk_label_set_wrap(GTK_LABEL(label), true);
+        gtk_label_set_selectable(GTK_LABEL(label), true);
+        gtk_box_append(GTK_BOX(row), label);
+        gtk_box_append(GTK_BOX(list), row);
+    }
+    gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(scroller), list);
+    gtk_box_append(GTK_BOX(content), scroller);
+    return dialog;
+}
+
 void discover_details_clicked(GtkButton *button, gpointer user_data)
 {
     auto *state = static_cast<WindowState *>(user_data);
@@ -377,11 +546,15 @@ void discover_details_clicked(GtkButton *button, gpointer user_data)
     gtk_box_append(GTK_BOX(outer), card);
 
     GtkWidget *status = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+    const bool package_installed =
+        record->state == infiltrator::software::InstallState::installed;
+    const bool package_upgradable =
+        record->state == infiltrator::software::InstallState::upgradable;
     GtkWidget *badge = make_label(
-        record->state == infiltrator::software::InstallState::installed
+        package_installed
             ? "Installed"
-            : "Available",
-        record->state == infiltrator::software::InstallState::installed
+            : (package_upgradable ? "Update available" : "Available"),
+        package_installed
             ? "state-installed"
             : "state-available");
     gtk_box_append(GTK_BOX(status), badge);
@@ -399,11 +572,36 @@ void discover_details_clicked(GtkButton *button, gpointer user_data)
     gtk_box_append(GTK_BOX(outer), status);
 
     GtkWidget *note = make_label(
-        "Installation remains disabled until the transaction planner can show "
-        "the complete dependency and system change set before authorization.",
+        package_installed
+            ? "This package is already installed."
+            : "The complete dependency and system change set will be resolved "
+              "and shown before administrator authorization is requested.",
         "detail-note");
     gtk_label_set_wrap(GTK_LABEL(note), true);
     gtk_box_append(GTK_BOX(outer), note);
+
+    if (!package_installed) {
+        GtkWidget *actions =
+            gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+        GtkWidget *install = gtk_button_new_with_label(
+            package_upgradable ? "Update" : "Install");
+        gtk_widget_add_css_class(install, "suggested-action");
+        g_object_set_data_full(
+            G_OBJECT(install),
+            "discover-install-record",
+            new PackageRecord(*record),
+            package_record_destroy);
+        g_object_set_data_full(
+            G_OBJECT(install),
+            "discover-install-status",
+            g_object_ref(note),
+            g_object_unref);
+        g_signal_connect(
+            install, "clicked",
+            G_CALLBACK(discover_install_clicked), state);
+        gtk_box_append(GTK_BOX(actions), install);
+        gtk_box_append(GTK_BOX(outer), actions);
+    }
 
     gtk_window_present(GTK_WINDOW(dialog));
 }
@@ -1722,6 +1920,398 @@ std::string one_line(std::string value)
     return value;
 }
 
+struct DiscoverPlanTaskData {
+    std::string package_id;
+    TransactionAction action{TransactionAction::install};
+    GtkWindow *main_window{};
+};
+
+struct DiscoverPlanResult {
+    std::optional<TransactionPlan> plan;
+    std::string error;
+    bool from_engine{false};
+};
+
+struct DiscoverInstallOperation {
+    GtkWindow *main_window{};
+    GtkWidget *button{};
+    GtkWidget *status{};
+    TransactionAction action{TransactionAction::install};
+    TransactionPlan plan;
+};
+
+void destroy_discover_plan_task_data(gpointer pointer)
+{
+    auto *data = static_cast<DiscoverPlanTaskData *>(pointer);
+    if (data == nullptr) return;
+    if (data->main_window != nullptr) g_object_unref(data->main_window);
+    delete data;
+}
+
+void destroy_discover_install_operation(
+    DiscoverInstallOperation *operation)
+{
+    if (operation == nullptr) return;
+    if (operation->main_window != nullptr) g_object_unref(operation->main_window);
+    if (operation->button != nullptr) g_object_unref(operation->button);
+    if (operation->status != nullptr) g_object_unref(operation->status);
+    delete operation;
+}
+
+void discover_plan_worker(
+    GTask *task,
+    gpointer,
+    gpointer task_data,
+    GCancellable *)
+{
+    auto *data = static_cast<DiscoverPlanTaskData *>(task_data);
+    auto *result = new DiscoverPlanResult{};
+
+    if (data == nullptr || data->package_id.empty()) {
+        result->error = "No package was selected for installation.";
+    } else {
+        infiltrator::software::TransactionRequest request;
+        request.action = data->action;
+        request.package_ids = {data->package_id};
+
+        std::string engine_error;
+        EngineClient engine;
+        result->plan = engine.plan(request, engine_error);
+        if (result->plan.has_value()) {
+            result->from_engine = true;
+        } else {
+            std::string fallback_error;
+            AptBackend fallback;
+            result->plan = fallback.plan(request, fallback_error);
+            if (!result->plan.has_value()) {
+                result->error = "Native planner: " + one_line(engine_error);
+                if (!fallback_error.empty()) {
+                    result->error +=
+                        "  Compatibility planner: " +
+                        one_line(fallback_error);
+                }
+            }
+        }
+    }
+
+    g_task_return_pointer(
+        task,
+        result,
+        [](gpointer pointer) {
+            delete static_cast<DiscoverPlanResult *>(pointer);
+        });
+}
+
+void discover_install_process_complete(
+    GObject *source_object,
+    GAsyncResult *async_result,
+    gpointer user_data)
+{
+    auto *operation =
+        static_cast<DiscoverInstallOperation *>(user_data);
+    auto *process = G_SUBPROCESS(source_object);
+
+    GError *error = nullptr;
+    gchar *stdout_text = nullptr;
+    gchar *stderr_text = nullptr;
+    const gboolean communicated =
+        g_subprocess_communicate_utf8_finish(
+            process, async_result,
+            &stdout_text, &stderr_text, &error);
+    const bool success =
+        communicated != FALSE &&
+        g_subprocess_get_successful(process);
+
+    if (operation != nullptr && operation->status != nullptr) {
+        if (success) {
+            gtk_label_set_text(
+                GTK_LABEL(operation->status),
+                operation->action == TransactionAction::upgrade
+                    ? "Update complete. Refreshing software state…"
+                    : "Installation complete. Refreshing software state…");
+        } else {
+            std::string message =
+                operation->action == TransactionAction::upgrade
+                    ? "Unable to update package."
+                    : "Unable to install package.";
+            if (error != nullptr && error->message != nullptr) {
+                message += " ";
+                message += error->message;
+            } else if (stderr_text != nullptr &&
+                       *stderr_text != '\0') {
+                message += " ";
+                message += one_line(stderr_text);
+            }
+            gtk_label_set_text(
+                GTK_LABEL(operation->status),
+                message.c_str());
+        }
+    }
+
+    if (operation != nullptr && operation->button != nullptr) {
+        if (success) {
+            gtk_button_set_label(
+                GTK_BUTTON(operation->button),
+                operation->action == TransactionAction::upgrade
+                    ? "Updated"
+                    : "Installed");
+            gtk_widget_set_sensitive(operation->button, false);
+        } else {
+            gtk_widget_set_sensitive(operation->button, true);
+        }
+    }
+
+    if (success && operation != nullptr &&
+        operation->main_window != nullptr) {
+        auto *state = static_cast<WindowState *>(
+            g_object_get_data(
+                G_OBJECT(operation->main_window),
+                "infiltrator-window-state"));
+        if (state != nullptr) {
+            refresh_discover(state, true);
+            if (state->installed_loaded) refresh_installed(state);
+            if (state->updates_loaded) refresh_updates(state);
+        }
+    }
+
+    g_free(stdout_text);
+    g_free(stderr_text);
+    g_clear_error(&error);
+    destroy_discover_install_operation(operation);
+}
+
+void start_discover_install_operation(
+    DiscoverInstallOperation *operation)
+{
+    if (operation == nullptr) return;
+
+    std::vector<std::string> specs;
+    std::string plan_error;
+    if (!exact_plan_specs(operation->plan, specs, plan_error)) {
+        if (operation->status != nullptr) {
+            gtk_label_set_text(
+                GTK_LABEL(operation->status),
+                plan_error.c_str());
+        }
+        if (operation->button != nullptr) {
+            gtk_widget_set_sensitive(operation->button, true);
+        }
+        destroy_discover_install_operation(operation);
+        return;
+    }
+
+    std::vector<std::string> arguments{
+        "pkexec",
+        "/usr/libexec/infiltrator-software-update-helper",
+        "apply-plan"};
+    arguments.reserve(specs.size() + 3U);
+    arguments.insert(arguments.end(), specs.begin(), specs.end());
+
+    std::vector<const gchar *> argv;
+    argv.reserve(arguments.size() + 1U);
+    for (const std::string &argument : arguments) {
+        argv.push_back(argument.c_str());
+    }
+    argv.push_back(nullptr);
+
+    GError *error = nullptr;
+    GSubprocess *process = g_subprocess_newv(
+        argv.data(),
+        static_cast<GSubprocessFlags>(
+            G_SUBPROCESS_FLAGS_STDOUT_PIPE |
+            G_SUBPROCESS_FLAGS_STDERR_PIPE),
+        &error);
+
+    if (process == nullptr) {
+        std::string message = "Unable to start package installation.";
+        if (error != nullptr && error->message != nullptr) {
+            message += " ";
+            message += error->message;
+        }
+        if (operation->status != nullptr) {
+            gtk_label_set_text(
+                GTK_LABEL(operation->status),
+                message.c_str());
+        }
+        if (operation->button != nullptr) {
+            gtk_widget_set_sensitive(operation->button, true);
+        }
+        g_clear_error(&error);
+        destroy_discover_install_operation(operation);
+        return;
+    }
+
+    if (operation->status != nullptr) {
+        gtk_label_set_text(
+            GTK_LABEL(operation->status),
+            "Waiting for administrator authorization…");
+    }
+
+    g_subprocess_communicate_utf8_async(
+        process, nullptr, nullptr,
+        discover_install_process_complete, operation);
+    g_object_unref(process);
+}
+
+void discover_install_confirm_response(
+    GtkDialog *dialog,
+    const gint response_id,
+    gpointer user_data)
+{
+    auto *operation =
+        static_cast<DiscoverInstallOperation *>(user_data);
+    gtk_window_destroy(GTK_WINDOW(dialog));
+
+    if (operation == nullptr) return;
+    if (response_id == GTK_RESPONSE_ACCEPT) {
+        start_discover_install_operation(operation);
+        return;
+    }
+
+    if (operation->status != nullptr) {
+        gtk_label_set_text(
+            GTK_LABEL(operation->status),
+            "Installation cancelled.");
+    }
+    if (operation->button != nullptr) {
+        gtk_widget_set_sensitive(operation->button, true);
+    }
+    destroy_discover_install_operation(operation);
+}
+
+void discover_plan_complete(
+    GObject *source_object,
+    GAsyncResult *async_result,
+    gpointer)
+{
+    auto *button = GTK_WIDGET(source_object);
+    auto *task = G_TASK(async_result);
+    auto *task_data = static_cast<DiscoverPlanTaskData *>(
+        g_task_get_task_data(task));
+    auto *result = static_cast<DiscoverPlanResult *>(
+        g_task_propagate_pointer(task, nullptr));
+    auto *status = static_cast<GtkWidget *>(
+        g_object_get_data(
+            G_OBJECT(button), "discover-install-status"));
+    auto *record = static_cast<PackageRecord *>(
+        g_object_get_data(
+            G_OBJECT(button), "discover-install-record"));
+
+    WindowState *state = nullptr;
+    if (task_data != nullptr && task_data->main_window != nullptr) {
+        state = static_cast<WindowState *>(
+            g_object_get_data(
+                G_OBJECT(task_data->main_window),
+                "infiltrator-window-state"));
+    }
+
+    if (result == nullptr || !result->plan.has_value() ||
+        state == nullptr || record == nullptr || task_data == nullptr) {
+        std::string message = "Unable to resolve installation transaction.";
+        if (result != nullptr && !result->error.empty()) {
+            message += " ";
+            message += one_line(result->error);
+        }
+        if (status != nullptr) {
+            gtk_label_set_text(GTK_LABEL(status), message.c_str());
+        }
+        gtk_widget_set_sensitive(button, true);
+        delete result;
+        return;
+    }
+
+    if (status != nullptr) {
+        gtk_label_set_text(
+            GTK_LABEL(status),
+            "Transaction resolved. Review every package change before authorizing.");
+    }
+
+    GtkWindow *parent = state->window;
+    if (GtkRoot *root = gtk_widget_get_root(button);
+        root != nullptr && GTK_IS_WINDOW(root)) {
+        parent = GTK_WINDOW(root);
+    }
+
+    const TransactionPlan plan = *result->plan;
+    const bool from_engine = result->from_engine;
+    delete result;
+
+    const std::string heading =
+        task_data->action == TransactionAction::upgrade
+            ? "Review the complete update transaction for " + record->name
+            : "Review the complete installation transaction for " + record->name;
+
+    auto *operation = new DiscoverInstallOperation{};
+    operation->main_window =
+        GTK_WINDOW(g_object_ref(task_data->main_window));
+    operation->button = GTK_WIDGET(g_object_ref(button));
+    operation->status =
+        status != nullptr ? GTK_WIDGET(g_object_ref(status)) : nullptr;
+    operation->action = task_data->action;
+    operation->plan = plan;
+
+    GtkWidget *dialog =
+        make_transaction_confirmation_dialog(
+            parent,
+            task_data->action == TransactionAction::upgrade
+                ? "Review update" : "Review installation",
+            heading,
+            task_data->action == TransactionAction::upgrade
+                ? "Update" : "Install",
+            plan,
+            from_engine);
+    g_signal_connect(
+        dialog, "response",
+        G_CALLBACK(discover_install_confirm_response),
+        operation);
+    gtk_window_present(GTK_WINDOW(dialog));
+}
+
+void discover_install_clicked(
+    GtkButton *button,
+    gpointer user_data)
+{
+    auto *state = static_cast<WindowState *>(user_data);
+    auto *record = static_cast<PackageRecord *>(
+        g_object_get_data(
+            G_OBJECT(button), "discover-install-record"));
+    auto *status = static_cast<GtkWidget *>(
+        g_object_get_data(
+            G_OBJECT(button), "discover-install-status"));
+
+    if (state == nullptr || state->window == nullptr ||
+        record == nullptr || record->package_name.empty()) {
+        return;
+    }
+
+    const TransactionAction action =
+        record->state == infiltrator::software::InstallState::upgradable
+            ? TransactionAction::upgrade
+            : TransactionAction::install;
+
+    gtk_widget_set_sensitive(GTK_WIDGET(button), false);
+    if (status != nullptr) {
+        gtk_label_set_text(
+            GTK_LABEL(status),
+            action == TransactionAction::upgrade
+                ? "Resolving the complete update transaction…"
+                : "Resolving the complete installation transaction…");
+    }
+
+    auto *data = new DiscoverPlanTaskData{};
+    data->package_id = record->package_name;
+    data->action = action;
+    data->main_window = GTK_WINDOW(g_object_ref(state->window));
+
+    GTask *task = g_task_new(
+        G_OBJECT(button), nullptr,
+        discover_plan_complete, nullptr);
+    g_task_set_task_data(
+        task, data, destroy_discover_plan_task_data);
+    g_task_run_in_thread(task, discover_plan_worker);
+    g_object_unref(task);
+}
+
 void set_update_runtime_state(const std::string_view value)
 {
     const std::filesystem::path path = update_runtime_state_path();
@@ -2284,7 +2874,30 @@ void update_refresh_clicked(GtkButton *, gpointer user_data)
 
 void begin_apply_updates(WindowState *state)
 {
-    if (state == nullptr || state->update_records.empty()) {
+    if (state == nullptr || !state->pending_update_plan.has_value()) {
+        return;
+    }
+
+    std::vector<std::string> specs;
+    std::string plan_error;
+    if (!exact_plan_specs(
+            *state->pending_update_plan, specs, plan_error)) {
+        state->updates_busy = false;
+        state->pending_update_plan.reset();
+        if (state->updates_status != nullptr) {
+            gtk_label_set_text(
+                GTK_LABEL(state->updates_status),
+                plan_error.c_str());
+        }
+        if (state->updates_install != nullptr) {
+            gtk_widget_set_sensitive(
+                state->updates_install,
+                !state->update_records.empty());
+        }
+        if (state->updates_refresh != nullptr) {
+            gtk_widget_set_sensitive(state->updates_refresh, true);
+        }
+        set_update_runtime_state("error:" + one_line(plan_error));
         return;
     }
 
@@ -2292,7 +2905,7 @@ void begin_apply_updates(WindowState *state)
     if (state->updates_status != nullptr) {
         gtk_label_set_text(
             GTK_LABEL(state->updates_status),
-            "Installing software updates…");
+            "Installing the approved software transaction…");
     }
     if (state->updates_install != nullptr) {
         gtk_widget_set_sensitive(state->updates_install, false);
@@ -2305,17 +2918,11 @@ void begin_apply_updates(WindowState *state)
     std::vector<std::string> arguments{
         "pkexec",
         "/usr/libexec/infiltrator-software-update-helper",
-        "apply"};
-    arguments.reserve(state->update_records.size() + 3U);
+        "apply-plan"};
+    arguments.reserve(specs.size() + 3U);
+    arguments.insert(arguments.end(), specs.begin(), specs.end());
 
-    for (const PackageRecord &package : state->update_records) {
-        std::string spec = package.package_name;
-        if (!package.available_version.empty()) {
-            spec += "=" + package.available_version;
-        }
-        arguments.emplace_back(std::move(spec));
-    }
-
+    state->pending_update_plan.reset();
     start_update_process(
         state, std::move(arguments), "install");
 }
@@ -2338,6 +2945,7 @@ void update_confirm_response(
     }
 
     state->updates_busy = false;
+    state->pending_update_plan.reset();
     if (state->updates_status != nullptr) {
         gtk_label_set_text(
             GTK_LABEL(state->updates_status),
@@ -2408,6 +3016,7 @@ void update_plan_complete(
 
     if (!result->plan.has_value()) {
         state->updates_busy = false;
+        state->pending_update_plan.reset();
         std::string message =
             "Unable to plan updates: " + one_line(result->error);
         if (state->updates_status != nullptr) {
@@ -2434,45 +3043,23 @@ void update_plan_complete(
     const bool from_engine = result->from_engine;
     delete result;
 
-    std::ostringstream secondary;
-    secondary << plan.items.size()
-              << (plan.items.size() == 1U
-                      ? " package change is in the resolved transaction."
-                      : " package changes are in the resolved transaction.");
-    if (plan.touches_system) {
-        secondary
-            << "\n\nThis transaction includes system-critical components.";
-    }
-    if (from_engine) {
-        secondary
-            << "\n\nResolved by the shared native package engine against "
-               "state generation "
-            << plan.state_generation << ".";
-    } else {
-        secondary
-            << "\n\nAPT compatibility planning is constrained to "
-               "upgrade-only operation and package removal is prohibited.";
-    }
+    state->pending_update_plan = plan;
 
-    GtkWidget *dialog = gtk_message_dialog_new(
-        state->window,
-        static_cast<GtkDialogFlags>(
-            GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT),
-        plan.touches_system
-            ? GTK_MESSAGE_WARNING
-            : GTK_MESSAGE_QUESTION,
-        GTK_BUTTONS_NONE,
-        "Install %zu available software update%s?",
-        state->update_records.size(),
-        state->update_records.size() == 1U ? "" : "s");
-    gtk_message_dialog_format_secondary_text(
-        GTK_MESSAGE_DIALOG(dialog), "%s",
-        secondary.str().c_str());
-    gtk_dialog_add_buttons(
-        GTK_DIALOG(dialog),
-        "Cancel", GTK_RESPONSE_CANCEL,
-        "Install updates", GTK_RESPONSE_ACCEPT,
-        nullptr);
+    std::ostringstream heading;
+    heading << "Install "
+            << state->update_records.size()
+            << (state->update_records.size() == 1U
+                    ? " available software update?"
+                    : " available software updates?");
+
+    GtkWidget *dialog =
+        make_transaction_confirmation_dialog(
+            state->window,
+            "Review updates",
+            heading.str(),
+            "Install updates",
+            plan,
+            from_engine);
     g_signal_connect(
         dialog, "response",
         G_CALLBACK(update_confirm_response), state);
@@ -2488,6 +3075,7 @@ void update_install_clicked(GtkButton *, gpointer user_data)
     }
 
     state->updates_busy = true;
+    state->pending_update_plan.reset();
     if (state->updates_status != nullptr) {
         gtk_label_set_text(
             GTK_LABEL(state->updates_status),

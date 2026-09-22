@@ -73,7 +73,18 @@ jobs:
           assert "APT::Sandbox::User=" in backend
           assert 'strcmp(argv[1], "refresh")' not in helper
           assert 'run_apt({"update"})' in helper
-          assert "Authentication is required to install system software updates." in policy
+          assert 'strcmp(argv[1], "apply-plan")' in helper
+          assert '"--no-remove"' in helper
+          assert '"--no-install-recommends"' in helper
+          assert "Authentication is required to install or update system software." in policy
+
+          # Discover must remain an operational planned-install surface, not a
+          # catalogue that permanently advertises an unavailable Install path.
+          assert "Installation remains disabled until the transaction planner" not in app
+          assert "discover_install_clicked" in app
+          assert '"apply-plan"' in app
+          assert "state->pending_update_plan = plan" in app
+          assert "request.action == TransactionAction::remove" in backend
 
           # Privileged mutations must authenticate rather than being denied
           # merely because the desktop is remote/inactive. Never cache this
