@@ -25,6 +25,7 @@ public:
         std::string &error) const;
 
     bool reload(std::string &error) const;
+    bool refresh(std::string &error) const;
 };
 
 } // namespace infiltrator::software
