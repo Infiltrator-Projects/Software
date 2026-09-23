@@ -288,17 +288,22 @@ int main(int argc, char **argv)
     if (legacy_upgrade || resolved_plan) {
         std::vector<std::string> arguments{
             "-y",
-            "--no-remove",
             "--no-install-recommends",
             "--no-install-suggests",
             "install"};
         arguments.reserve(static_cast<std::size_t>(argc) + 5U);
 
+        bool has_removal = false;
         std::vector<std::string> approved_specs;
         approved_specs.reserve(static_cast<std::size_t>(argc - 2));
 
         for (int index = 2; index < argc; ++index) {
-            const std::string spec(argv[index]);
+            std::string approved(argv[index]);
+            const bool removal =
+                approved.rfind("remove:", 0U) == 0U;
+            const std::string spec =
+                removal ? approved.substr(7U) : approved;
+
             if (!safe_package_spec(spec) ||
                 spec.find('=') == std::string::npos) {
                 std::fprintf(
@@ -307,13 +312,18 @@ int main(int argc, char **argv)
                     argv[index]);
                 return 64;
             }
+            if (legacy_upgrade && removal) {
+                std::fprintf(
+                    stderr,
+                    "The legacy upgrade entry point cannot remove packages.\n");
+                return 64;
+            }
 
             /*
              * The legacy entry point remains upgrade-only for compatibility
-             * with older Software clients. apply-plan is different: the GUI
-             * has already resolved the complete install/upgrade dependency
-             * graph, so new packages are expected and every package arrives
-             * here with an exact approved version.
+             * with older Software clients. apply-plan accepts the exact
+             * install/upgrade/removal set already resolved by the native
+             * planner.
              */
             if (legacy_upgrade && !installed_package(spec)) {
                 std::fprintf(
@@ -323,16 +333,28 @@ int main(int argc, char **argv)
                     argv[index]);
                 return 65;
             }
-            approved_specs.push_back(spec);
-            arguments.push_back(spec);
+
+            approved_specs.push_back(approved);
+            if (removal) {
+                has_removal = true;
+                const std::size_t equals = spec.find('=');
+                arguments.push_back(spec.substr(0U, equals) + "-");
+            } else {
+                arguments.push_back(spec);
+            }
+        }
+
+        if (!has_removal) {
+            arguments.insert(arguments.begin() + 1, "--no-remove");
         }
 
         /*
          * Refresh root-owned metadata only after the user has reviewed the
          * complete plan and PolicyKit has authorized this exact execution.
-         * Every planned package is pinned to the reviewed version. Removal is
-         * prohibited and implicit Recommends/Suggests are disabled so APT
-         * cannot silently broaden the approved native dependency plan.
+         * Every planned package mutation is explicit. Installs/upgrades are
+         * pinned to the reviewed version; approved removals are named
+         * explicitly. Recommends/Suggests are disabled so APT cannot silently
+         * broaden the native plan.
          */
         const int refresh_status = run_apt({"update"});
         if (refresh_status != 0) {
@@ -375,6 +397,6 @@ int main(int argc, char **argv)
     std::fprintf(
         stderr,
         "Usage: infiltrator-software-update-helper "
-        "apply-plan PACKAGE=VERSION...\n");
+        "apply-plan [remove:]PACKAGE=VERSION...\n");
     return 64;
 }
