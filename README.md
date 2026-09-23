@@ -6,7 +6,7 @@
 
 Infiltrator Software is the software-management application for the Infiltrator project family. It presents software discovery, installation, removal, updates, system components, repositories, release channels, history and repair as one coherent graphical product.
 
-**Current source version:** 0.3.12  
+**Current source version:** 0.3.13  
 **Language:** C++17 application/core with native GTK4 Linux shell; C11 Common foundation  
 **Shared foundation:** Common 1.19.24  
 **Current package compatibility:** Debian repositories and .deb packages; Flatpak and AppStream catalogue integration  
@@ -40,10 +40,10 @@ The primary navigation contract is:
 
 - **Discover** — merged catalogue of verified Infiltrator applications, host AppStream applications and configured Flatpak sources.
 - **Installed** — installed applications and components with versions, source, size and state.
-- **Updates** — available application, library, kernel and system updates with complete preflight planning before authorization.
+- **Updates** — available application, library, kernel and system updates with per-package/subset selection and complete preflight planning before authorization.
 - **System** — kernels, drivers and core operating-system components.
 - **Repositories** — Debian/Infiltrator sources, Flatpak remotes, channels, trust and health.
-- **History** — durable transaction history with before/after versions and outcomes.
+- **History** — planned durable transaction history with before/after versions and outcomes; the current page remains a milestone placeholder.
 - **Repair** — diagnostics and guided recovery for package, repository and interrupted-transaction problems.
 
 Advanced technical information remains available through GUI details views with copyable diagnostics; it is not exposed by forcing the user into a shell.
@@ -148,11 +148,13 @@ See [UI Design](docs/UI_DESIGN.md).
 
 The first client cutover is now implemented: Installed, ordinary Updates inventory and native update planning use the shared D-Bus engine when a published generation is available, while the panel indicator subscribes to engine state/health changes instead of owning a second resolver. The direct Debian installed-state reader remains a no-process fallback, and explicit repository refresh/update inventory retains the 0.3 compatibility path until native reconciliation publishes complete source state.
 
-Discover installation is now operational. Selecting Install resolves a complete native transaction when shared state is available, falls back to the transitional APT planner when necessary, shows every resolved package change before authorization, and executes the exact approved package/version set through the constrained privileged helper. The same exact-plan execution path is now used by Updates.
+Discover install, update and removal workflows are now operational. Install/update resolves a complete native transaction when shared state is available, with the transitional APT planner retained only as a compatibility fallback for those non-removal operations. Removal is native-only: installed dependency/provides/Essential metadata is preserved in the shared generation, reverse dependencies are checked before authorization, and Essential-package removal fails closed. Every operation shows the complete resolved change set before authorization and executes only the exact approved mutations through the constrained privileged helper.
 
-0.3.11 hardens that compatibility boundary. After administrator authorization and the root-owned metadata refresh, Software performs a second non-mutating APT simulation and requires its install/upgrade set to match the approved package identities, architectures and exact versions one-for-one. Any new dependency, missing change, removal or architecture drift aborts before package mutation.
+Updates now supports per-package and arbitrary subset selection as well as all-updates operation. The same native preflight planner resolves the selected roots and all required dependency changes before authorization.
 
-The next 0.4 slice is the native reconciliation publisher that turns configured repository sources plus installed dpkg state into the shared generation automatically. Once that owns refresh end to end, the remaining APT compatibility inventory paths can be deleted rather than merely bypassed.
+The privileged compatibility boundary re-simulates the approved exact operation set after its root-owned metadata refresh. Installs/upgrades must retain their approved package identities, architectures and exact versions; approved removals must retain their exact installed versions. Any added, missing or changed mutation aborts before package mutation.
+
+Native reconciliation now turns configured repository sources plus installed dpkg state into coherent shared generations through the engine refresh path. The remaining compatibility layer is an execution boundary rather than an inventory/resolution architecture.
 
 The 0.4 design is documented before implementation so code cannot accidentally preserve the startup and coupling problems exposed by 0.3.
 
