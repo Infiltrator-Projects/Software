@@ -136,6 +136,8 @@ add_library(software-engine STATIC
     src/engine/debian_candidate.cpp
     src/engine/debian_dependency.cpp
     src/engine/debian_repository.cpp
+    src/engine/debian_source_configuration.cpp
+    src/engine/debian_reconcile.cpp
     src/engine/package_state_store.cpp
     src/engine/debian_transaction.cpp
     src/engine/engine_service_core.cpp)
@@ -299,6 +301,13 @@ if(BUILD_TESTING)
     add_test(
         NAME software-debian-repository-test
         COMMAND software-debian-repository-test)
+
+    add_executable(software-debian-source-configuration-test
+        tests/debian_source_configuration_test.cpp)
+    target_link_libraries(software-debian-source-configuration-test PRIVATE software-engine)
+    add_test(
+        NAME software-debian-source-configuration-test
+        COMMAND software-debian-source-configuration-test)
 
     add_executable(software-package-state-test
         tests/package_state_store_test.cpp)
