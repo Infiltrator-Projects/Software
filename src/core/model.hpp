@@ -40,6 +40,12 @@ struct PackageRecord {
     InstallState state{InstallState::not_installed};
     std::uint64_t installed_size_bytes{0};
     std::uint64_t download_size_bytes{0};
+    std::string depends;
+    std::string pre_depends;
+    std::string provides;
+    std::string priority;
+    std::string multi_arch;
+    bool essential{false};
     bool system_critical{false};
 };
 
