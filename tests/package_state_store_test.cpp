@@ -35,6 +35,12 @@ infiltrator::software::PackageRecord installed(
     package.available_version = version;
     package.installed_size_bytes = 4096U;
     package.source = "Debian";
+    package.depends = "libcore (>= 1.0)";
+    package.pre_depends = "init-base";
+    package.provides = "virtual-" + name + " (= " + version + ")";
+    package.priority = "optional";
+    package.multi_arch = "same";
+    package.essential = name == "alpha";
     package.state = InstallState::installed;
     return package;
 }
@@ -92,6 +98,12 @@ int main()
     assert(first->source_fingerprint == "fixture-a");
     assert(first->installed.size() == 1U);
     assert(first->available.size() == 1U);
+    assert(first->installed[0].depends == "libcore (>= 1.0)");
+    assert(first->installed[0].pre_depends == "init-base");
+    assert(first->installed[0].provides == "virtual-alpha (= 1.0)");
+    assert(first->installed[0].priority == "optional");
+    assert(first->installed[0].multi_arch == "same");
+    assert(first->installed[0].essential);
 
     assert(store.publish(
         {installed("alpha", "1.1"),
