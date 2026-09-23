@@ -17,6 +17,7 @@ struct DebianRepositorySource {
     std::string suite;
     std::vector<std::string> components;
     std::vector<std::string> keyrings;
+    std::vector<std::string> architectures;
     bool verify_signatures{true};
 };
 
