@@ -88,6 +88,8 @@ The privileged executor does not accept database rows as implicit authority; it 
 
 The native engine now has a PackageStateStore that publishes installed and repository package state as immutable SQLite generations. Publication uses a single immediate transaction: generation rows, installed records, repository records and the current-generation pointer commit together or not at all. The current and immediately previous generations are retained so readers never need to observe a partially written refresh and a failed publish leaves the previous generation intact.
 
+Schema version 2 retains installed Depends, Pre-Depends, Provides, Priority, Multi-Arch and Essential metadata alongside installed identity/version/size. This relationship state is derived from authoritative dpkg status and is required for native reverse-dependency checks before package removal. Existing version-1 derived databases migrate in place; as derived state they remain rebuildable from authoritative inputs.
+
 
 ## Externally installed first-party native builds
 
