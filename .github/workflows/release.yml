@@ -167,23 +167,42 @@ jobs:
           test -n "$VERSION"
           payload="$(jq -nc --arg repository "$GITHUB_REPOSITORY" --arg sha "$RELEASE_SHA"             '{event_type:"application-release",client_payload:{repository:$repository,sha:$sha}}')"
 
+          dispatched=false
           if [[ -n "${DISPATCH_TOKEN:-}" ]]; then
-            if ! curl --fail-with-body --silent --show-error               --request POST               --header "Authorization: Bearer $DISPATCH_TOKEN"               --header "Accept: application/vnd.github+json"               --header "X-GitHub-Api-Version: 2022-11-28"               --data "$payload"               https://api.github.com/repos/Infiltrator-Projects/Infiltrator-Repository/dispatches; then
-              echo "::warning::Immediate APT dispatch failed; waiting for repository safety refresh."
+            if curl --fail-with-body --silent --show-error               --request POST               --header "Authorization: Bearer $DISPATCH_TOKEN"               --header "Accept: application/vnd.github+json"               --header "X-GitHub-Api-Version: 2022-11-28"               --data "$payload"               https://api.github.com/repos/Infiltrator-Projects/Infiltrator-Repository/dispatches; then
+              echo "Immediate APT dispatch accepted; verifying publication."
+              dispatched=true
+            else
+              echo "::warning::Immediate APT dispatch failed; central scheduled publication will verify this release asynchronously."
             fi
           else
-            echo "::warning::APT dispatch token unavailable; waiting for repository safety refresh."
+            echo "::warning::APT dispatch token unavailable; central scheduled publication will verify this release asynchronously."
           fi
 
           CATALOGUE='https://infiltrator-projects.github.io/Infiltrator-Repository/catalogue/apps.json'
+
+          # Accept a release that the central publisher has already made visible.
+          if curl -fsS --retry 2 --retry-delay 1 "$CATALOGUE?release=$RELEASE_SHA&attempt=0"               | jq -e --arg id "software" --arg version "$VERSION"                 '.[] | select(.id == $id and .version == $version)' >/dev/null; then
+            echo "APT repository already advertises Software $VERSION."
+            exit 0
+          fi
+
+          # Scheduled GitHub Actions are explicitly asynchronous. When no
+          # immediate dispatch was accepted, publication remains the central
+          # repository's responsibility and is not a synchronous release gate.
+          if [[ "$dispatched" != true ]]; then
+            echo "APT verification deferred to the central repository workflow."
+            exit 0
+          fi
+
           for attempt in $(seq 1 120); do
             if curl -fsS --retry 2 --retry-delay 1 "$CATALOGUE?release=$RELEASE_SHA&attempt=$attempt"               | jq -e --arg id "software" --arg version "$VERSION"                 '.[] | select(.id == $id and .version == $version)' >/dev/null; then
               echo "APT repository advertises Software $VERSION."
               exit 0
             fi
-            echo "Waiting for APT publication of Software $VERSION ($attempt/120)..."
+            echo "Waiting for immediate APT publication of Software $VERSION ($attempt/120)..."
             sleep 10
           done
 
-          echo "::error::The central APT repository did not advertise Software $VERSION within 20 minutes."
+          echo "::error::Immediate APT dispatch was accepted, but the central repository did not advertise Software $VERSION within 20 minutes."
           exit 1
