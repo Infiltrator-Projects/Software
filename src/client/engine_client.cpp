@@ -20,6 +20,7 @@ constexpr const char *kInterfaceName =
     "net.ssmith.infiltrator.software.Engine";
 constexpr int kInventoryCallTimeoutMs = 750;
 constexpr int kControlCallTimeoutMs = 5000;
+constexpr int kRefreshCallTimeoutMs = 125000;
 
 std::string consume_error(GError *error)
 {
@@ -410,6 +411,23 @@ bool EngineClient::reload(std::string &error) const
             nullptr,
             G_VARIANT_TYPE("(a{sv})"),
             kControlCallTimeoutMs,
+            error);
+    if (reply == nullptr) {
+        return false;
+    }
+    g_variant_unref(reply);
+    error.clear();
+    return true;
+}
+
+bool EngineClient::refresh(std::string &error) const
+{
+    GVariant *reply =
+        call_engine(
+            "RefreshState",
+            nullptr,
+            G_VARIANT_TYPE("(a{sv})"),
+            kRefreshCallTimeoutMs,
             error);
     if (reply == nullptr) {
         return false;
