@@ -41,6 +41,24 @@ int main()
         error));
     assert(error.find("remove") != std::string::npos);
 
+    assert(validate_apt_simulation(
+        {"remove:old=1.0"},
+        "Remv old [1.0]\n",
+        error));
+    assert(error.empty());
+
+    assert(validate_apt_simulation(
+        {"remove:old=1.0", "app:amd64=2.0"},
+        "Remv old [1.0]\n"
+        "Inst app [1.0] (2.0 stable [amd64])\n",
+        error));
+    assert(error.empty());
+
+    assert(!validate_apt_simulation(
+        {"remove:old=1.0"},
+        "Remv old [1.1]\n",
+        error));
+
     assert(!validate_apt_simulation(
         {"app:arm64=2.0"},
         "Inst app [1.0] (2.0 stable [amd64])\n",
