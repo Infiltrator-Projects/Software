@@ -14,6 +14,7 @@ struct ExactPackage {
     std::string name;
     std::string architecture;
     std::string version;
+    bool remove{false};
 };
 
 std::string_view trim(std::string_view value)
@@ -53,17 +54,22 @@ bool split_identity(
 
 bool parse_exact_spec(const std::string_view spec, ExactPackage &package)
 {
-    const std::size_t equals = spec.find('=');
+    std::string_view value = spec;
+    if (value.rfind("remove:", 0U) == 0U) {
+        package.remove = true;
+        value.remove_prefix(7U);
+    }
+    const std::size_t equals = value.find('=');
     if (equals == std::string_view::npos || equals == 0U ||
-        equals + 1U >= spec.size() ||
-        spec.find('=', equals + 1U) != std::string_view::npos) {
+        equals + 1U >= value.size() ||
+        value.find('=', equals + 1U) != std::string_view::npos) {
         return false;
     }
     if (!split_identity(
-            spec.substr(0U, equals), package.name, package.architecture)) {
+            value.substr(0U, equals), package.name, package.architecture)) {
         return false;
     }
-    package.version.assign(spec.substr(equals + 1U));
+    package.version.assign(value.substr(equals + 1U));
     return !package.version.empty();
 }
 
@@ -116,9 +122,43 @@ bool parse_install_line(const std::string_view line, ExactPackage &package)
     return true;
 }
 
+bool parse_remove_line(const std::string_view line, ExactPackage &package)
+{
+    constexpr std::string_view prefix = "Remv ";
+    if (line.rfind(prefix, 0U) != 0U) return false;
+
+    const std::size_t identity_start = prefix.size();
+    const std::size_t identity_end = line.find(' ', identity_start);
+    if (identity_end == std::string_view::npos ||
+        identity_end <= identity_start ||
+        !split_identity(
+            line.substr(identity_start, identity_end - identity_start),
+            package.name, package.architecture)) {
+        return false;
+    }
+
+    const std::size_t version_open = line.find('[', identity_end);
+    const std::size_t version_close =
+        version_open == std::string_view::npos
+            ? std::string_view::npos
+            : line.find(']', version_open + 1U);
+    if (version_open == std::string_view::npos ||
+        version_close == std::string_view::npos ||
+        version_close <= version_open + 1U) {
+        return false;
+    }
+    package.version.assign(
+        trim(line.substr(
+            version_open + 1U,
+            version_close - version_open - 1U)));
+    package.remove = true;
+    return !package.version.empty();
+}
+
 bool compatible(const ExactPackage &approved, const ExactPackage &actual)
 {
-    if (approved.name != actual.name ||
+    if (approved.remove != actual.remove ||
+        approved.name != actual.name ||
         approved.version != actual.version) {
         return false;
     }
@@ -128,7 +168,8 @@ bool compatible(const ExactPackage &approved, const ExactPackage &actual)
 
 std::string render(const ExactPackage &package)
 {
-    std::string result = package.name;
+    std::string result = package.remove ? "remove:" : "";
+    result += package.name;
     if (!package.architecture.empty()) result += ":" + package.architecture;
     result += "=" + package.version;
     return result;
@@ -178,11 +219,15 @@ bool validate_apt_simulation(
                 : end - start));
 
         if (line.rfind("Remv ", 0U) == 0U) {
-            error =
-                "Post-refresh APT simulation would remove a package; the approved plan is invalid.";
-            return false;
-        }
-        if (line.rfind("Inst ", 0U) == 0U) {
+            ExactPackage package;
+            if (!parse_remove_line(line, package)) {
+                error =
+                    "Unable to parse post-refresh APT removal line: " +
+                    std::string(line) + ".";
+                return false;
+            }
+            actual.emplace_back(std::move(package));
+        } else if (line.rfind("Inst ", 0U) == 0U) {
             ExactPackage package;
             if (!parse_install_line(line, package)) {
                 error =
