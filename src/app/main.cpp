@@ -87,6 +87,7 @@ struct WindowState {
     GtkWidget *updates_refresh{};
     GtkWidget *updates_backend{};
     std::vector<PackageRecord> update_records;
+    std::unordered_set<std::string> selected_update_ids;
     std::optional<TransactionPlan> pending_update_plan;
     unsigned int updates_generation{0U};
     bool updates_busy{false};
@@ -349,13 +350,26 @@ bool exact_plan_specs(
     }
     specs.reserve(plan.items.size());
     for (const auto &item : plan.items) {
-        if (item.action == TransactionAction::remove) {
+        if (item.package_id.empty()) {
             error =
-                "Package removal is not enabled in the compatibility executor.";
+                "The resolved transaction contains a package without a stable "
+                "identity.";
             specs.clear();
             return false;
         }
-        if (item.package_id.empty() || item.to_version.empty()) {
+        if (item.action == TransactionAction::remove) {
+            if (item.from_version.empty()) {
+                error =
+                    "The resolved removal contains a package without its exact "
+                    "installed version.";
+                specs.clear();
+                return false;
+            }
+            specs.emplace_back(
+                "remove:" + item.package_id + "=" + item.from_version);
+            continue;
+        }
+        if (item.to_version.empty()) {
             error =
                 "The resolved transaction contains a package without an exact "
                 "target version.";
@@ -573,35 +587,38 @@ void discover_details_clicked(GtkButton *button, gpointer user_data)
 
     GtkWidget *note = make_label(
         package_installed
-            ? "This package is already installed."
+            ? "Removal is checked against installed reverse dependencies and "
+              "the complete change set is shown before authorization."
             : "The complete dependency and system change set will be resolved "
               "and shown before administrator authorization is requested.",
         "detail-note");
     gtk_label_set_wrap(GTK_LABEL(note), true);
     gtk_box_append(GTK_BOX(outer), note);
 
-    if (!package_installed) {
-        GtkWidget *actions =
-            gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
-        GtkWidget *install = gtk_button_new_with_label(
-            package_upgradable ? "Update" : "Install");
-        gtk_widget_add_css_class(install, "suggested-action");
-        g_object_set_data_full(
-            G_OBJECT(install),
-            "discover-install-record",
-            new PackageRecord(*record),
-            package_record_destroy);
-        g_object_set_data_full(
-            G_OBJECT(install),
-            "discover-install-status",
-            g_object_ref(note),
-            g_object_unref);
-        g_signal_connect(
-            install, "clicked",
-            G_CALLBACK(discover_install_clicked), state);
-        gtk_box_append(GTK_BOX(actions), install);
-        gtk_box_append(GTK_BOX(outer), actions);
-    }
+    GtkWidget *actions =
+        gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+    GtkWidget *install = gtk_button_new_with_label(
+        package_installed
+            ? "Remove"
+            : (package_upgradable ? "Update" : "Install"));
+    gtk_widget_add_css_class(
+        install,
+        package_installed ? "destructive-action" : "suggested-action");
+    g_object_set_data_full(
+        G_OBJECT(install),
+        "discover-install-record",
+        new PackageRecord(*record),
+        package_record_destroy);
+    g_object_set_data_full(
+        G_OBJECT(install),
+        "discover-install-status",
+        g_object_ref(note),
+        g_object_unref);
+    g_signal_connect(
+        install, "clicked",
+        G_CALLBACK(discover_install_clicked), state);
+    gtk_box_append(GTK_BOX(actions), install);
+    gtk_box_append(GTK_BOX(outer), actions);
 
     gtk_window_present(GTK_WINDOW(dialog));
 }
@@ -1968,7 +1985,7 @@ void discover_plan_worker(
     auto *result = new DiscoverPlanResult{};
 
     if (data == nullptr || data->package_id.empty()) {
-        result->error = "No package was selected for installation.";
+        result->error = "No package was selected for the transaction.";
     } else {
         infiltrator::software::TransactionRequest request;
         request.action = data->action;
@@ -1979,6 +1996,9 @@ void discover_plan_worker(
         result->plan = engine.plan(request, engine_error);
         if (result->plan.has_value()) {
             result->from_engine = true;
+        } else if (data->action == TransactionAction::remove) {
+            result->error =
+                "Native removal planner: " + one_line(engine_error);
         } else {
             std::string fallback_error;
             AptBackend fallback;
@@ -2026,14 +2046,18 @@ void discover_install_process_complete(
         if (success) {
             gtk_label_set_text(
                 GTK_LABEL(operation->status),
-                operation->action == TransactionAction::upgrade
-                    ? "Update complete. Refreshing software state…"
-                    : "Installation complete. Refreshing software state…");
+                operation->action == TransactionAction::remove
+                    ? "Removal complete. Refreshing software state…"
+                    : operation->action == TransactionAction::upgrade
+                        ? "Update complete. Refreshing software state…"
+                        : "Installation complete. Refreshing software state…");
         } else {
             std::string message =
-                operation->action == TransactionAction::upgrade
-                    ? "Unable to update package."
-                    : "Unable to install package.";
+                operation->action == TransactionAction::remove
+                    ? "Unable to remove package."
+                    : operation->action == TransactionAction::upgrade
+                        ? "Unable to update package."
+                        : "Unable to install package.";
             if (error != nullptr && error->message != nullptr) {
                 message += " ";
                 message += error->message;
@@ -2052,9 +2076,11 @@ void discover_install_process_complete(
         if (success) {
             gtk_button_set_label(
                 GTK_BUTTON(operation->button),
-                operation->action == TransactionAction::upgrade
-                    ? "Updated"
-                    : "Installed");
+                operation->action == TransactionAction::remove
+                    ? "Removed"
+                    : operation->action == TransactionAction::upgrade
+                        ? "Updated"
+                        : "Installed");
             gtk_widget_set_sensitive(operation->button, false);
         } else {
             gtk_widget_set_sensitive(operation->button, true);
@@ -2123,7 +2149,12 @@ void start_discover_install_operation(
         &error);
 
     if (process == nullptr) {
-        std::string message = "Unable to start package installation.";
+        std::string message =
+            operation->action == TransactionAction::remove
+                ? "Unable to start package removal."
+                : operation->action == TransactionAction::upgrade
+                    ? "Unable to start package update."
+                    : "Unable to start package installation.";
         if (error != nullptr && error->message != nullptr) {
             message += " ";
             message += error->message;
@@ -2171,7 +2202,11 @@ void discover_install_confirm_response(
     if (operation->status != nullptr) {
         gtk_label_set_text(
             GTK_LABEL(operation->status),
-            "Installation cancelled.");
+            operation->action == TransactionAction::remove
+                ? "Removal cancelled."
+                : operation->action == TransactionAction::upgrade
+                    ? "Update cancelled."
+                    : "Installation cancelled.");
     }
     if (operation->button != nullptr) {
         gtk_widget_set_sensitive(operation->button, true);
@@ -2207,7 +2242,7 @@ void discover_plan_complete(
 
     if (result == nullptr || !result->plan.has_value() ||
         state == nullptr || record == nullptr || task_data == nullptr) {
-        std::string message = "Unable to resolve installation transaction.";
+        std::string message = "Unable to resolve software transaction.";
         if (result != nullptr && !result->error.empty()) {
             message += " ";
             message += one_line(result->error);
@@ -2237,9 +2272,11 @@ void discover_plan_complete(
     delete result;
 
     const std::string heading =
-        task_data->action == TransactionAction::upgrade
-            ? "Review the complete update transaction for " + record->name
-            : "Review the complete installation transaction for " + record->name;
+        task_data->action == TransactionAction::remove
+            ? "Review the complete removal transaction for " + record->name
+            : task_data->action == TransactionAction::upgrade
+                ? "Review the complete update transaction for " + record->name
+                : "Review the complete installation transaction for " + record->name;
 
     auto *operation = new DiscoverInstallOperation{};
     operation->main_window =
@@ -2253,11 +2290,15 @@ void discover_plan_complete(
     GtkWidget *dialog =
         make_transaction_confirmation_dialog(
             parent,
-            task_data->action == TransactionAction::upgrade
-                ? "Review update" : "Review installation",
+            task_data->action == TransactionAction::remove
+                ? "Review removal"
+                : task_data->action == TransactionAction::upgrade
+                    ? "Review update" : "Review installation",
             heading,
-            task_data->action == TransactionAction::upgrade
-                ? "Update" : "Install",
+            task_data->action == TransactionAction::remove
+                ? "Remove"
+                : task_data->action == TransactionAction::upgrade
+                    ? "Update" : "Install",
             plan,
             from_engine);
     g_signal_connect(
@@ -2285,17 +2326,21 @@ void discover_install_clicked(
     }
 
     const TransactionAction action =
-        record->state == infiltrator::software::InstallState::upgradable
-            ? TransactionAction::upgrade
-            : TransactionAction::install;
+        record->state == infiltrator::software::InstallState::installed
+            ? TransactionAction::remove
+            : record->state == infiltrator::software::InstallState::upgradable
+                ? TransactionAction::upgrade
+                : TransactionAction::install;
 
     gtk_widget_set_sensitive(GTK_WIDGET(button), false);
     if (status != nullptr) {
         gtk_label_set_text(
             GTK_LABEL(status),
-            action == TransactionAction::upgrade
-                ? "Resolving the complete update transaction…"
-                : "Resolving the complete installation transaction…");
+            action == TransactionAction::remove
+                ? "Checking reverse dependencies and resolving removal…"
+                : action == TransactionAction::upgrade
+                    ? "Resolving the complete update transaction…"
+                    : "Resolving the complete installation transaction…");
     }
 
     auto *data = new DiscoverPlanTaskData{};
