@@ -15,6 +15,11 @@ int main()
         "architecture: amd64\n"
         "Version: 1:2.3-4\n"
         "Installed-Size: 123\n"
+        "Depends: libcore (>= 2.0), helper | alternate\n"
+        "Pre-Depends: init-base\n"
+        "Provides: virtual-alpha (= 1:2.3-4)\n"
+        "Priority: required\n"
+        "Essential: yes\n"
         "Description: Alpha package\n"
         " continued description\n"
         "\n"
@@ -56,6 +61,11 @@ int main()
     assert(packages[0].available_version == "1:2.3-4");
     assert(packages[0].installed_size_bytes == 123U * 1024U);
     assert(packages[0].source == "Debian");
+    assert(packages[0].depends == "libcore (>= 2.0), helper | alternate");
+    assert(packages[0].pre_depends == "init-base");
+    assert(packages[0].provides == "virtual-alpha (= 1:2.3-4)");
+    assert(packages[0].priority == "required");
+    assert(packages[0].essential);
     assert(packages[0].state == InstallState::installed);
 
     assert(packages[1].id == "held-package");
