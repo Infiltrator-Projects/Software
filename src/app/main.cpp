@@ -3145,12 +3145,17 @@ void update_plan_complete(
 
     state->pending_update_plan = plan;
 
+    const std::size_t requested_count =
+        static_cast<std::size_t>(std::count_if(
+            plan.items.begin(),
+            plan.items.end(),
+            [](const infiltrator::software::TransactionItem &item) {
+                return item.requested;
+            }));
     std::ostringstream heading;
-    const std::size_t selected_count =
-        state->selected_update_ids.size();
     heading << "Install "
-            << selected_count
-            << (selected_count == 1U
+            << requested_count
+            << (requested_count == 1U
                     ? " selected software update?"
                     : " selected software updates?");
 
@@ -3166,6 +3171,30 @@ void update_plan_complete(
         dialog, "response",
         G_CALLBACK(update_confirm_response), state);
     gtk_window_present(GTK_WINDOW(dialog));
+}
+
+void updates_select_all_clicked(GtkButton *, gpointer user_data)
+{
+    auto *state = static_cast<WindowState *>(user_data);
+    if (state == nullptr || state->updates_busy) return;
+
+    state->selected_update_ids.clear();
+    for (const PackageRecord &package : state->update_records) {
+        const std::string identity = update_identity(package);
+        if (!identity.empty()) state->selected_update_ids.insert(identity);
+    }
+    rebuild_updates(state);
+    update_selection_controls(state);
+}
+
+void updates_clear_selection_clicked(GtkButton *, gpointer user_data)
+{
+    auto *state = static_cast<WindowState *>(user_data);
+    if (state == nullptr || state->updates_busy) return;
+
+    state->selected_update_ids.clear();
+    rebuild_updates(state);
+    update_selection_controls(state);
 }
 
 void update_install_clicked(GtkButton *, gpointer user_data)
@@ -3259,6 +3288,22 @@ GtkWidget *make_updates_page(WindowState *state)
     gtk_label_set_wrap(GTK_LABEL(state->updates_status), true);
     gtk_widget_set_hexpand(state->updates_status, true);
     gtk_box_append(GTK_BOX(controls), state->updates_status);
+
+    GtkWidget *select_all =
+        gtk_button_new_with_label("Select all");
+    gtk_widget_add_css_class(select_all, "discover-details");
+    g_signal_connect(
+        select_all, "clicked",
+        G_CALLBACK(updates_select_all_clicked), state);
+    gtk_box_append(GTK_BOX(controls), select_all);
+
+    GtkWidget *clear_selection =
+        gtk_button_new_with_label("Clear");
+    gtk_widget_add_css_class(clear_selection, "discover-details");
+    g_signal_connect(
+        clear_selection, "clicked",
+        G_CALLBACK(updates_clear_selection_clicked), state);
+    gtk_box_append(GTK_BOX(controls), clear_selection);
 
     state->updates_refresh =
         gtk_button_new_with_label("Refresh package lists");
