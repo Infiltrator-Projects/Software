@@ -3,8 +3,11 @@
 
 #include <gio/gio.h>
 
+#include <cerrno>
+#include <csignal>
 #include <cstdint>
 #include <string>
+#include <unistd.h>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -21,6 +24,9 @@ constexpr const char *kInterfaceName =
 constexpr int kInventoryCallTimeoutMs = 750;
 constexpr int kControlCallTimeoutMs = 5000;
 constexpr int kRefreshCallTimeoutMs = 125000;
+constexpr guint32 kRefreshApiVersion = 2U;
+constexpr guint kEngineRestartAttempts = 40U;
+constexpr gulong kEngineRestartDelayUs = 50000U;
 
 std::string consume_error(GError *error)
 {
@@ -77,6 +83,198 @@ GVariant *call_engine(
         return nullptr;
     }
     return reply;
+}
+
+bool engine_api_version(
+    guint32 &version,
+    std::string &error)
+{
+    version = 0U;
+    GVariant *reply =
+        call_engine(
+            "GetStatus",
+            nullptr,
+            G_VARIANT_TYPE("(a{sv})"),
+            kControlCallTimeoutMs,
+            error);
+    if (reply == nullptr) {
+        return false;
+    }
+
+    GVariant *dictionary = nullptr;
+    g_variant_get(reply, "(@a{sv})", &dictionary);
+    g_variant_unref(reply);
+    if (dictionary == nullptr) {
+        error =
+            "Package engine returned an invalid status reply.";
+        return false;
+    }
+
+    const gboolean found =
+        g_variant_lookup(
+            dictionary,
+            "api-version",
+            "u",
+            &version);
+    g_variant_unref(dictionary);
+    if (!found || version == 0U) {
+        version = 0U;
+        error =
+            "Package engine did not report an API version.";
+        return false;
+    }
+
+    error.clear();
+    return true;
+}
+
+bool engine_owner_value(
+    const char *method,
+    guint32 &value,
+    std::string &error)
+{
+    value = 0U;
+    GError *gerror = nullptr;
+    GDBusConnection *connection =
+        g_bus_get_sync(
+            G_BUS_TYPE_SESSION,
+            nullptr,
+            &gerror);
+    if (connection == nullptr) {
+        error = consume_error(gerror);
+        return false;
+    }
+
+    GVariant *reply =
+        g_dbus_connection_call_sync(
+            connection,
+            "org.freedesktop.DBus",
+            "/org/freedesktop/DBus",
+            "org.freedesktop.DBus",
+            method,
+            g_variant_new("(s)", kBusName),
+            G_VARIANT_TYPE("(u)"),
+            G_DBUS_CALL_FLAGS_NONE,
+            kControlCallTimeoutMs,
+            nullptr,
+            &gerror);
+    g_object_unref(connection);
+    if (reply == nullptr) {
+        error = consume_error(gerror);
+        return false;
+    }
+
+    g_variant_get(reply, "(u)", &value);
+    g_variant_unref(reply);
+    error.clear();
+    return true;
+}
+
+bool wait_for_engine_api(
+    const guint32 required_version,
+    std::string &error)
+{
+    for (guint attempt = 0U;
+         attempt < kEngineRestartAttempts;
+         ++attempt) {
+        guint32 version = 0U;
+        std::string probe_error;
+        if (engine_api_version(version, probe_error) &&
+            version >= required_version) {
+            error.clear();
+            return true;
+        }
+
+        if (attempt + 1U < kEngineRestartAttempts) {
+            g_usleep(kEngineRestartDelayUs);
+        }
+    }
+
+    error =
+        "Package engine did not restart with API version " +
+        std::to_string(required_version) + ".";
+    return false;
+}
+
+bool recycle_engine_service(
+    const guint32 required_version,
+    std::string &error)
+{
+    /*
+     * D-Bus activation does not replace an already running per-user service
+     * when a package upgrade installs a newer engine binary. Ask newer
+     * engines to quit cleanly. Pre-v2 engines have no Quit method, so verify
+     * the bus owner's uid before terminating that same-user stale process.
+     */
+    std::string quit_error;
+    GVariant *quit_reply =
+        call_engine(
+            "Quit",
+            nullptr,
+            G_VARIANT_TYPE("()"),
+            kControlCallTimeoutMs,
+            quit_error);
+    if (quit_reply != nullptr) {
+        g_variant_unref(quit_reply);
+        return wait_for_engine_api(
+            required_version, error);
+    }
+
+    guint32 owner_uid = 0U;
+    if (!engine_owner_value(
+            "GetConnectionUnixUser",
+            owner_uid,
+            error)) {
+        return false;
+    }
+    if (owner_uid != static_cast<guint32>(getuid())) {
+        error =
+            "Refusing to restart a package engine owned by another user.";
+        return false;
+    }
+
+    guint32 owner_pid = 0U;
+    if (!engine_owner_value(
+            "GetConnectionUnixProcessID",
+            owner_pid,
+            error)) {
+        return false;
+    }
+    if (owner_pid == 0U ||
+        owner_pid == static_cast<guint32>(getpid())) {
+        error =
+            "Package engine reported an invalid process identity.";
+        return false;
+    }
+
+    if (::kill(
+            static_cast<pid_t>(owner_pid),
+            SIGTERM) != 0 &&
+        errno != ESRCH) {
+        error =
+            "Unable to stop the stale package engine process.";
+        return false;
+    }
+
+    return wait_for_engine_api(
+        required_version, error);
+}
+
+bool ensure_engine_api_version(
+    const guint32 required_version,
+    std::string &error)
+{
+    guint32 version = 0U;
+    if (!engine_api_version(version, error)) {
+        return false;
+    }
+    if (version >= required_version) {
+        error.clear();
+        return true;
+    }
+
+    return recycle_engine_service(
+        required_version, error);
 }
 
 std::string lookup_string(
@@ -422,6 +620,11 @@ bool EngineClient::reload(std::string &error) const
 
 bool EngineClient::refresh(std::string &error) const
 {
+    if (!ensure_engine_api_version(
+            kRefreshApiVersion, error)) {
+        return false;
+    }
+
     GVariant *reply =
         call_engine(
             "RefreshState",
