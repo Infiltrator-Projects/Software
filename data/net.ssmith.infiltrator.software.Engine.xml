@@ -22,6 +22,7 @@
     <method name="RefreshState">
       <arg name="status" type="a{sv}" direction="out"/>
     </method>
+    <method name="Quit"/>
     <signal name="StateChanged">
       <arg name="generation" type="t"/>
     </signal>
