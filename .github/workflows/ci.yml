@@ -60,6 +60,7 @@ jobs:
 
           app = Path("src/app/main.cpp").read_text()
           backend = Path("src/backends/apt/apt_backend.cpp").read_text()
+          transaction = Path("src/engine/debian_transaction.cpp").read_text()
           helper = Path("src/helper/update_helper.cpp").read_text()
           guard = Path("src/helper/apt_plan_guard.cpp").read_text()
           update_policy_path = Path("data/net.ssmith.infiltrator.software.updates.policy")
@@ -67,7 +68,8 @@ jobs:
           policy = update_policy_path.read_text()
 
           assert "refresh_updates(state, true)" in app
-          assert "backend.refresh_metadata(result->error)" in app
+          assert "engine.refresh(result->error)" in app
+          assert "backend.refresh_metadata(result->error)" not in app
           assert '"refresh"}' not in app
           assert "AptBackend::refresh_metadata" in backend
           assert "Dir::State::lists=" in backend
@@ -80,8 +82,12 @@ jobs:
           assert "validate_apt_simulation" in helper
           assert 'simulation_arguments.insert(simulation_arguments.begin(), "-s")' in helper
           assert "introduced an unapproved change" in guard
-          assert "would remove a package" in guard
-          assert "Authentication is required to install or update system software." in policy
+          assert "parse_remove_line" in guard
+          assert '"remove:"' in guard
+          assert "approved.remove != actual.remove" in guard
+          assert "plan_removal(" in transaction
+          assert "Refusing to remove Essential package" in transaction
+          assert "Authentication is required to install, update or remove system software." in policy
 
           # Discover must remain an operational planned-install surface, not a
           # catalogue that permanently advertises an unavailable Install path.
