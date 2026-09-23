@@ -1,3 +1,16 @@
+infiltrator-software (0.3.12) unstable; urgency=medium
+
+  * Replace the repository engine's private exact-write loop with Common
+    1.19.24's equivalent EINTR-safe infiltratr_write_full contract.
+  * Preserve the exact approved APT transaction guard and document its
+    architecture and one-to-one mutation-set invariants.
+  * Treat central Infiltrator-Repository publication as asynchronous unless an
+    immediate cross-repository dispatch is actually accepted.
+  * Keep the current Common 1.19.24 pin and existing 0.3.11 transaction safety
+    behaviour unchanged.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Wed, 23 Sep 2026 14:10:00 +1000
+
 infiltrator-software (0.3.11) unstable; urgency=high
 
   * Re-pin Software to Common 1.19.24 at 748e089ae175329471d4cf375522c44081371bd5.
