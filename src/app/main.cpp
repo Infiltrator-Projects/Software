@@ -2401,7 +2401,62 @@ const char *update_icon_name(const PackageRecord &package)
     return "software-update-available-symbolic";
 }
 
-GtkWidget *make_update_row(const PackageRecord &package)
+std::string update_identity(const PackageRecord &package)
+{
+    return package.package_name.empty()
+        ? package.id
+        : package.package_name;
+}
+
+void update_selection_controls(WindowState *state)
+{
+    if (state == nullptr || state->updates_install == nullptr) {
+        return;
+    }
+
+    const std::size_t selected = state->selected_update_ids.size();
+    if (selected == 0U) {
+        gtk_button_set_label(
+            GTK_BUTTON(state->updates_install),
+            "Install selected updates");
+    } else if (selected == state->update_records.size()) {
+        gtk_button_set_label(
+            GTK_BUTTON(state->updates_install),
+            state->update_records.size() == 1U
+                ? "Install update"
+                : "Install all updates");
+    } else {
+        const std::string label =
+            "Install " + std::to_string(selected) + " selected";
+        gtk_button_set_label(
+            GTK_BUTTON(state->updates_install), label.c_str());
+    }
+
+    gtk_widget_set_sensitive(
+        state->updates_install,
+        !state->updates_busy && selected != 0U);
+}
+
+void update_selection_toggled(GtkCheckButton *button, gpointer user_data)
+{
+    auto *state = static_cast<WindowState *>(user_data);
+    const char *identity = static_cast<const char *>(
+        g_object_get_data(G_OBJECT(button), "update-identity"));
+    if (state == nullptr || identity == nullptr || *identity == '\0') {
+        return;
+    }
+
+    if (gtk_check_button_get_active(button)) {
+        state->selected_update_ids.insert(identity);
+    } else {
+        state->selected_update_ids.erase(identity);
+    }
+    update_selection_controls(state);
+}
+
+GtkWidget *make_update_row(
+    WindowState *state,
+    const PackageRecord &package)
 {
     GtkWidget *row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
     gtk_widget_add_css_class(row, "package-row");
@@ -2409,6 +2464,25 @@ GtkWidget *make_update_row(const PackageRecord &package)
     gtk_widget_set_margin_bottom(row, 6);
     gtk_widget_set_margin_start(row, 8);
     gtk_widget_set_margin_end(row, 8);
+
+    const std::string identity_key = update_identity(package);
+    GtkWidget *selected = gtk_check_button_new();
+    gtk_widget_set_tooltip_text(selected, "Include this package in the update");
+    gtk_widget_set_valign(selected, GTK_ALIGN_CENTER);
+    gtk_check_button_set_active(
+        GTK_CHECK_BUTTON(selected),
+        state != nullptr &&
+            state->selected_update_ids.find(identity_key) !=
+                state->selected_update_ids.end());
+    g_object_set_data_full(
+        G_OBJECT(selected),
+        "update-identity",
+        g_strdup(identity_key.c_str()),
+        g_free);
+    g_signal_connect(
+        selected, "toggled",
+        G_CALLBACK(update_selection_toggled), state);
+    gtk_box_append(GTK_BOX(row), selected);
 
     GtkWidget *icon = make_icon(update_icon_name(package), 24);
     gtk_widget_add_css_class(icon, "package-icon");
@@ -2474,7 +2548,7 @@ void rebuild_updates(WindowState *state)
         }
         GtkWidget *row = gtk_list_box_row_new();
         gtk_list_box_row_set_child(
-            GTK_LIST_BOX_ROW(row), make_update_row(package));
+            GTK_LIST_BOX_ROW(row), make_update_row(state, package));
         gtk_list_box_append(state->updates_list, row);
     }
 
@@ -2585,6 +2659,13 @@ void updates_complete(
     state->updates_busy = false;
     state->update_records = std::move(result->records);
     state->updates_from_engine = result->from_engine;
+    state->selected_update_ids.clear();
+    for (const PackageRecord &package : state->update_records) {
+        const std::string identity = update_identity(package);
+        if (!identity.empty()) {
+            state->selected_update_ids.insert(identity);
+        }
+    }
     const bool refreshed_metadata = result->refreshed_metadata;
     const bool from_engine = result->from_engine;
     const std::string error = result->error;
@@ -2650,9 +2731,11 @@ void updates_complete(
     }
 
     if (state->updates_install != nullptr) {
-        gtk_widget_set_sensitive(
-            state->updates_install,
-            error.empty() && !state->update_records.empty());
+        if (!error.empty()) {
+            gtk_widget_set_sensitive(state->updates_install, false);
+        } else {
+            update_selection_controls(state);
+        }
     }
     if (state->updates_refresh != nullptr) {
         gtk_widget_set_sensitive(state->updates_refresh, true);
@@ -2803,9 +2886,7 @@ void update_process_complete(
                     message.c_str());
             }
             if (state->updates_install != nullptr) {
-                gtk_widget_set_sensitive(
-                    state->updates_install,
-                    !state->update_records.empty());
+                update_selection_controls(state);
             }
             if (state->updates_refresh != nullptr) {
                 gtk_widget_set_sensitive(
@@ -2868,9 +2949,7 @@ void start_update_process(
                 state->updates_refresh, true);
         }
         if (state->updates_install != nullptr) {
-            gtk_widget_set_sensitive(
-                state->updates_install,
-                !state->update_records.empty());
+            update_selection_controls(state);
         }
         return;
     }
@@ -2917,9 +2996,7 @@ void begin_apply_updates(WindowState *state)
                 plan_error.c_str());
         }
         if (state->updates_install != nullptr) {
-            gtk_widget_set_sensitive(
-                state->updates_install,
-                !state->update_records.empty());
+            update_selection_controls(state);
         }
         if (state->updates_refresh != nullptr) {
             gtk_widget_set_sensitive(state->updates_refresh, true);
@@ -2979,9 +3056,7 @@ void update_confirm_response(
             "Update installation cancelled.");
     }
     if (state->updates_install != nullptr) {
-        gtk_widget_set_sensitive(
-            state->updates_install,
-            !state->update_records.empty());
+        update_selection_controls(state);
     }
     if (state->updates_refresh != nullptr) {
         gtk_widget_set_sensitive(state->updates_refresh, true);
@@ -3052,9 +3127,7 @@ void update_plan_complete(
                 message.c_str());
         }
         if (state->updates_install != nullptr) {
-            gtk_widget_set_sensitive(
-                state->updates_install,
-                !state->update_records.empty());
+            update_selection_controls(state);
         }
         if (state->updates_refresh != nullptr) {
             gtk_widget_set_sensitive(state->updates_refresh, true);
@@ -3073,11 +3146,13 @@ void update_plan_complete(
     state->pending_update_plan = plan;
 
     std::ostringstream heading;
+    const std::size_t selected_count =
+        state->selected_update_ids.size();
     heading << "Install "
-            << state->update_records.size()
-            << (state->update_records.size() == 1U
-                    ? " available software update?"
-                    : " available software updates?");
+            << selected_count
+            << (selected_count == 1U
+                    ? " selected software update?"
+                    : " selected software updates?");
 
     GtkWidget *dialog =
         make_transaction_confirmation_dialog(
@@ -3097,7 +3172,8 @@ void update_install_clicked(GtkButton *, gpointer user_data)
 {
     auto *state = static_cast<WindowState *>(user_data);
     if (state == nullptr || state->updates_busy ||
-        state->update_records.empty()) {
+        state->update_records.empty() ||
+        state->selected_update_ids.empty()) {
         return;
     }
 
@@ -3118,9 +3194,13 @@ void update_install_clicked(GtkButton *, gpointer user_data)
 
     auto *data = new UpdatePlanTaskData{};
     data->use_engine = state->updates_from_engine;
-    data->package_ids.reserve(state->update_records.size());
+    data->package_ids.reserve(state->selected_update_ids.size());
     for (const PackageRecord &package : state->update_records) {
-        data->package_ids.push_back(package.package_name);
+        const std::string identity = update_identity(package);
+        if (state->selected_update_ids.find(identity) !=
+            state->selected_update_ids.end()) {
+            data->package_ids.push_back(identity);
+        }
     }
 
     GTask *task = g_task_new(
@@ -3190,7 +3270,7 @@ GtkWidget *make_updates_page(WindowState *state)
     gtk_box_append(GTK_BOX(controls), state->updates_refresh);
 
     state->updates_install =
-        gtk_button_new_with_label("Install all updates");
+        gtk_button_new_with_label("Install selected updates");
     gtk_widget_add_css_class(
         state->updates_install, "suggested-action");
     gtk_widget_set_sensitive(state->updates_install, false);
