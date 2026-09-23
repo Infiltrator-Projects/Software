@@ -41,6 +41,13 @@ Repository refresh performs:
 
 A failed refresh leaves the last verified generation readable and clearly marks freshness/error state.
 
+The per-user D-Bus engine interface is explicitly versioned. Clients check the
+reported API version before using methods introduced after v1. If a package
+upgrade leaves an older activated engine running in the desktop session, the
+client first requests a clean service exit when supported and otherwise
+recycles only the verified same-user stale engine process. D-Bus then activates
+the newly installed engine binary before the newer method is retried.
+
 ## Debian package model
 
 The engine must model the fields needed for safe planning, including Package, Version, Architecture, source repository, Filename, Size/checksums, Depends, Pre-Depends, Recommends policy, Provides, Conflicts, Breaks, Replaces, Essential/priority information, installed state and hold/policy state.
