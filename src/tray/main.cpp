@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-#include "backends/apt/apt_backend.hpp"
 #include "client/engine_client.hpp"
 
 #include <gtk/gtk.h>
@@ -18,14 +17,16 @@
 
 namespace {
 
-using infiltrator::software::AptBackend;
 using infiltrator::software::EngineClient;
 using infiltrator::software::PackageRecord;
 
 struct CheckResult {
     std::vector<PackageRecord> updates;
     std::string error;
-    bool from_engine{false};
+};
+
+struct CheckTaskData {
+    bool refresh_metadata{false};
 };
 
 struct TrayState {
@@ -172,36 +173,27 @@ void render(TrayState *state)
 void check_worker(
     GTask *task,
     gpointer,
-    gpointer,
+    gpointer task_data,
     GCancellable *)
 {
     auto *result = new CheckResult{};
+    auto *data = static_cast<CheckTaskData *>(task_data);
 
     EngineClient engine;
-    std::string engine_error;
-    if (engine.list_updates(
+    if (data != nullptr && data->refresh_metadata) {
+        (void)engine.refresh(result->error);
+    }
+    if (result->error.empty()) {
+        (void)engine.list_updates(
             result->updates,
-            engine_error)) {
-        result->from_engine = true;
-    } else {
-        AptBackend fallback;
-        result->updates =
-            fallback.list_updates(result->error);
-        if (!result->error.empty() &&
-            !engine_error.empty()) {
-            result->error =
-                "Shared engine unavailable: " +
-                engine_error +
-                " Compatibility update scan failed: " +
-                result->error;
-        }
+            result->error);
     }
 
     g_task_return_pointer(
         task,
         result,
-        [](gpointer data) {
-            delete static_cast<CheckResult *>(data);
+        [](gpointer value) {
+            delete static_cast<CheckResult *>(value);
         });
 }
 
@@ -230,7 +222,9 @@ void check_complete(
     render(state);
 }
 
-void begin_check(TrayState *state)
+void begin_check(
+    TrayState *state,
+    const bool refresh_metadata = false)
 {
     if (state == nullptr || state->checking) {
         return;
@@ -246,6 +240,14 @@ void begin_check(TrayState *state)
 
     GTask *task =
         g_task_new(nullptr, nullptr, check_complete, state);
+    auto *task_data = new CheckTaskData{};
+    task_data->refresh_metadata = refresh_metadata;
+    g_task_set_task_data(
+        task,
+        task_data,
+        [](gpointer value) {
+            delete static_cast<CheckTaskData *>(value);
+        });
     g_task_run_in_thread(task, check_worker);
     g_object_unref(task);
 }
@@ -285,7 +287,7 @@ void engine_signal(
      * generation as Software instead of independently scheduling another
      * resolver. Health recovery also re-reads the shared snapshot.
      */
-    begin_check(state);
+    begin_check(state, false);
 }
 
 void subscribe_engine(TrayState *state)
@@ -338,7 +340,9 @@ void subscribe_engine(TrayState *state)
 
 gboolean scheduled_check(gpointer user_data)
 {
-    begin_check(static_cast<TrayState *>(user_data));
+    begin_check(
+        static_cast<TrayState *>(user_data),
+        true);
     return G_SOURCE_CONTINUE;
 }
 
@@ -401,7 +405,9 @@ void open_menu_item(GtkMenuItem *, gpointer user_data)
 
 void check_menu_item(GtkMenuItem *, gpointer user_data)
 {
-    begin_check(static_cast<TrayState *>(user_data));
+    begin_check(
+        static_cast<TrayState *>(user_data),
+        true);
 }
 
 void quit_menu_item(GtkMenuItem *, gpointer)
@@ -462,7 +468,9 @@ int main(int argc, char **argv)
     render(&state);
     g_idle_add(
         [](gpointer data) -> gboolean {
-            begin_check(static_cast<TrayState *>(data));
+            begin_check(
+                static_cast<TrayState *>(data),
+                true);
             return G_SOURCE_REMOVE;
         },
         &state);
