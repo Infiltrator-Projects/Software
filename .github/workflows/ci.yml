@@ -63,6 +63,9 @@ jobs:
           transaction = Path("src/engine/debian_transaction.cpp").read_text()
           helper = Path("src/helper/update_helper.cpp").read_text()
           guard = Path("src/helper/apt_plan_guard.cpp").read_text()
+          engine_client = Path("src/client/engine_client.cpp").read_text()
+          engine_service = Path("src/service/main.cpp").read_text()
+          engine_interface = Path("data/net.ssmith.infiltrator.software.Engine.xml").read_text()
           update_policy_path = Path("data/net.ssmith.infiltrator.software.updates.policy")
           source_policy_path = Path("data/net.ssmith.infiltrator.software.policy")
           policy = update_policy_path.read_text()
@@ -88,6 +91,16 @@ jobs:
           assert "plan_removal(" in transaction
           assert "Refusing to remove Essential package" in transaction
           assert "Authentication is required to install, update or remove system software." in policy
+
+          # RefreshState was added after the original v1 session service. A
+          # package upgrade can leave that old D-Bus process alive, so clients
+          # must detect/recycle it before invoking the v2 refresh contract.
+          assert "constexpr guint kApiVersion = 2U;" in engine_service
+          assert '<method name="Quit"/>' in engine_interface
+          assert "kRefreshApiVersion = 2U" in engine_client
+          assert "ensure_engine_api_version(" in engine_client
+          assert "GetConnectionUnixUser" in engine_client
+          assert "GetConnectionUnixProcessID" in engine_client
 
           # Discover must remain an operational planned-install surface, not a
           # catalogue that permanently advertises an unavailable Install path.
