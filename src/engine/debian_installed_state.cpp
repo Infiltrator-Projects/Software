@@ -122,6 +122,26 @@ void append_package(
         package.installed_size_bytes = kib_to_bytes(size->second);
     }
 
+    if (const auto depends = fields.find("depends"); depends != fields.end()) {
+        package.depends = depends->second;
+    }
+    if (const auto pre_depends = fields.find("pre-depends"); pre_depends != fields.end()) {
+        package.pre_depends = pre_depends->second;
+    }
+    if (const auto provides = fields.find("provides"); provides != fields.end()) {
+        package.provides = provides->second;
+    }
+    if (const auto priority = fields.find("priority"); priority != fields.end()) {
+        package.priority = priority->second;
+    }
+    if (multi_arch != fields.end()) {
+        package.multi_arch = multi_arch->second;
+    }
+    if (const auto essential = fields.find("essential"); essential != fields.end()) {
+        package.essential =
+            essential->second == "yes" || essential->second == "true";
+    }
+
     if (valid_identity(package)) {
         packages.emplace_back(std::move(package));
     }
