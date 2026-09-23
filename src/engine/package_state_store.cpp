@@ -16,7 +16,7 @@
 namespace infiltrator::software {
 namespace {
 
-constexpr int kSchemaVersion = 1;
+constexpr int kSchemaVersion = 2;
 
 struct Database {
     sqlite3 *handle{nullptr};
@@ -258,7 +258,7 @@ bool ensure_schema(
         return false;
     }
 
-    if (version != 0 && version != kSchemaVersion) {
+    if (version != 0 && version != 1 && version != kSchemaVersion) {
         error =
             "Unsupported package-state schema version " +
             std::to_string(version) + ".";
@@ -287,6 +287,12 @@ bool ensure_schema(
         " available_version TEXT NOT NULL,"
         " installed_size_bytes INTEGER NOT NULL,"
         " source TEXT NOT NULL,"
+        " depends_text TEXT NOT NULL DEFAULT '',"
+        " pre_depends TEXT NOT NULL DEFAULT '',"
+        " provides TEXT NOT NULL DEFAULT '',"
+        " priority TEXT NOT NULL DEFAULT '',"
+        " multi_arch TEXT NOT NULL DEFAULT '',"
+        " essential INTEGER NOT NULL DEFAULT 0,"
         " PRIMARY KEY(generation_id, package_id)"
         ");"
         "CREATE TABLE IF NOT EXISTS available_packages ("
@@ -325,10 +331,22 @@ bool ensure_schema(
         return false;
     }
 
-    if (version == 0) {
+    if (version == 1) {
+        static constexpr const char *migration =
+            "ALTER TABLE installed_packages ADD COLUMN depends_text TEXT NOT NULL DEFAULT '';"
+            "ALTER TABLE installed_packages ADD COLUMN pre_depends TEXT NOT NULL DEFAULT '';"
+            "ALTER TABLE installed_packages ADD COLUMN provides TEXT NOT NULL DEFAULT '';"
+            "ALTER TABLE installed_packages ADD COLUMN priority TEXT NOT NULL DEFAULT '';"
+            "ALTER TABLE installed_packages ADD COLUMN multi_arch TEXT NOT NULL DEFAULT '';"
+            "ALTER TABLE installed_packages ADD COLUMN essential INTEGER NOT NULL DEFAULT 0;"
+            "PRAGMA user_version=2;";
+        if (!exec_sql(database, migration, error)) {
+            return false;
+        }
+    } else if (version == 0) {
         if (!exec_sql(
                 database,
-                "PRAGMA user_version=1;",
+                "PRAGMA user_version=2;",
                 error)) {
             return false;
         }
@@ -464,8 +482,9 @@ bool insert_installed(
             "INSERT INTO installed_packages("
             " generation_id, package_id, name, package_name,"
             " architecture, installed_version, available_version,"
-            " installed_size_bytes, source"
-            ") VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?);",
+            " installed_size_bytes, source, depends_text, pre_depends,"
+            " provides, priority, multi_arch, essential"
+            ") VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
             statement,
             error)) {
         return false;
@@ -485,7 +504,15 @@ bool insert_installed(
                 8,
                 to_sqlite_integer(
                     package.installed_size_bytes)) != SQLITE_OK ||
-            !bind_text(statement.handle, 9, package.source)) {
+            !bind_text(statement.handle, 9, package.source) ||
+            !bind_text(statement.handle, 10, package.depends) ||
+            !bind_text(statement.handle, 11, package.pre_depends) ||
+            !bind_text(statement.handle, 12, package.provides) ||
+            !bind_text(statement.handle, 13, package.priority) ||
+            !bind_text(statement.handle, 14, package.multi_arch) ||
+            sqlite3_bind_int(
+                statement.handle, 15,
+                package.essential ? 1 : 0) != SQLITE_OK) {
             error = sqlite_error(database);
             return false;
         }
@@ -735,7 +762,9 @@ PackageStateStore::load_current(
                 database.handle,
                 "SELECT package_id, name, package_name,"
                 " architecture, installed_version,"
-                " available_version, installed_size_bytes, source"
+                " available_version, installed_size_bytes, source,"
+                " depends_text, pre_depends, provides, priority,"
+                " multi_arch, essential"
                 " FROM installed_packages"
                 " WHERE generation_id=?"
                 " ORDER BY package_id;",
@@ -779,6 +808,18 @@ PackageStateStore::load_current(
                         statement.handle, 6));
             package.source =
                 column_text(statement.handle, 7);
+            package.depends =
+                column_text(statement.handle, 8);
+            package.pre_depends =
+                column_text(statement.handle, 9);
+            package.provides =
+                column_text(statement.handle, 10);
+            package.priority =
+                column_text(statement.handle, 11);
+            package.multi_arch =
+                column_text(statement.handle, 12);
+            package.essential =
+                sqlite3_column_int(statement.handle, 13) != 0;
             package.state = InstallState::installed;
             snapshot.installed.emplace_back(std::move(package));
         }
