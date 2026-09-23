@@ -26,7 +26,7 @@ constexpr const char *kObjectPath =
     "/net/ssmith/infiltrator/software/Engine";
 constexpr const char *kInterfaceName =
     "net.ssmith.infiltrator.software.Engine";
-constexpr guint kApiVersion = 1U;
+constexpr guint kApiVersion = 2U;
 constexpr std::size_t kMaximumPlanPackages = 4096U;
 
 constexpr const char *kIntrospectionXml = R"XML(
@@ -52,6 +52,7 @@ constexpr const char *kIntrospectionXml = R"XML(
     <method name="RefreshState">
       <arg name="status" type="a{sv}" direction="out"/>
     </method>
+    <method name="Quit"/>
     <signal name="StateChanged">
       <arg name="generation" type="t"/>
     </signal>
@@ -457,6 +458,17 @@ void start_state_watch(ServiceState *state)
             state);
 }
 
+gboolean quit_service(gpointer user_data)
+{
+    auto *state =
+        static_cast<ServiceState *>(user_data);
+    if (state != nullptr &&
+        state->loop != nullptr) {
+        g_main_loop_quit(state->loop);
+    }
+    return G_SOURCE_REMOVE;
+}
+
 bool parse_action(
     const std::string_view text,
     TransactionAction &action)
@@ -568,6 +580,14 @@ void handle_method_call(
             g_variant_new(
                 "(@a{sv})",
                 status_variant(state->core.status())));
+        return;
+    }
+
+    if (method == "Quit") {
+        g_dbus_method_invocation_return_value(
+            invocation,
+            g_variant_new("()"));
+        g_idle_add(quit_service, state);
         return;
     }
 
