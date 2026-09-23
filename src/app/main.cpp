@@ -2458,46 +2458,39 @@ void updates_worker(
     result->generation = data == nullptr ? 0U : data->generation;
 
     /*
-     * Normal inventory is engine-first so Software and the panel indicator
-     * consume the same generation. Explicit metadata refresh still uses the
-     * compatibility refresher until native reconciliation owns source refresh
-     * end to end.
+     * Update inventory and repository refresh now both go through the shared
+     * native engine.  The GUI never launches an APT process merely to discover
+     * package state.  If no generation exists yet, initialise it once through
+     * the same reconciliation path before retrying the inventory read.
      */
-    if (data == nullptr || !data->refresh_metadata) {
+    result->from_engine = true;
+    if (data == nullptr) {
+        result->error = "Update task state is unavailable.";
+    } else {
         EngineClient engine;
-        std::string engine_error;
-        if (engine.list_updates(
+        if (data->refresh_metadata) {
+            result->refreshed_metadata = true;
+            (void)engine.refresh(result->error);
+        }
+
+        if (result->error.empty() &&
+            !engine.list_updates(
                 result->records,
-                engine_error)) {
-            result->from_engine = true;
-            result->error.clear();
-        } else {
-            AptBackend fallback;
-            result->records =
-                fallback.list_updates(result->error);
-            if (!result->error.empty() &&
-                !engine_error.empty()) {
+                result->error) &&
+            !data->refresh_metadata) {
+            std::string refresh_error;
+            if (engine.refresh(refresh_error)) {
+                result->refreshed_metadata = true;
+                result->error.clear();
+                (void)engine.list_updates(
+                    result->records,
+                    result->error);
+            } else {
                 result->error =
-                    "Shared engine unavailable: " +
-                    engine_error +
-                    " Compatibility update scan failed: " +
-                    result->error;
+                    "Native package-state refresh failed: " +
+                    refresh_error;
             }
         }
-    } else {
-        AptBackend backend;
-        result->refreshed_metadata = true;
-        if (!backend.refresh_metadata(result->error)) {
-            g_task_return_pointer(
-                task,
-                result,
-                [](gpointer pointer) {
-                    delete static_cast<UpdatesResult *>(pointer);
-                });
-            return;
-        }
-        result->records =
-            backend.list_updates(result->error);
     }
 
     g_task_return_pointer(
@@ -2558,24 +2551,15 @@ void updates_complete(
     }
 
     /*
-     * Cached compatibility metadata is useful for the first paint but it must
-     * not become an indefinite source of truth.  After showing the cached
-     * result, perform one unprivileged repository refresh per application
-     * session and then replace the view with the current candidate set.
-     *
-     * This is deliberately second-phase so opening Updates stays responsive.
-     * It also fixes the case where a newly published Software release exists
-     * in the repository but an older user APT cache incorrectly reports
-     * "Your system is up to date."
+     * Present the last coherent native generation first, then reconcile once
+     * per application session.  This keeps first paint independent of network
+     * latency while ensuring the displayed candidate set becomes current.
      */
     const bool schedule_auto_refresh =
         !refreshed_metadata &&
-        !from_engine &&
         error.empty() &&
         state->updates_auto_refresh_pending;
-    if (schedule_auto_refresh) {
-        state->updates_auto_refresh_pending = false;
-    } else if (from_engine || refreshed_metadata) {
+    if (schedule_auto_refresh || refreshed_metadata) {
         state->updates_auto_refresh_pending = false;
     }
 
@@ -2584,7 +2568,7 @@ void updates_complete(
             GTK_LABEL(state->updates_backend),
             from_engine
                 ? "Native engine"
-                : "APT compatibility");
+                : "Native engine unavailable");
     }
 
     rebuild_updates(state);
@@ -2863,11 +2847,9 @@ void update_refresh_clicked(GtkButton *, gpointer user_data)
     }
 
     /*
-     * Refresh is read-only. Keep it entirely in the user's session so checking
-     * for updates never produces a Polkit/admin prompt. The APT compatibility
-     * backend uses its own verified user-writable metadata cache during the
-     * 0.3 -> native-engine migration. Authorization remains an execution-only
-     * boundary when the user actually installs updates.
+     * Refresh is read-only and is owned by the shared native engine.  It
+     * verifies configured repository metadata, publishes a new coherent
+     * generation, and requires no administrator prompt.
      */
     refresh_updates(state, true);
 }
