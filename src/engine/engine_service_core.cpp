@@ -1,11 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "engine/engine_service_core.hpp"
 
+#include "engine/debian_reconcile.hpp"
 #include "engine/debian_transaction.hpp"
 
 #include <algorithm>
 #include <cstdlib>
+#include <filesystem>
 #include <string>
+#include <unistd.h>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -149,6 +152,29 @@ bool EngineServiceCore::reload(std::string &error)
     return true;
 }
 
+bool EngineServiceCore::refresh(std::string &error)
+{
+    std::uint64_t published_generation = 0U;
+    std::string refresh_error;
+    if (!DebianReconciler::reconcile(
+            store_,
+            native_debian_architecture(),
+            default_repository_cache_path(),
+            published_generation,
+            refresh_error)) {
+        detail_ = snapshot_.has_value()
+            ? "Refresh failed; retained generation " +
+                std::to_string(snapshot_->generation) + ": " +
+                refresh_error
+            : refresh_error;
+        healthy_ = snapshot_.has_value();
+        error = refresh_error;
+        return false;
+    }
+
+    return reload(error);
+}
+
 EngineServiceStatus EngineServiceCore::status() const
 {
     EngineServiceStatus result;
@@ -237,7 +263,28 @@ std::string default_package_state_path()
         return override_path;
     }
 
-    return "/var/lib/infiltrator/software/packages.db";
+    if (geteuid() == 0) {
+        return "/var/lib/infiltrator/software/packages.db";
+    }
+
+    const char *xdg_state = std::getenv("XDG_STATE_HOME");
+    if (xdg_state != nullptr && *xdg_state != '\0') {
+        return (
+            std::filesystem::path(xdg_state) /
+            "infiltrator/software/packages.db").string();
+    }
+
+    const char *home = std::getenv("HOME");
+    if (home != nullptr && *home != '\0') {
+        return (
+            std::filesystem::path(home) /
+            ".local/state/infiltrator/software/packages.db").string();
+    }
+
+    return (
+        std::filesystem::temp_directory_path() /
+        ("infiltrator-software-" + std::to_string(getuid())) /
+        "packages.db").string();
 }
 
 std::string native_debian_architecture()
