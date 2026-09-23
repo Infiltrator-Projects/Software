@@ -1,3 +1,18 @@
+infiltrator-software (0.3.13) unstable; urgency=medium
+
+  * Add native Discover package removal with installed reverse-dependency,
+    virtual-provides and Essential-package safety checks.
+  * Persist installed dependency, Pre-Depends, Provides, Priority, Multi-Arch
+    and Essential metadata in package-state schema version 2.
+  * Extend exact privileged-plan revalidation to explicitly approved removals
+    while continuing to reject any unapproved APT mutation.
+  * Add per-package and arbitrary selected-update workflows with Select all and
+    Clear controls, preserving complete native preflight before authorization.
+  * Correct roadmap, package-engine, state and authorization documentation for
+    the implemented workflows.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Wed, 23 Sep 2026 19:38:00 +1000
+
 infiltrator-software (0.3.12) unstable; urgency=medium
 
   * Replace the repository engine's private exact-write loop with Common
