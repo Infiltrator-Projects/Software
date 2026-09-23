@@ -49,6 +49,9 @@ constexpr const char *kIntrospectionXml = R"XML(
     <method name="ReloadState">
       <arg name="status" type="a{sv}" direction="out"/>
     </method>
+    <method name="RefreshState">
+      <arg name="status" type="a{sv}" direction="out"/>
+    </method>
     <signal name="StateChanged">
       <arg name="generation" type="t"/>
     </signal>
@@ -308,6 +311,30 @@ void emit_health_changed(
     }
 }
 
+bool refresh_and_signal(
+    ServiceState *state,
+    std::string &error)
+{
+    if (state == nullptr) {
+        error = "Engine service state is unavailable.";
+        return false;
+    }
+
+    const EngineServiceStatus before = state->last_status;
+    const bool refreshed = state->core.refresh(error);
+    const EngineServiceStatus after = state->core.status();
+
+    if (after.generation != before.generation) {
+        emit_state_changed(state, after.generation);
+    }
+    if (after.healthy != before.healthy ||
+        after.detail != before.detail) {
+        emit_health_changed(state, after);
+    }
+    state->last_status = after;
+    return refreshed;
+}
+
 void reload_and_signal(ServiceState *state)
 {
     if (state == nullptr) {
@@ -519,6 +546,23 @@ void handle_method_call(
 
     if (method == "ReloadState") {
         reload_and_signal(state);
+        g_dbus_method_invocation_return_value(
+            invocation,
+            g_variant_new(
+                "(@a{sv})",
+                status_variant(state->core.status())));
+        return;
+    }
+
+    if (method == "RefreshState") {
+        std::string refresh_error;
+        if (!refresh_and_signal(state, refresh_error)) {
+            return_engine_error(
+                invocation,
+                "net.ssmith.infiltrator.software.Engine.Error.RefreshFailed",
+                refresh_error);
+            return;
+        }
         g_dbus_method_invocation_return_value(
             invocation,
             g_variant_new(
