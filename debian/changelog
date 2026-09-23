@@ -1,3 +1,13 @@
+infiltrator-software (0.3.14) unstable; urgency=high
+
+  * Version the package-engine D-Bus contract at API v2 for RefreshState.
+  * Detect stale pre-v2 per-user engine processes left alive across package
+    upgrades and recycle only the verified same-user service before refresh.
+  * Add a graceful Quit method for subsequent in-session engine upgrades.
+  * Guard the lifecycle contract in CI and document the activation behaviour.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Wed, 23 Sep 2026 20:01:00 +1000
+
 infiltrator-software (0.3.13) unstable; urgency=medium
 
   * Add native Discover package removal with installed reverse-dependency,
