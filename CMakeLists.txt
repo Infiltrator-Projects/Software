@@ -195,7 +195,7 @@ target_link_libraries(infiltrator-software-engine PRIVATE
 add_executable(infiltrator-software-tray
     src/tray/main.cpp)
 target_link_libraries(infiltrator-software-tray PRIVATE
-    software-client software-apt PkgConfig::GTK3 PkgConfig::XAPP)
+    software-client PkgConfig::GTK3 PkgConfig::XAPP)
 
 add_executable(infiltrator-software
     src/app/main.cpp
