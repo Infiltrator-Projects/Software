@@ -209,6 +209,12 @@ int main()
     assert(!held_plan.has_value());
     assert(error.find("held") != std::string::npos);
 
+    PackageRecord removable_app =
+        installed("app", "1.0", 1500U);
+    removable_app.depends = "libcore (>= 1.0)";
+    PackageRecord removable_library =
+        installed("libcore", "1.0", 800U);
+
     TransactionRequest remove_request;
     remove_request.action = TransactionAction::remove;
     remove_request.package_ids = {"app"};
@@ -217,15 +223,80 @@ int main()
     const auto remove_plan =
         DebianTransactionPlanner::plan(
             remove_request,
-            current,
+            {removable_app, removable_library},
             repository,
             "amd64",
             10U,
             "snapshot-10",
             policy,
             error);
-    assert(!remove_plan.has_value());
-    assert(error.find("reverse-dependency") != std::string::npos);
+    assert(remove_plan.has_value());
+    assert(error.empty());
+    assert(remove_plan->items.size() == 1U);
+    assert(remove_plan->items.front().action == TransactionAction::remove);
+    assert(remove_plan->items.front().from_version == "1.0");
+    assert(remove_plan->items.front().to_version.empty());
+    assert(remove_plan->disk_delta_bytes == -1500);
+
+    TransactionRequest break_dependency;
+    break_dependency.action = TransactionAction::remove;
+    break_dependency.package_ids = {"libcore"};
+
+    error.clear();
+    const auto unsafe_remove =
+        DebianTransactionPlanner::plan(
+            break_dependency,
+            {removable_app, removable_library},
+            repository,
+            "amd64",
+            11U,
+            "snapshot-11",
+            policy,
+            error);
+    assert(!unsafe_remove.has_value());
+    assert(error.find("app") != std::string::npos);
+    assert(error.find("libcore") != std::string::npos);
+
+    TransactionRequest remove_together;
+    remove_together.action = TransactionAction::remove;
+    remove_together.package_ids = {"app", "libcore"};
+
+    error.clear();
+    const auto joint_remove =
+        DebianTransactionPlanner::plan(
+            remove_together,
+            {removable_app, removable_library},
+            repository,
+            "amd64",
+            12U,
+            "snapshot-12",
+            policy,
+            error);
+    assert(joint_remove.has_value());
+    assert(joint_remove->items.size() == 2U);
+    assert(joint_remove->disk_delta_bytes == -2300);
+
+    PackageRecord essential =
+        installed("essential-base", "1.0", 100U);
+    essential.essential = true;
+
+    TransactionRequest essential_remove;
+    essential_remove.action = TransactionAction::remove;
+    essential_remove.package_ids = {"essential-base"};
+
+    error.clear();
+    const auto essential_plan =
+        DebianTransactionPlanner::plan(
+            essential_remove,
+            {essential},
+            {},
+            "amd64",
+            13U,
+            "snapshot-13",
+            policy,
+            error);
+    assert(!essential_plan.has_value());
+    assert(error.find("Essential") != std::string::npos);
 
     return 0;
 }
