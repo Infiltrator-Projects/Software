@@ -73,7 +73,15 @@ In other words, "newest Debian version available" and "preferred candidate for
 this installed system" remain distinct facts. The policy stack decides the
 second without changing Debian version-ordering semantics.
 
-It considers installed version, available versions, architecture, repository Release identity, host compatibility policy, future Infiltrator distribution policy, default NotAutomatic/ButAutomaticUpgrades priorities, explicit holds, configured source/channel policy and dependency satisfiability.
+It considers installed version, available versions, architecture, repository Release identity, host compatibility policy, phased-update eligibility, future Infiltrator distribution policy, default NotAutomatic/ButAutomaticUpgrades priorities, explicit holds, configured source/channel policy and dependency satisfiability.
+
+For Ubuntu-style phased updates, the native engine reads the Packages
+Phased-Update-Percentage field and the source package/version identity. It uses
+the host machine identity and the same std::seed_seq + std::minstd_rand +
+uniform [0,100] decision used by APT. Ineligible versions receive priority 1
+before ordinary host preferences are considered. The usual
+Always-Include-Phased-Updates and Never-Include-Phased-Updates compatibility
+settings are honoured without invoking apt or apt-config.
 
 Every row in the normal Updates view represents the preferred candidate for the active policy stack. The GUI exposes the repository origin/site, the policy provider, resolved priority and selection rationale so the user can distinguish an Infiltrator-preferred candidate, a host-policy candidate and an ordinary repository-default candidate without interpreting raw source-file paths.
 

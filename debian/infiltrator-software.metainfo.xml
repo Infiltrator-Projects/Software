@@ -36,7 +36,7 @@
   <releases>
     <release version="0.3.21" date="2026-09-24">
       <description>
-        <p>Makes update recommendations understandable by displaying each preferred candidate's repository origin, active policy owner, resolved priority and selection rationale, backed by persisted provenance in the native package-state engine.</p>
+        <p>Makes update recommendations understandable by displaying each preferred candidate's repository origin, active policy owner, resolved priority and selection rationale, and matches APT phased-update eligibility so staged Ubuntu updates are not recommended before the host is eligible.</p>
       </description>
     </release>
     <release version="0.3.20" date="2026-09-24">

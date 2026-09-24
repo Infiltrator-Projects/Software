@@ -64,6 +64,7 @@ jobs:
           transaction = Path("src/engine/debian_transaction.cpp").read_text()
           candidate = Path("src/engine/debian_candidate.cpp").read_text()
           package_policy = Path("src/engine/package_policy.cpp").read_text()
+          phased = Path("src/engine/debian_phased_updates.cpp").read_text()
           preferences = Path("src/engine/debian_preferences.cpp").read_text()
           reconcile = Path("src/engine/debian_reconcile.cpp").read_text()
           state_store = Path("src/engine/package_state_store.cpp").read_text()
@@ -107,7 +108,12 @@ jobs:
           assert "release_archive" in preferences
           assert "DebianPolicyStack" in package_policy
           assert "providers_" in package_policy
+          assert "policy.add(phased_updates)" in reconcile
           assert "policy.add(host_preferences)" in reconcile
+          assert "phased-update-percentage" in Path("src/engine/debian_package_index.cpp").read_text()
+          assert "std::minstd_rand" in phased
+          assert "APT::Get::Always-Include-Phased-Updates".lower() in phased.lower()
+          assert "APT::Get::Never-Include-Phased-Updates".lower() in phased.lower()
           assert "preferences.priority_for" not in reconcile
           assert "candidate.pin_priority" in candidate
           assert "pin_priority INTEGER NOT NULL" in state_store

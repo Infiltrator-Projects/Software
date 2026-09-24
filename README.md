@@ -30,7 +30,7 @@ The application must answer:
 
 The UI is package-system-neutral. Debian repositories, .deb packages, AppStream and Flatpak remain supported formats and ecosystems. APT command-line programs are an implementation detail of the 0.3 line, not part of the product contract. Read-only package metadata refresh is unprivileged: checking for updates must never ask for administrator credentials. Authorization is reserved for actual system mutation.
 
-The 0.4 architecture replaces those APT command invocations with a native Infiltrator package engine. The engine reads Debian repository metadata directly, applies the host's APT preference/pinning policy when selecting candidates, maintains its own derived package-state database, resolves updates and transactions itself, and uses a constrained privileged executor for final package writes. dpkg remains the temporary .deb payload installer until a later native installer exists.
+The 0.4 architecture replaces those APT command invocations with a native Infiltrator package engine. The engine reads Debian repository metadata directly, applies host compatibility policy including APT preferences and phased-update eligibility when selecting candidates, maintains its own derived package-state database, resolves updates and transactions itself, and uses a constrained privileged executor for final package writes. dpkg remains the temporary .deb payload installer until a later native installer exists.
 
 ## User experience
 

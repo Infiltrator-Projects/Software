@@ -11,6 +11,12 @@ infiltrator-software (0.3.21) unstable; urgency=high
     Host preferred, Infiltrator preferred and repository-default candidates.
   * Keep the complete policy/selection rationale as a tooltip and label
     system-critical packages as recommended rather than merely available.
+  * Match APT phased-update eligibility natively using source package/version,
+    the host machine ID and APT's deterministic minstd_rand bucket algorithm,
+    so staged Ubuntu updates do not appear as recommended before this machine
+    is eligible.
+  * Honour the standard Always/Never Include Phased Updates compatibility
+    settings while keeping normal update discovery free of APT subprocesses.
 
  -- Shannon Smith <infiltratr@yandex.com>  Thu, 24 Sep 2026 14:12:00 +1000
 
