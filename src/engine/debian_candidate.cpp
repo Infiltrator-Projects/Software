@@ -46,6 +46,9 @@ int source_priority(
     if (configured != policy.source_priorities.end()) {
         return configured->second;
     }
+    if (candidate.pin_priority != 0) {
+        return candidate.pin_priority;
+    }
     return policy.default_source_priority;
 }
 
