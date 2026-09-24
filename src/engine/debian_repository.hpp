@@ -28,8 +28,13 @@ struct DebianReleaseEntry {
 };
 
 struct DebianReleaseMetadata {
+    std::string origin;
+    std::string label;
+    std::string version;
     std::string suite;
     std::string codename;
+    bool not_automatic{false};
+    bool but_automatic_upgrades{false};
     std::vector<std::string> architectures;
     std::vector<std::string> components;
     std::vector<DebianReleaseEntry> sha256_entries;
