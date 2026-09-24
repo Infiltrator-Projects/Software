@@ -75,7 +75,7 @@ second without changing Debian version-ordering semantics.
 
 It considers installed version, available versions, architecture, repository Release identity, host compatibility policy, future Infiltrator distribution policy, default NotAutomatic/ButAutomaticUpgrades priorities, explicit holds, configured source/channel policy and dependency satisfiability.
 
-The selected candidate and the reason for selection are inspectable through the GUI details view.
+Every row in the normal Updates view represents the preferred candidate for the active policy stack. The GUI exposes the repository origin/site, the policy provider, resolved priority and selection rationale so the user can distinguish an Infiltrator-preferred candidate, a host-policy candidate and an ordinary repository-default candidate without interpreting raw source-file paths.
 
 ## Resolver
 

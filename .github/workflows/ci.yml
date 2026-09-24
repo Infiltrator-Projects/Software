@@ -111,6 +111,12 @@ jobs:
           assert "preferences.priority_for" not in reconcile
           assert "candidate.pin_priority" in candidate
           assert "pin_priority INTEGER NOT NULL" in state_store
+          assert "policy_provider TEXT NOT NULL" in state_store
+          assert "release_origin TEXT NOT NULL" in state_store
+          assert '"policy-provider"' in engine_service
+          assert '"selection-reason"' in engine_service
+          assert '"Policy: " + policy_name' in app
+          assert '"Recommended update"' in app
 
           # The footer must report the exact pinned Common header version,
           # never a stale hand-written version string.
