@@ -108,6 +108,36 @@ void append_record(
         ? field(fields, "source")
         : std::string(source_id);
     package.priority = field(fields, "priority");
+
+    const std::string source_field = field(fields, "source");
+    package.source_package = package.package;
+    package.source_version = package.version;
+    if (!source_field.empty()) {
+        const std::size_t space = source_field.find_first_of(" \t(");
+        package.source_package =
+            source_field.substr(0U, space);
+        const std::size_t open = source_field.find('(');
+        const std::size_t close =
+            source_field.find(')', open == std::string::npos ? 0U : open + 1U);
+        if (open != std::string::npos &&
+            close != std::string::npos &&
+            close > open + 1U) {
+            package.source_version =
+                trim(std::string_view(source_field).substr(
+                    open + 1U,
+                    close - open - 1U));
+        }
+    }
+
+    const std::string phased_text =
+        field(fields, "phased-update-percentage");
+    const std::uint64_t phased =
+        parse_unsigned(phased_text);
+    if (!phased_text.empty() && phased <= 100U) {
+        package.phased_update_percentage =
+            static_cast<int>(phased);
+    }
+
     package.multi_arch = field(fields, "multi-arch");
     package.depends = field(fields, "depends");
     package.pre_depends = field(fields, "pre-depends");
