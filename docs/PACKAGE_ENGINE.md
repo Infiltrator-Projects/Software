@@ -61,7 +61,19 @@ The implementation must follow Debian version-ordering semantics rather than lex
 
 Candidate selection is deterministic and testable.
 
-It considers installed version, available versions, architecture, repository Release identity, the host's APT preference/pinning policy, default NotAutomatic/ButAutomaticUpgrades priorities, explicit holds, configured source/channel policy and dependency satisfiability.
+Debian mechanics do not embed Mint, Ubuntu or Infiltrator distribution policy.
+Repository Release metadata supplies the normal Debian fallback priority. An
+ordered policy-provider stack may then override that priority. The current host
+adapter reads APT preferences so Software remains safe on the distribution it
+is running on. A future Infiltrator distribution provider can be placed ahead
+of that adapter for packages that have explicitly migrated to Infiltrator
+ownership, while untouched packages continue to follow host policy.
+
+In other words, "newest Debian version available" and "preferred candidate for
+this installed system" remain distinct facts. The policy stack decides the
+second without changing Debian version-ordering semantics.
+
+It considers installed version, available versions, architecture, repository Release identity, host compatibility policy, future Infiltrator distribution policy, default NotAutomatic/ButAutomaticUpgrades priorities, explicit holds, configured source/channel policy and dependency satisfiability.
 
 The selected candidate and the reason for selection are inspectable through the GUI details view.
 
