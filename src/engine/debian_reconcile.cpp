@@ -2,6 +2,7 @@
 #include "engine/debian_reconcile.hpp"
 
 #include "engine/debian_installed_state.hpp"
+#include "engine/debian_phased_updates.hpp"
 #include "engine/debian_preferences.hpp"
 #include "engine/package_policy.hpp"
 #include "engine/debian_repository.hpp"
@@ -129,7 +130,18 @@ bool DebianReconciler::reconcile(
      * can later be inserted ahead of it for migrated packages while the host
      * adapter continues to protect packages that still belong to the base OS.
      */
+    std::string phased_error;
+    const DebianPhasedUpdatesPolicy phased_updates =
+        DebianPhasedUpdatesPolicy::read(phased_error);
+    if (!phased_error.empty()) {
+        error =
+            "Unable to read phased-update policy: " +
+            phased_error;
+        return false;
+    }
+
     DebianPolicyStack policy;
+    policy.add(phased_updates);
     policy.add(host_preferences);
 
     std::vector<DebianRepositorySource> active;
