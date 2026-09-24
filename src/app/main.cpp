@@ -5986,6 +5986,10 @@ void destroy_window_state(gpointer data)
         g_source_remove(state->updates_refresh_timer_id);
         state->updates_refresh_timer_id = 0U;
     }
+    if (state->updates_progress_timer_id != 0U) {
+        g_source_remove(state->updates_progress_timer_id);
+        state->updates_progress_timer_id = 0U;
+    }
     delete state;
 }
 
