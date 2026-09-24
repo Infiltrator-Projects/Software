@@ -135,6 +135,7 @@ add_library(software-engine STATIC
     src/engine/debian_version.cpp
     src/engine/debian_candidate.cpp
     src/engine/package_policy.cpp
+    src/engine/debian_phased_updates.cpp
     src/engine/debian_preferences.cpp
     src/engine/debian_dependency.cpp
     src/engine/debian_repository.cpp
@@ -296,6 +297,13 @@ if(BUILD_TESTING)
     add_test(
         NAME software-debian-candidate-test
         COMMAND software-debian-candidate-test)
+
+    add_executable(software-debian-phased-updates-test
+        tests/debian_phased_updates_test.cpp)
+    target_link_libraries(software-debian-phased-updates-test PRIVATE software-engine)
+    add_test(
+        NAME software-debian-phased-updates-test
+        COMMAND software-debian-phased-updates-test)
 
     add_executable(software-debian-preferences-test
         tests/debian_preferences_test.cpp)
