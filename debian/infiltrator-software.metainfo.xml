@@ -34,6 +34,11 @@
   <url type="homepage">https://github.com/Infiltrator-Projects/Software</url>
 
   <releases>
+    <release version="0.3.26" date="2026-09-24">
+      <description>
+        <p>Fixes the Repositories navigation and page accents becoming nearly black under dark/system themes by using the readable information accent and full symbolic-icon opacity.</p>
+      </description>
+    </release>
     <release version="0.3.25" date="2026-09-24">
       <description>
         <p>Keeps update installation visibly active on the Updates page with animated elapsed progress through privileged execution and final verification, while retaining the live durable transaction History view.</p>
