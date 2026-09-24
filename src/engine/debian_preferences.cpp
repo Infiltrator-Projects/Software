@@ -376,6 +376,14 @@ bool parse_pin(
     return false;
 }
 
+bool has_suffix(
+    const std::string_view value,
+    const std::string_view suffix)
+{
+    return value.size() >= suffix.size() &&
+           value.substr(value.size() - suffix.size()) == suffix;
+}
+
 bool preference_filename(
     const std::filesystem::path &path)
 {
@@ -384,10 +392,10 @@ bool preference_filename(
         return false;
     }
     if (name.back() == '~' ||
-        name.ends_with(".bak") ||
-        name.ends_with(".disabled") ||
-        name.ends_with(".save") ||
-        name.ends_with(".distUpgrade")) {
+        has_suffix(name, ".bak") ||
+        has_suffix(name, ".disabled") ||
+        has_suffix(name, ".save") ||
+        has_suffix(name, ".distUpgrade")) {
         return false;
     }
 
