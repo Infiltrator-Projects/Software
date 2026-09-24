@@ -34,6 +34,11 @@
   <url type="homepage">https://github.com/Infiltrator-Projects/Software</url>
 
   <releases>
+    <release version="0.3.25" date="2026-09-24">
+      <description>
+        <p>Keeps update installation visibly active on the Updates page with animated elapsed progress through privileged execution and final verification, while retaining the live durable transaction History view.</p>
+      </description>
+    </release>
     <release version="0.3.24" date="2026-09-24">
       <description>
         <p>Fixes update-row icons that could render nearly black under Mint dark themes by switching application updates to a reliably symbolic refresh glyph and explicitly applying the Software operation colour.</p>

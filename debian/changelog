@@ -1,3 +1,16 @@
+infiltrator-software (0.3.25) unstable; urgency=high
+
+  * Keep privileged update activity visibly on the Updates page from
+    authorization through metadata refresh, exact-plan revalidation, package
+    execution and final installed-state verification.
+  * Show an animated indeterminate progress bar with elapsed-time status so a
+    long transaction cannot look idle while the helper is still working.
+  * Keep the live durable History page and exact successful/failed transaction
+    recording introduced in 0.3.23; remove the old milestone-only behaviour
+    exposed by older installed builds.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Thu, 24 Sep 2026 16:05:00 +1000
+
 infiltrator-software (0.3.24) unstable; urgency=high
 
   * Fix the dark update-row icon on dark/system themes.
