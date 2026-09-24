@@ -2801,7 +2801,6 @@ void discover_install_process_complete(
                         ? "Update complete. Refreshing software state…"
                         : "Installation complete. Refreshing software state…");
         } else {
-            stop_update_progress(state);
             std::string message =
                 operation->action == TransactionAction::remove
                     ? "Unable to remove package."
