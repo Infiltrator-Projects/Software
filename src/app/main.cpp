@@ -2872,6 +2872,18 @@ void start_discover_install_operation(
         if (operation->button != nullptr) {
             gtk_widget_set_sensitive(operation->button, true);
         }
+        record_transaction_history(
+            operation->plan, false, plan_error);
+        if (operation->main_window != nullptr) {
+            auto *history_state = static_cast<WindowState *>(
+                g_object_get_data(
+                    G_OBJECT(operation->main_window),
+                    "infiltrator-window-state"));
+            if (history_state != nullptr &&
+                history_state->history_loaded) {
+                refresh_history(history_state);
+            }
+        }
         destroy_discover_install_operation(operation);
         return;
     }
@@ -2916,6 +2928,18 @@ void start_discover_install_operation(
         }
         if (operation->button != nullptr) {
             gtk_widget_set_sensitive(operation->button, true);
+        }
+        record_transaction_history(
+            operation->plan, false, message);
+        if (operation->main_window != nullptr) {
+            auto *history_state = static_cast<WindowState *>(
+                g_object_get_data(
+                    G_OBJECT(operation->main_window),
+                    "infiltrator-window-state"));
+            if (history_state != nullptr &&
+                history_state->history_loaded) {
+                refresh_history(history_state);
+            }
         }
         g_clear_error(&error);
         destroy_discover_install_operation(operation);
