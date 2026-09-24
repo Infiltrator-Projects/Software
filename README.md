@@ -6,7 +6,7 @@
 
 Infiltrator Software is the software-management application for the Infiltrator project family. It presents software discovery, installation, removal, updates, system components, repositories, release channels, history and repair as one coherent graphical product.
 
-**Current source version:** 0.3.17  
+**Current source version:** 0.3.18  
 **Language:** C++17 application/core with native GTK4 Linux shell; C11 Common foundation  
 **Shared foundation:** Common 1.19.24  
 **Current package compatibility:** Debian repositories and .deb packages; Flatpak and AppStream catalogue integration  
