@@ -1,3 +1,14 @@
+infiltrator-software (0.3.24) unstable; urgency=high
+
+  * Fix the dark update-row icon on dark/system themes.
+  * Stop relying on Mint's software-update-available-symbolic asset for
+    application update rows because some icon-theme variants are pre-coloured
+    and do not inherit the Software palette.
+  * Use a reliably symbolic refresh glyph and explicitly apply the operation
+    colour and full opacity to package icons.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Thu, 24 Sep 2026 15:46:00 +1000
+
 infiltrator-software (0.3.23) unstable; urgency=high
 
   * Replace the History milestone placeholder with a live durable transaction

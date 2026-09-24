@@ -3169,9 +3169,16 @@ const char *update_icon_name(const PackageRecord &package)
         return "emblem-system-symbolic";
     case infiltrator::software::PackageKind::application:
     case infiltrator::software::PackageKind::unknown:
-        return "software-update-available-symbolic";
+        /*
+         * Mint icon themes may provide software-update-available-symbolic as
+         * a pre-coloured raster asset.  Such assets ignore GtkImage's CSS
+         * foreground and become nearly black on the Software dark palette.
+         * view-refresh-symbolic is a true symbolic icon across the supported
+         * GTK/Mint themes, so it reliably follows .package-icon colour.
+         */
+        return "view-refresh-symbolic";
     }
-    return "software-update-available-symbolic";
+    return "view-refresh-symbolic";
 }
 
 std::string update_identity(const PackageRecord &package)

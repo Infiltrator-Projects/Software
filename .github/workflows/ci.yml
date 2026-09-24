@@ -124,6 +124,8 @@ jobs:
           assert '"selection-reason"' in engine_service
           assert '"Policy: " + policy_name' in app
           assert '"Recommended update"' in app
+          assert 'return "view-refresh-symbolic";' in app
+          assert 'image.package-icon { color:' in theme
 
           # System is an operational inventory, not a milestone placeholder.
           assert "make_system_page(state)" in app

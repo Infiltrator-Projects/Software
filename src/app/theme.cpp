@@ -422,7 +422,7 @@ void ThemeController::apply()
         << "; border-radius: " << metrics->control_radius << "px; }"
         << ".package-row { padding: 10px 12px; }"
         << ".package-row label { font-size: 13px; color: " << text << "; }"
-        << ".package-icon { color: " << operation << "; }"
+        << "image.package-icon { color: " << operation << "; opacity: 1; }"
         << "listview row { border-bottom: 1px solid " << border << "; }"
         << "listview row:hover { background: " << card_hover << "; }"
         << "listview row:selected { background: " << select_bg << "; }"
