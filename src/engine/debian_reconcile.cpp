@@ -70,6 +70,10 @@ std::string build_fingerprint(
         checksum_field(
             checksum,
             std::to_string(package.pin_priority));
+        checksum_field(checksum, package.policy_provider);
+        checksum_field(checksum, package.policy_reason);
+        checksum_field(checksum, package.release_origin);
+        checksum_field(checksum, package.site);
     }
 
     const char *digest = g_checksum_get_string(checksum);
@@ -146,6 +150,8 @@ bool DebianReconciler::reconcile(
             const DebianPolicyDecision decision =
                 policy.evaluate(package);
             package.pin_priority = decision.priority;
+            package.policy_provider = decision.provider;
+            package.policy_reason = decision.reason;
         }
 
         active.emplace_back(source);
