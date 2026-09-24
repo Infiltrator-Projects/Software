@@ -63,7 +63,9 @@ jobs:
           backend = Path("src/backends/apt/apt_backend.cpp").read_text()
           transaction = Path("src/engine/debian_transaction.cpp").read_text()
           candidate = Path("src/engine/debian_candidate.cpp").read_text()
+          package_policy = Path("src/engine/package_policy.cpp").read_text()
           preferences = Path("src/engine/debian_preferences.cpp").read_text()
+          reconcile = Path("src/engine/debian_reconcile.cpp").read_text()
           state_store = Path("src/engine/package_state_store.cpp").read_text()
           helper = Path("src/helper/update_helper.cpp").read_text()
           source_helper = Path("src/helper/source_helper.cpp").read_text()
@@ -103,6 +105,10 @@ jobs:
           assert "/etc/apt/preferences.d" in preferences
           assert "release_origin" in preferences
           assert "release_archive" in preferences
+          assert "DebianPolicyStack" in package_policy
+          assert "providers_" in package_policy
+          assert "policy.add(host_preferences)" in reconcile
+          assert "preferences.priority_for" not in reconcile
           assert "candidate.pin_priority" in candidate
           assert "pin_priority INTEGER NOT NULL" in state_store
 
