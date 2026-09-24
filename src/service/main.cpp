@@ -147,6 +147,24 @@ GVariant *package_variant(const PackageRecord &package)
         &builder, "{sv}", "source",
         g_variant_new_string(package.source.c_str()));
     g_variant_builder_add(
+        &builder, "{sv}", "repository-origin",
+        g_variant_new_string(package.repository_origin.c_str()));
+    g_variant_builder_add(
+        &builder, "{sv}", "repository-site",
+        g_variant_new_string(package.repository_site.c_str()));
+    g_variant_builder_add(
+        &builder, "{sv}", "policy-provider",
+        g_variant_new_string(package.policy_provider.c_str()));
+    g_variant_builder_add(
+        &builder, "{sv}", "policy-reason",
+        g_variant_new_string(package.policy_reason.c_str()));
+    g_variant_builder_add(
+        &builder, "{sv}", "selection-reason",
+        g_variant_new_string(package.selection_reason.c_str()));
+    g_variant_builder_add(
+        &builder, "{sv}", "candidate-priority",
+        g_variant_new_int32(package.candidate_priority));
+    g_variant_builder_add(
         &builder, "{sv}", "filename",
         g_variant_new_string(package.asset.c_str()));
     g_variant_builder_add(
