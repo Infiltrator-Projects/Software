@@ -355,7 +355,7 @@ void ThemeController::apply()
         << ".nav-history image { color: " << info << "; }"
         << ".nav-repair image { color: " << fault << "; }"
         << ".nav-row:selected image { color: " << select_fg << "; }"
-        << ".sidebar-footer { padding: 12px 16px; border-top: 1px dashed "
+        << ".sidebar-footer { padding: 12px 16px; border-top: 1px solid "
         << border << "; }"
         << ".sidebar-note { font-size: 11px; color: " << summary << "; }"
 
