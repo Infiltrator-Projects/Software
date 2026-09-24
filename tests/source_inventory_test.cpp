@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "sources/source_inventory.hpp"
+#include "sources/source_mutation.hpp"
 
 #include <cassert>
 #include <string>
@@ -20,8 +21,30 @@ int main()
         assert(records.size() == 2U);
         assert(records[0].enabled);
         assert(records[0].location == "https://example.invalid");
+        assert(records[0].entry_index == 1U);
         assert(!records[1].enabled);
         assert(records[1].location == "https://disabled.invalid");
+        assert(records[1].entry_index == 2U);
+
+        std::string updated;
+        std::string error;
+        assert(infiltrator::software::set_apt_list_entry_enabled(
+            list, records[0].entry_index, false, updated, error));
+        assert(error.empty());
+        const auto disabled =
+            SourceInventory::parse_apt_list(
+                updated, "/etc/apt/sources.list.d/example.list");
+        assert(disabled.size() == 2U);
+        assert(!disabled[0].enabled);
+
+        assert(infiltrator::software::set_apt_list_entry_enabled(
+            updated, disabled[1].entry_index, true, updated, error));
+        assert(error.empty());
+        const auto enabled =
+            SourceInventory::parse_apt_list(
+                updated, "/etc/apt/sources.list.d/example.list");
+        assert(enabled.size() == 2U);
+        assert(enabled[1].enabled);
     }
 
     {
@@ -42,8 +65,21 @@ int main()
                 deb822, "/etc/apt/sources.list.d/example.sources");
         assert(records.size() == 2U);
         assert(records[0].enabled);
+        assert(records[0].entry_index == 1U);
         assert(records[0].detail.find("main contrib") != std::string::npos);
         assert(!records[1].enabled);
+        assert(records[1].entry_index == 2U);
+
+        std::string updated;
+        std::string error;
+        assert(infiltrator::software::set_apt_deb822_entry_enabled(
+            deb822, records[1].entry_index, true, updated, error));
+        assert(error.empty());
+        const auto enabled =
+            SourceInventory::parse_apt_deb822(
+                updated, "/etc/apt/sources.list.d/example.sources");
+        assert(enabled.size() == 2U);
+        assert(enabled[1].enabled);
     }
 
     return 0;
