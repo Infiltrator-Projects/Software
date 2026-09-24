@@ -89,6 +89,9 @@ GVariant *status_variant(const EngineServiceStatus &status)
         &builder, "{sv}", "api-version",
         g_variant_new_uint32(kApiVersion));
     g_variant_builder_add(
+        &builder, "{sv}", "engine-version",
+        g_variant_new_string(INFILTRATOR_SOFTWARE_VERSION));
+    g_variant_builder_add(
         &builder, "{sv}", "generation",
         g_variant_new_uint64(status.generation));
     g_variant_builder_add(
