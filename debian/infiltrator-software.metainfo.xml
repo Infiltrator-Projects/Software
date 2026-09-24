@@ -34,6 +34,11 @@
   <url type="homepage">https://github.com/Infiltrator-Projects/Software</url>
 
   <releases>
+    <release version="0.3.20" date="2026-09-24">
+      <description>
+        <p>Separates Debian package mechanics from distribution policy through an ordered policy-provider layer, retaining current host compatibility while creating a safe path for package-by-package migration to Infiltrator OS policy.</p>
+      </description>
+    </release>
     <release version="0.3.19" date="2026-09-24">
       <description>
         <p>Corrects false update counts by honoring native APT preference and repository pin priorities, including Linux Mint's higher-priority upstream layer, and reports the exact pinned Common version in the sidebar.</p>
