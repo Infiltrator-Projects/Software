@@ -7,6 +7,7 @@
 #include <filesystem>
 #include <fstream>
 #include <fnmatch.h>
+#include <iterator>
 #include <limits>
 #include <map>
 #include <regex>
