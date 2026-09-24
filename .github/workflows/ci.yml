@@ -62,6 +62,8 @@ jobs:
           backend = Path("src/backends/apt/apt_backend.cpp").read_text()
           transaction = Path("src/engine/debian_transaction.cpp").read_text()
           helper = Path("src/helper/update_helper.cpp").read_text()
+          source_helper = Path("src/helper/source_helper.cpp").read_text()
+          source_mutation = Path("src/sources/source_mutation.cpp").read_text()
           guard = Path("src/helper/apt_plan_guard.cpp").read_text()
           engine_client = Path("src/client/engine_client.cpp").read_text()
           engine_service = Path("src/service/main.cpp").read_text()
@@ -91,6 +93,16 @@ jobs:
           assert "plan_removal(" in transaction
           assert "Refusing to remove Essential package" in transaction
           assert "Authentication is required to install, update or remove system software." in policy
+
+          # Repositories must be an operational settings surface. Mutable APT
+          # and Flatpak sources expose a real Enabled/Disabled action, while
+          # system APT edits stay behind the constrained source helper.
+          assert "source_toggle_clicked" in app
+          assert '"set-apt-source-enabled"' in source_helper
+          assert "safe_existing_apt_source" in source_helper
+          assert "/etc/apt/sources.list.d" in source_helper
+          assert "set_apt_list_entry_enabled" in source_mutation
+          assert "set_apt_deb822_entry_enabled" in source_mutation
 
           # RefreshState was added after the original v1 session service. A
           # package upgrade can leave that old D-Bus process alive, so clients

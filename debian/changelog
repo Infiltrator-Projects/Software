@@ -1,3 +1,19 @@
+infiltrator-software (0.3.15) unstable; urgency=high
+
+  * Make repository Enabled/Disabled state an operational graphical control
+    for configured APT sources and Flatpak remotes.
+  * Preserve exact APT line/stanza identities so a toggle changes only the
+    selected source, including traditional .list and deb822 .sources files.
+  * Apply system APT changes through the authenticated source helper with
+    strict /etc/apt path validation, atomic replacement and owner/mode
+    preservation.
+  * Refresh Repositories, Discover and loaded Updates state after a successful
+    source change so disabled repositories immediately leave reconciliation.
+  * Add regression tests for list/deb822 enable-disable mutation and protect
+    the source-management contract in CI.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Thu, 24 Sep 2026 10:00:00 +1000
+
 infiltrator-software (0.3.14) unstable; urgency=high
 
   * Version the package-engine D-Bus contract at API v2 for RefreshState.

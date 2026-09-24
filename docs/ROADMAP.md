@@ -10,7 +10,7 @@ Implemented: one shell with Discover, Installed, Updates, System, Repositories, 
 
 ## 0.2 — Discover and source management
 
-Implemented: asynchronous Infiltrator Repository refresh; first-party metadata validation; canonical icon digest/cache pipeline; offline metadata fallback; AppStream ingestion; Flatpak catalogue integration; merged search/categories/details; source inventory; and integrated Add Source workflow.
+Implemented: asynchronous Infiltrator Repository refresh; first-party metadata validation; canonical icon digest/cache pipeline; offline metadata fallback; AppStream ingestion; Flatpak catalogue integration; merged search/categories/details; source inventory; integrated Add Source workflow; and operational graphical enable/disable controls for configured APT sources and Flatpak remotes.
 
 ## 0.3 — Operational updates and panel integration
 
