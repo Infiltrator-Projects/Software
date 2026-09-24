@@ -25,39 +25,6 @@ std::string package_base(const std::string_view identity)
             : identity.substr(0U, colon));
 }
 
-void classify_update(
-    PackageRecord &record,
-    const DebianPackageVersion &candidate)
-{
-    const std::string name =
-        package_base(record.package_name.empty()
-            ? record.id
-            : record.package_name);
-
-    record.system_critical =
-        candidate.essential ||
-        candidate.priority == "required" ||
-        name == "dpkg" ||
-        name == "systemd" ||
-        name == "libc6" ||
-        name == "linux-base" ||
-        name == "infiltrator-software" ||
-        name.rfind("linux-image", 0U) == 0U ||
-        name.rfind("linux-modules", 0U) == 0U;
-
-    if (name.rfind("linux-image", 0U) == 0U ||
-        name.rfind("linux-modules", 0U) == 0U ||
-        name.rfind("linux-headers", 0U) == 0U) {
-        record.kind = PackageKind::kernel;
-    } else if (record.system_critical) {
-        record.kind = PackageKind::system;
-    } else if (name.rfind("lib", 0U) == 0U) {
-        record.kind = PackageKind::library;
-    } else {
-        record.kind = PackageKind::application;
-    }
-}
-
 std::vector<PackageRecord> build_updates(
     const PackageStateSnapshot &snapshot,
     const DebianCandidatePolicy &policy)
@@ -90,8 +57,10 @@ std::vector<PackageRecord> build_updates(
         record.asset = candidate.filename;
         record.package_sha256 = candidate.sha256;
         record.download_size_bytes = candidate.size_bytes;
+        record.priority = candidate.priority;
+        record.essential = candidate.essential;
         record.state = InstallState::upgradable;
-        classify_update(record, candidate);
+        classify_package_role(record);
         result.emplace_back(std::move(record));
     }
 
@@ -207,9 +176,15 @@ EngineServiceStatus EngineServiceCore::status() const
 
 std::vector<PackageRecord> EngineServiceCore::installed() const
 {
-    return snapshot_.has_value()
-        ? snapshot_->installed
-        : std::vector<PackageRecord>{};
+    if (!snapshot_.has_value()) {
+        return {};
+    }
+
+    std::vector<PackageRecord> result = snapshot_->installed;
+    for (PackageRecord &package : result) {
+        classify_package_role(package);
+    }
+    return result;
 }
 
 std::vector<PackageRecord> EngineServiceCore::updates() const
