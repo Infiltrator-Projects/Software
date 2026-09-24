@@ -59,6 +59,7 @@ jobs:
           import xml.etree.ElementTree as ET
 
           app = Path("src/app/main.cpp").read_text()
+          theme = Path("src/app/theme.cpp").read_text()
           backend = Path("src/backends/apt/apt_backend.cpp").read_text()
           transaction = Path("src/engine/debian_transaction.cpp").read_text()
           helper = Path("src/helper/update_helper.cpp").read_text()
@@ -98,6 +99,8 @@ jobs:
           # and Flatpak sources expose a real Enabled/Disabled action, while
           # system APT edits stay behind the constrained source helper.
           assert "source_toggle_clicked" in app
+          assert "button.source-state-toggle.state-installed label" in theme
+          assert "button.source-state-toggle.state-available label" in theme
           assert '"set-apt-source-enabled"' in source_helper
           assert "safe_existing_apt_source" in source_helper
           assert "/etc/apt/sources.list.d" in source_helper
