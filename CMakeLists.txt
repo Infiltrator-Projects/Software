@@ -296,6 +296,13 @@ if(BUILD_TESTING)
         NAME software-debian-candidate-test
         COMMAND software-debian-candidate-test)
 
+    add_executable(software-debian-preferences-test
+        tests/debian_preferences_test.cpp)
+    target_link_libraries(software-debian-preferences-test PRIVATE software-engine)
+    add_test(
+        NAME software-debian-preferences-test
+        COMMAND software-debian-preferences-test)
+
     add_executable(software-debian-dependency-test
         tests/debian_dependency_test.cpp)
     target_link_libraries(software-debian-dependency-test PRIVATE software-engine)
