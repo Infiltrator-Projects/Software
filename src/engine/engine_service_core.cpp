@@ -81,6 +81,12 @@ std::vector<PackageRecord> build_updates(
         PackageRecord record = selection.installed;
         record.available_version = candidate.version;
         record.source = candidate.source;
+        record.repository_origin = candidate.release_origin;
+        record.repository_site = candidate.site;
+        record.policy_provider = candidate.policy_provider;
+        record.policy_reason = candidate.policy_reason;
+        record.selection_reason = selection.reason;
+        record.candidate_priority = selection.candidate_priority;
         record.asset = candidate.filename;
         record.package_sha256 = candidate.sha256;
         record.download_size_bytes = candidate.size_bytes;
