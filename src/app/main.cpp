@@ -2502,27 +2502,76 @@ GtkWidget *make_update_row(
         GTK_LABEL(version_label), PANGO_ELLIPSIZE_END);
     gtk_box_append(GTK_BOX(identity), version_label);
 
-    std::string meta =
-        std::string(infiltrator::software::package_kind_name(package.kind));
-    if (!package.source.empty()) {
-        meta += "  •  " + package.source;
+    std::string source_name = package.repository_origin;
+    if (source_name.empty()) {
+        source_name = package.repository_site;
     }
-    GtkWidget *meta_label = make_label(meta.c_str(), "discover-meta");
-    gtk_box_append(GTK_BOX(identity), meta_label);
+    if (source_name.empty()) {
+        source_name = package.source;
+    }
+    if (!package.repository_site.empty() &&
+        package.repository_site != source_name) {
+        source_name += " (" + package.repository_site + ")";
+    }
+
+    std::string policy_name = "Repository default";
+    if (package.policy_provider == "host-apt-preferences") {
+        policy_name = "Host preferred";
+    } else if (
+        package.policy_provider == "infiltrator-distribution") {
+        policy_name = "Infiltrator preferred";
+    } else if (!package.policy_provider.empty() &&
+               package.policy_provider != "repository-default") {
+        policy_name = package.policy_provider;
+    }
+
+    std::string source_meta =
+        std::string(infiltrator::software::package_kind_name(package.kind));
+    if (!source_name.empty()) {
+        source_meta += "  •  Source: " + source_name;
+    }
+    GtkWidget *source_label =
+        make_label(source_meta.c_str(), "discover-meta");
+    gtk_label_set_ellipsize(
+        GTK_LABEL(source_label), PANGO_ELLIPSIZE_END);
+    gtk_box_append(GTK_BOX(identity), source_label);
+
+    std::string policy_meta =
+        "Policy: " + policy_name;
+    if (package.candidate_priority != 0) {
+        policy_meta +=
+            "  •  priority " +
+            std::to_string(package.candidate_priority);
+    }
+    GtkWidget *policy_label =
+        make_label(policy_meta.c_str(), "discover-meta");
+    gtk_label_set_ellipsize(
+        GTK_LABEL(policy_label), PANGO_ELLIPSIZE_END);
+    std::string explanation = package.policy_reason;
+    if (!package.selection_reason.empty()) {
+        if (!explanation.empty()) {
+            explanation += " ";
+        }
+        explanation += package.selection_reason;
+    }
+    if (!explanation.empty()) {
+        gtk_widget_set_tooltip_text(
+            policy_label, explanation.c_str());
+    }
+    gtk_box_append(GTK_BOX(identity), policy_label);
 
     gtk_box_append(GTK_BOX(row), identity);
 
-    if (package.system_critical) {
-        GtkWidget *critical =
-            make_label("System-critical", "state-warning");
-        gtk_widget_set_valign(critical, GTK_ALIGN_CENTER);
-        gtk_box_append(GTK_BOX(row), critical);
-    } else {
-        GtkWidget *available =
-            make_label("Update available", "state-available");
-        gtk_widget_set_valign(available, GTK_ALIGN_CENTER);
-        gtk_box_append(GTK_BOX(row), available);
-    }
+    GtkWidget *recommended =
+        make_label(
+            package.system_critical
+                ? "Recommended • System-critical"
+                : "Recommended update",
+            package.system_critical
+                ? "state-warning"
+                : "state-available");
+    gtk_widget_set_valign(recommended, GTK_ALIGN_CENTER);
+    gtk_box_append(GTK_BOX(row), recommended);
 
     return row;
 }
