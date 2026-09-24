@@ -2444,15 +2444,6 @@ GtkWidget *make_system_page(WindowState *state)
 
     gtk_box_append(GTK_BOX(page), controls);
 
-    state->updates_progress = gtk_progress_bar_new();
-    gtk_progress_bar_set_show_text(
-        GTK_PROGRESS_BAR(state->updates_progress), false);
-    gtk_widget_set_visible(state->updates_progress, false);
-    gtk_widget_set_tooltip_text(
-        state->updates_progress,
-        "Software is actively processing the approved transaction.");
-    gtk_box_append(GTK_BOX(page), state->updates_progress);
-
     GtkWidget *card =
         gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
     gtk_widget_add_css_class(card, "card");
@@ -3595,6 +3586,10 @@ void updates_complete(
             "error:" + one_line(error));
     }
 
+    if (post_install) {
+        stop_update_progress(state);
+    }
+
     if (schedule_auto_refresh &&
         state->window != nullptr) {
         g_idle_add_full(
@@ -4218,6 +4213,15 @@ GtkWidget *make_updates_page(WindowState *state)
     gtk_box_append(GTK_BOX(controls), state->updates_install);
 
     gtk_box_append(GTK_BOX(page), controls);
+
+    state->updates_progress = gtk_progress_bar_new();
+    gtk_progress_bar_set_show_text(
+        GTK_PROGRESS_BAR(state->updates_progress), false);
+    gtk_widget_set_visible(state->updates_progress, false);
+    gtk_widget_set_tooltip_text(
+        state->updates_progress,
+        "Software is actively processing the approved transaction.");
+    gtk_box_append(GTK_BOX(page), state->updates_progress);
 
     GtkWidget *card =
         gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
