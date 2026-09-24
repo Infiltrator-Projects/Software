@@ -2505,6 +2505,7 @@ struct UpdatePlanTaskData {
 struct UpdateProcessRun {
     GtkWindow *window{};
     std::string operation;
+    TransactionPlan plan;
 };
 
 std::filesystem::path update_runtime_state_path()
@@ -2515,6 +2516,36 @@ std::filesystem::path update_runtime_state_path()
     }
     return std::filesystem::path(runtime) /
            "infiltrator-software" / "update-state";
+}
+
+std::filesystem::path transaction_history_path()
+{
+    const char *data = g_get_user_data_dir();
+    if (data == nullptr || *data == '\0') {
+        return {};
+    }
+    return std::filesystem::path(data) /
+           "infiltrator-software" / "history.sqlite3";
+}
+
+void record_transaction_history(
+    const TransactionPlan &plan,
+    const bool success,
+    const std::string_view message)
+{
+    const std::filesystem::path path =
+        transaction_history_path();
+    if (path.empty() || plan.items.empty()) {
+        return;
+    }
+
+    TransactionHistoryStore store(path.string());
+    std::string error;
+    if (!store.append(plan, success, message, error)) {
+        g_warning(
+            "Unable to record Software transaction history: %s",
+            error.c_str());
+    }
 }
 
 std::string one_line(std::string value)
@@ -2533,6 +2564,84 @@ std::string one_line(std::string value)
         value += "...";
     }
     return value;
+}
+
+
+gboolean update_progress_tick(gpointer user_data)
+{
+    auto *state = static_cast<WindowState *>(user_data);
+    if (state == nullptr ||
+        !state->updates_busy ||
+        state->updates_progress == nullptr) {
+        if (state != nullptr) {
+            state->updates_progress_timer_id = 0U;
+        }
+        return G_SOURCE_REMOVE;
+    }
+
+    gtk_progress_bar_pulse(
+        GTK_PROGRESS_BAR(state->updates_progress));
+
+    if (state->updates_status != nullptr &&
+        state->updates_progress_started_us > 0) {
+        const gint64 elapsed_us =
+            g_get_monotonic_time() -
+            state->updates_progress_started_us;
+        const long long elapsed_seconds =
+            static_cast<long long>(
+                elapsed_us / G_USEC_PER_SEC);
+
+        const std::string message =
+            "Installing approved updates… " +
+            std::to_string(elapsed_seconds) +
+            " s elapsed. Software is refreshing metadata, "
+            "re-validating the approved exact versions and applying packages.";
+        gtk_label_set_text(
+            GTK_LABEL(state->updates_status),
+            message.c_str());
+    }
+
+    return G_SOURCE_CONTINUE;
+}
+
+void start_update_progress(WindowState *state)
+{
+    if (state == nullptr ||
+        state->updates_progress == nullptr) {
+        return;
+    }
+
+    state->updates_progress_started_us =
+        g_get_monotonic_time();
+    gtk_widget_set_visible(
+        state->updates_progress, true);
+    gtk_progress_bar_set_pulse_step(
+        GTK_PROGRESS_BAR(state->updates_progress), 0.08);
+    gtk_progress_bar_pulse(
+        GTK_PROGRESS_BAR(state->updates_progress));
+
+    if (state->updates_progress_timer_id == 0U) {
+        state->updates_progress_timer_id =
+            g_timeout_add_seconds(
+                1U, update_progress_tick, state);
+    }
+}
+
+void stop_update_progress(WindowState *state)
+{
+    if (state == nullptr) {
+        return;
+    }
+
+    if (state->updates_progress_timer_id != 0U) {
+        g_source_remove(state->updates_progress_timer_id);
+        state->updates_progress_timer_id = 0U;
+    }
+    state->updates_progress_started_us = 0;
+    if (state->updates_progress != nullptr) {
+        gtk_widget_set_visible(
+            state->updates_progress, false);
+    }
 }
 
 struct DiscoverPlanTaskData {
