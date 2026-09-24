@@ -3748,7 +3748,247 @@ const char *source_icon(const SourceRecord &source) noexcept
     return "network-workgroup-symbolic";
 }
 
-GtkWidget *make_source_card(const SourceRecord &source)
+struct SourceToggleContext {
+    GtkWindow *window{};
+    SourceRecord source;
+};
+
+struct SourceToggleRun {
+    GtkWindow *window{};
+    bool enabled{false};
+    std::string source_name;
+};
+
+void destroy_source_toggle_context(gpointer data)
+{
+    delete static_cast<SourceToggleContext *>(data);
+}
+
+void destroy_source_toggle_run(SourceToggleRun *run)
+{
+    if (run == nullptr) {
+        return;
+    }
+    if (run->window != nullptr) {
+        g_object_unref(run->window);
+    }
+    delete run;
+}
+
+void source_toggle_process_complete(
+    GObject *source_object,
+    GAsyncResult *result,
+    gpointer user_data)
+{
+    auto *run = static_cast<SourceToggleRun *>(user_data);
+    auto *process = G_SUBPROCESS(source_object);
+
+    GError *error = nullptr;
+    gchar *stdout_text = nullptr;
+    gchar *stderr_text = nullptr;
+    const gboolean communicated =
+        g_subprocess_communicate_utf8_finish(
+            process,
+            result,
+            &stdout_text,
+            &stderr_text,
+            &error);
+    const bool success =
+        communicated &&
+        g_subprocess_get_successful(process);
+
+    auto *state =
+        run == nullptr || run->window == nullptr
+            ? nullptr
+            : static_cast<WindowState *>(
+                  g_object_get_data(
+                      G_OBJECT(run->window),
+                      "infiltrator-window-state"));
+
+    if (state != nullptr) {
+        state->repositories_busy = false;
+        if (state->repository_flow != nullptr) {
+            gtk_widget_set_sensitive(
+                state->repository_flow, true);
+        }
+
+        if (success) {
+            if (state->repository_status != nullptr) {
+                const std::string message =
+                    run->source_name +
+                    (run->enabled
+                         ? " enabled. Refreshing software state…"
+                         : " disabled. Refreshing software state…");
+                gtk_label_set_text(
+                    GTK_LABEL(state->repository_status),
+                    message.c_str());
+            }
+
+            refresh_repositories(state);
+            if (state->discover_loaded) {
+                refresh_discover(state, true);
+            }
+            if (state->updates_loaded) {
+                refresh_updates(state, true);
+            }
+        } else if (state->repository_status != nullptr) {
+            std::string message =
+                run != nullptr && run->enabled
+                    ? "Unable to enable source."
+                    : "Unable to disable source.";
+            if (stderr_text != nullptr &&
+                *stderr_text != '\0') {
+                message += " ";
+                message += one_line(stderr_text);
+            } else if (error != nullptr &&
+                       error->message != nullptr) {
+                message += " ";
+                message += one_line(error->message);
+            }
+            gtk_label_set_text(
+                GTK_LABEL(state->repository_status),
+                message.c_str());
+        }
+    }
+
+    g_free(stdout_text);
+    g_free(stderr_text);
+    g_clear_error(&error);
+    destroy_source_toggle_run(run);
+}
+
+void source_toggle_clicked(
+    GtkButton *,
+    gpointer user_data)
+{
+    auto *context =
+        static_cast<SourceToggleContext *>(user_data);
+    if (context == nullptr ||
+        context->window == nullptr) {
+        return;
+    }
+
+    auto *state = static_cast<WindowState *>(
+        g_object_get_data(
+            G_OBJECT(context->window),
+            "infiltrator-window-state"));
+    if (state == nullptr || state->repositories_busy) {
+        return;
+    }
+
+    const bool enable = !context->source.enabled;
+    std::vector<std::string> arguments;
+
+    if (context->source.kind ==
+        infiltrator::software::SourceKind::apt) {
+        if (context->source.backing_file.empty() ||
+            context->source.entry_index == 0U) {
+            if (state->repository_status != nullptr) {
+                gtk_label_set_text(
+                    GTK_LABEL(state->repository_status),
+                    "This APT source has no mutable source-file identity.");
+            }
+            return;
+        }
+        arguments = {
+            "pkexec",
+            "/usr/libexec/infiltrator-software-helper",
+            "set-apt-source-enabled",
+            context->source.backing_file,
+            std::to_string(context->source.entry_index),
+            enable ? "yes" : "no"
+        };
+    } else if (context->source.kind ==
+               infiltrator::software::SourceKind::flatpak) {
+        const bool system_scope =
+            context->source.scope == "System";
+        if (system_scope) {
+            arguments = {
+                "pkexec",
+                "/usr/bin/flatpak",
+                "remote-modify",
+                "--system",
+                enable ? "--enable" : "--disable",
+                context->source.name
+            };
+        } else {
+            arguments = {
+                "flatpak",
+                "remote-modify",
+                "--user",
+                enable ? "--enable" : "--disable",
+                context->source.name
+            };
+        }
+    } else {
+        return;
+    }
+
+    std::vector<const gchar *> argv;
+    argv.reserve(arguments.size() + 1U);
+    for (const std::string &argument : arguments) {
+        argv.push_back(argument.c_str());
+    }
+    argv.push_back(nullptr);
+
+    GError *error = nullptr;
+    GSubprocess *process =
+        g_subprocess_newv(
+            argv.data(),
+            static_cast<GSubprocessFlags>(
+                G_SUBPROCESS_FLAGS_STDOUT_PIPE |
+                G_SUBPROCESS_FLAGS_STDERR_PIPE),
+            &error);
+    if (process == nullptr) {
+        if (state->repository_status != nullptr) {
+            std::string message =
+                enable
+                    ? "Unable to enable source."
+                    : "Unable to disable source.";
+            if (error != nullptr &&
+                error->message != nullptr) {
+                message += " ";
+                message += one_line(error->message);
+            }
+            gtk_label_set_text(
+                GTK_LABEL(state->repository_status),
+                message.c_str());
+        }
+        g_clear_error(&error);
+        return;
+    }
+
+    state->repositories_busy = true;
+    if (state->repository_flow != nullptr) {
+        gtk_widget_set_sensitive(
+            state->repository_flow, false);
+    }
+    if (state->repository_status != nullptr) {
+        const std::string message =
+            std::string(enable ? "Enabling " : "Disabling ") +
+            context->source.name + "…";
+        gtk_label_set_text(
+            GTK_LABEL(state->repository_status),
+            message.c_str());
+    }
+
+    auto *run = new SourceToggleRun{
+        context->window,
+        enable,
+        context->source.name};
+    g_object_ref(run->window);
+    g_subprocess_communicate_utf8_async(
+        process,
+        nullptr,
+        nullptr,
+        source_toggle_process_complete,
+        run);
+    g_object_unref(process);
+}
+
+GtkWidget *make_source_card(
+    WindowState *state,
+    const SourceRecord &source)
 {
     GtkWidget *card = gtk_box_new(GTK_ORIENTATION_VERTICAL, 7);
     gtk_widget_add_css_class(card, "source-card");
@@ -3774,10 +4014,59 @@ GtkWidget *make_source_card(const SourceRecord &source)
         make_label(type.c_str(), "source-meta"));
     gtk_box_append(GTK_BOX(header), identity);
 
-    GtkWidget *state = make_label(
-        source.enabled ? "Enabled" : "Disabled",
-        source.enabled ? "state-installed" : "state-available");
-    gtk_box_append(GTK_BOX(header), state);
+    const bool mutable_source =
+        source.kind == infiltrator::software::SourceKind::flatpak ||
+        (source.kind == infiltrator::software::SourceKind::apt &&
+         !source.backing_file.empty() &&
+         source.entry_index != 0U);
+
+    GtkWidget *source_state = nullptr;
+    if (mutable_source && state != nullptr &&
+        state->window != nullptr) {
+        source_state =
+            gtk_button_new_with_label(
+                source.enabled ? "Enabled" : "Disabled");
+        gtk_widget_add_css_class(
+            source_state, "source-state-toggle");
+        gtk_widget_add_css_class(
+            source_state,
+            source.enabled
+                ? "state-installed"
+                : "state-available");
+        gtk_widget_set_tooltip_text(
+            source_state,
+            source.enabled
+                ? "Click to disable this source"
+                : "Click to enable this source");
+
+        auto *context = new SourceToggleContext{
+            state->window,
+            source};
+        g_object_set_data_full(
+            G_OBJECT(source_state),
+            "source-toggle-context",
+            context,
+            destroy_source_toggle_context);
+        g_signal_connect(
+            source_state,
+            "clicked",
+            G_CALLBACK(source_toggle_clicked),
+            context);
+    } else {
+        source_state = make_label(
+            source.enabled ? "Enabled" : "Disabled",
+            source.enabled
+                ? "state-installed"
+                : "state-available");
+        if (source.kind ==
+            infiltrator::software::SourceKind::infiltrator) {
+            gtk_widget_set_tooltip_text(
+                source_state,
+                "The built-in Infiltrator project catalogue is always enabled.");
+        }
+    }
+
+    gtk_box_append(GTK_BOX(header), source_state);
     gtk_box_append(GTK_BOX(card), header);
 
     GtkWidget *location =
@@ -3871,7 +4160,7 @@ void repositories_complete(
     for (const SourceRecord &source : result->sources) {
         gtk_flow_box_append(
             GTK_FLOW_BOX(state->repository_flow),
-            make_source_card(source));
+            make_source_card(state, source));
         if (source.enabled) {
             ++enabled;
         }
