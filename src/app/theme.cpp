@@ -465,6 +465,35 @@ void ThemeController::apply()
         << ".source-location { font-size: 12px; color: " << text << "; }"
         << ".source-detail { font-size: 11px; color: " << note << "; }"
         << ".source-file { font-size: 10px; color: " << summary << "; }"
+        /*
+         * Repository state controls are GtkButtons. GTK's generic
+         * "button label" rule sets the child label colour explicitly, so the
+         * state colour on the button itself does not inherit into its label.
+         * Style both the button and its child label to keep Enabled/Disabled
+         * readable in every palette.
+         */
+        << "button.source-state-toggle { min-height: 30px; padding: 0 11px; "
+        << "border-radius: 999px; background: " << surface << "; }"
+        << "button.source-state-toggle.state-installed { border-color: "
+        << success_border << "; background: " << surface << "; }"
+        << "button.source-state-toggle.state-installed, "
+        << "button.source-state-toggle.state-installed label { color: "
+        << success << "; opacity: 1; }"
+        << "button.source-state-toggle.state-available { border-color: "
+        << info << "; background: " << surface << "; }"
+        << "button.source-state-toggle.state-available, "
+        << "button.source-state-toggle.state-available label { color: "
+        << info << "; opacity: 1; }"
+        << "button.source-state-toggle.state-installed:hover { background: "
+        << card_hover << "; border-color: " << success << "; }"
+        << "button.source-state-toggle.state-installed:hover, "
+        << "button.source-state-toggle.state-installed:hover label { color: "
+        << success << "; opacity: 1; }"
+        << "button.source-state-toggle.state-available:hover { background: "
+        << card_hover << "; border-color: " << info << "; }"
+        << "button.source-state-toggle.state-available:hover, "
+        << "button.source-state-toggle.state-available:hover label { color: "
+        << info << "; opacity: 1; }"
         << ".discover-details { min-height: 30px; }"
         << ".detail-page { background: " << background << "; }"
         << ".detail-hero { padding-bottom: 4px; }"
