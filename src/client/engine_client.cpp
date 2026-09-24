@@ -337,6 +337,18 @@ std::uint64_t lookup_u64(
     return static_cast<std::uint64_t>(value);
 }
 
+std::int32_t lookup_i32(
+    GVariant *dictionary,
+    const char *key)
+{
+    gint32 value = 0;
+    if (dictionary != nullptr) {
+        (void)g_variant_lookup(
+            dictionary, key, "i", &value);
+    }
+    return static_cast<std::int32_t>(value);
+}
+
 std::int64_t lookup_i64(
     GVariant *dictionary,
     const char *key)
@@ -398,6 +410,18 @@ PackageRecord parse_package(GVariant *dictionary)
     package.available_version =
         lookup_string(dictionary, "available-version");
     package.source = lookup_string(dictionary, "source");
+    package.repository_origin =
+        lookup_string(dictionary, "repository-origin");
+    package.repository_site =
+        lookup_string(dictionary, "repository-site");
+    package.policy_provider =
+        lookup_string(dictionary, "policy-provider");
+    package.policy_reason =
+        lookup_string(dictionary, "policy-reason");
+    package.selection_reason =
+        lookup_string(dictionary, "selection-reason");
+    package.candidate_priority =
+        lookup_i32(dictionary, "candidate-priority");
     package.asset = lookup_string(dictionary, "filename");
     package.package_sha256 =
         lookup_string(dictionary, "sha256");
