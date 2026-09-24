@@ -585,14 +585,18 @@ void DebianAptPreferences::append(
         std::make_move_iterator(other.rules_.end()));
 }
 
-int DebianAptPreferences::priority_for(
+std::optional<DebianPolicyDecision>
+DebianAptPreferences::evaluate(
     const DebianPackageVersion &package) const
 {
     for (const DebianPreferenceRule &rule : rules_) {
         if (!rule.generic &&
             package_rule_matches(rule, package) &&
             pin_rule_matches(rule, package)) {
-            return rule.priority;
+            return DebianPolicyDecision{
+                rule.priority,
+                std::string(id()),
+                "Matched host APT package-specific preference."};
         }
     }
 
@@ -610,9 +614,14 @@ int DebianAptPreferences::priority_for(
             std::max(generic_priority, rule.priority);
     }
 
-    return matched_generic
-        ? generic_priority
-        : package.pin_priority;
+    if (!matched_generic) {
+        return std::nullopt;
+    }
+
+    return DebianPolicyDecision{
+        generic_priority,
+        std::string(id()),
+        "Matched host APT generic preference."};
 }
 
 } // namespace infiltrator::software
