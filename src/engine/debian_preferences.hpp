@@ -2,8 +2,9 @@
 #ifndef INFILTRATOR_SOFTWARE_DEBIAN_PREFERENCES_HPP
 #define INFILTRATOR_SOFTWARE_DEBIAN_PREFERENCES_HPP
 
-#include "engine/debian_package_index.hpp"
+#include "engine/package_policy.hpp"
 
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -27,7 +28,7 @@ struct DebianPreferenceRule {
     bool generic{false};
 };
 
-class DebianAptPreferences final {
+class DebianAptPreferences final : public DebianPackagePolicyProvider {
 public:
     static DebianAptPreferences read(std::string &error);
 
@@ -38,8 +39,13 @@ public:
 
     void append(DebianAptPreferences other);
 
-    [[nodiscard]] int priority_for(
-        const DebianPackageVersion &package) const;
+    [[nodiscard]] std::string_view id() const noexcept override
+    {
+        return "host-apt-preferences";
+    }
+
+    [[nodiscard]] std::optional<DebianPolicyDecision> evaluate(
+        const DebianPackageVersion &package) const override;
 
     [[nodiscard]] bool empty() const noexcept
     {
