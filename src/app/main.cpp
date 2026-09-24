@@ -3455,14 +3455,31 @@ void updates_complete(
 
     rebuild_updates(state);
 
+    const bool post_install =
+        state->updates_post_install_refresh;
+    state->updates_post_install_refresh = false;
+
     if (state->updates_status != nullptr) {
         if (!error.empty()) {
             const std::string message =
                 std::string(
-                    refreshed_metadata
-                        ? "Unable to refresh package metadata: "
-                        : "Unable to check for updates: ") +
+                    post_install
+                        ? "Updates were installed, but final state verification failed: "
+                        : refreshed_metadata
+                            ? "Unable to refresh package metadata: "
+                            : "Unable to check for updates: ") +
                 one_line(error);
+            gtk_label_set_text(
+                GTK_LABEL(state->updates_status), message.c_str());
+        } else if (post_install) {
+            const std::string message =
+                state->update_records.empty()
+                    ? "Installation complete. Final package state verified; the system is up to date."
+                    : "Installation complete. Final package state verified; " +
+                        std::to_string(state->update_records.size()) +
+                        (state->update_records.size() == 1U
+                             ? " preferred update remains."
+                             : " preferred updates remain.");
             gtk_label_set_text(
                 GTK_LABEL(state->updates_status), message.c_str());
         } else if (schedule_auto_refresh) {
@@ -3532,9 +3549,11 @@ void refresh_updates(WindowState *state, const bool refresh_metadata)
     if (state->updates_status != nullptr) {
         gtk_label_set_text(
             GTK_LABEL(state->updates_status),
-            refresh_metadata
-                ? "Refreshing repository metadata without administrator access…"
-                : "Checking installed versions and available updates…");
+            state->updates_post_install_refresh
+                ? "Installation finished. Verifying installed versions and remaining updates…"
+                : refresh_metadata
+                    ? "Refreshing repository metadata without administrator access…"
+                    : "Checking installed versions and available updates…");
     }
     if (state->updates_install != nullptr) {
         gtk_widget_set_sensitive(state->updates_install, false);
@@ -3598,6 +3617,30 @@ void update_process_complete(
 
     if (state != nullptr) {
         state->updates_busy = false;
+        stop_update_progress(state);
+
+        if (run != nullptr &&
+            run->operation == "install" &&
+            !run->plan.items.empty()) {
+            std::string history_message;
+            if (success) {
+                history_message = "Transaction completed successfully.";
+            } else if (g_subprocess_get_if_exited(process) &&
+                       g_subprocess_get_exit_status(process) == 126) {
+                history_message = "Administrator authentication was cancelled.";
+            } else if (stderr_text != nullptr && *stderr_text != '\0') {
+                history_message = one_line(stderr_text);
+            } else if (error != nullptr && error->message != nullptr) {
+                history_message = one_line(error->message);
+            } else {
+                history_message = "Transaction failed.";
+            }
+            record_transaction_history(
+                run->plan, success, history_message);
+            if (state->history_loaded) {
+                refresh_history(state);
+            }
+        }
 
         if (success) {
             set_update_runtime_state({});
@@ -3612,6 +3655,8 @@ void update_process_complete(
             refresh_installed(state);
             refresh_discover(state);
             refresh_repositories(state);
+            state->updates_post_install_refresh =
+                run->operation == "install";
             refresh_updates(state);
         } else {
             std::string message =
@@ -3660,7 +3705,8 @@ void update_process_complete(
 void start_update_process(
     WindowState *state,
     std::vector<std::string> arguments,
-    const std::string &operation)
+    const std::string &operation,
+    TransactionPlan plan)
 {
     if (state == nullptr || state->window == nullptr ||
         arguments.empty()) {
@@ -3707,11 +3753,21 @@ void start_update_process(
         if (state->updates_install != nullptr) {
             update_selection_controls(state);
         }
+        stop_update_progress(state);
+        if (!plan.items.empty()) {
+            record_transaction_history(
+                plan, false, message);
+            if (state->history_loaded) {
+                refresh_history(state);
+            }
+        }
         return;
     }
 
     auto *run = new UpdateProcessRun{
-        GTK_WINDOW(g_object_ref(state->window)), operation};
+        GTK_WINDOW(g_object_ref(state->window)),
+        operation,
+        std::move(plan)};
 
     g_subprocess_communicate_utf8_async(
         process, nullptr, nullptr,
@@ -3761,11 +3817,14 @@ void begin_apply_updates(WindowState *state)
         return;
     }
 
+    const TransactionPlan approved_plan =
+        *state->pending_update_plan;
+
     state->updates_busy = true;
     if (state->updates_status != nullptr) {
         gtk_label_set_text(
             GTK_LABEL(state->updates_status),
-            "Installing the approved software transaction…");
+            "Administrator authorization accepted. Installing approved updates…");
     }
     if (state->updates_install != nullptr) {
         gtk_widget_set_sensitive(state->updates_install, false);
@@ -3774,6 +3833,7 @@ void begin_apply_updates(WindowState *state)
         gtk_widget_set_sensitive(state->updates_refresh, false);
     }
     set_update_runtime_state("installing");
+    start_update_progress(state);
 
     std::vector<std::string> arguments{
         "pkexec",
@@ -3784,7 +3844,10 @@ void begin_apply_updates(WindowState *state)
 
     state->pending_update_plan.reset();
     start_update_process(
-        state, std::move(arguments), "install");
+        state,
+        std::move(arguments),
+        "install",
+        approved_plan);
 }
 
 void update_confirm_response(
