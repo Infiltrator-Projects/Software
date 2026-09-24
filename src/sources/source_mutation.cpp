@@ -162,6 +162,11 @@ bool set_apt_list_entry_enabled(
         return false;
     }
 
+    if (currently_enabled == enabled) {
+        updated.assign(content);
+        return true;
+    }
+
     std::string replacement(indent);
     if (!enabled) {
         replacement += "# ";
@@ -173,9 +178,6 @@ bool set_apt_list_entry_enabled(
 
     updated.assign(content);
     updated.replace(start, end - start, replacement);
-    if (currently_enabled == enabled) {
-        return true;
-    }
     return true;
 }
 
@@ -237,7 +239,7 @@ bool set_apt_deb822_entry_enabled(
                     replacement.push_back('\n');
                 }
                 replacement +=
-                    enabled ? "Enabled: yes\n" : "Enabled: no\n";
+                    enabled ? "Enabled: yes" : "Enabled: no";
             }
 
             updated.assign(content);
