@@ -20,7 +20,6 @@
 #include <iterator>
 #include <limits>
 #include <sstream>
-#include <tuple>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -276,6 +275,11 @@ struct TemporaryFile {
         }
     }
 };
+
+bool create_temporary_file(
+    std::string_view content,
+    TemporaryFile &file,
+    std::string &error);
 
 std::uint32_t crc24(const std::string_view content)
 {
