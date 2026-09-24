@@ -6,6 +6,7 @@
 #include "catalogue/system_catalogue.hpp"
 #include "client/engine_client.hpp"
 #include "core/model.hpp"
+#include "core/transaction_history.hpp"
 #include "core/update_freshness.hpp"
 #include "sources/source_inventory.hpp"
 
@@ -43,6 +44,8 @@ using infiltrator::software::SourceRecord;
 using infiltrator::software::SystemCatalogue;
 using infiltrator::software::ThemeController;
 using infiltrator::software::TransactionAction;
+using infiltrator::software::TransactionHistoryItem;
+using infiltrator::software::TransactionHistoryStore;
 using infiltrator::software::TransactionPlan;
 using infiltrator::software::source_kind_name;
 using infiltrator::software::update_metadata_refresh_due;
@@ -86,6 +89,10 @@ struct WindowState {
     GtkWidget *updates_install{};
     GtkWidget *updates_refresh{};
     GtkWidget *updates_backend{};
+    GtkWidget *updates_progress{};
+    guint updates_progress_timer_id{0U};
+    gint64 updates_progress_started_us{0};
+    bool updates_post_install_refresh{false};
     std::vector<PackageRecord> update_records;
     std::unordered_set<std::string> selected_update_ids;
     std::optional<TransactionPlan> pending_update_plan;
@@ -108,12 +115,21 @@ struct WindowState {
     unsigned int system_generation{0U};
     bool system_busy{false};
 
+    GtkListBox *history_list{};
+    GtkWidget *history_status{};
+    GtkWidget *history_count{};
+    GtkWidget *history_refresh{};
+    std::vector<TransactionHistoryItem> history_records;
+    unsigned int history_generation{0U};
+    bool history_busy{false};
+
     bool window_presented{false};
     bool discover_loaded{false};
     bool installed_loaded{false};
     bool updates_loaded{false};
     bool system_loaded{false};
     bool repositories_loaded{false};
+    bool history_loaded{false};
 };
 
 void refresh_repositories(WindowState *state);
@@ -121,6 +137,7 @@ void refresh_updates(WindowState *state, bool refresh_metadata = false);
 void refresh_discover(WindowState *state, bool force_refresh);
 void refresh_installed(WindowState *state);
 void refresh_system(WindowState *state, bool refresh_metadata = false);
+void refresh_history(WindowState *state);
 void discover_install_clicked(GtkButton *button, gpointer user_data);
 
 GtkWidget *make_icon(const char *name, int size)
