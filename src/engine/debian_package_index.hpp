@@ -18,9 +18,11 @@ struct DebianPackageVersion {
     std::string source;
     std::string priority;
     int pin_priority{0};
+    std::string policy_provider;
+    std::string policy_reason;
 
-    // Ephemeral repository identity used while reconciling APT policy.
-    // Only pin_priority is persisted in the package-state database.
+    // Repository identity is persisted so the UI can explain why a candidate
+    // was selected without re-reading mutable repository metadata.
     std::string release_origin;
     std::string release_label;
     std::string release_version;
