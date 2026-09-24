@@ -20,6 +20,7 @@
 #include <iterator>
 #include <limits>
 #include <sstream>
+#include <tuple>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -242,6 +243,31 @@ bool write_all(const int fd, const std::string_view content)
 
 struct TemporaryFile {
     std::string path;
+
+    TemporaryFile() = default;
+    TemporaryFile(const TemporaryFile &) = delete;
+    TemporaryFile &operator=(const TemporaryFile &) = delete;
+
+    TemporaryFile(TemporaryFile &&other) noexcept
+        : path(std::move(other.path))
+    {
+        other.path.clear();
+    }
+
+    TemporaryFile &operator=(TemporaryFile &&other) noexcept
+    {
+        if (this == &other) {
+            return *this;
+        }
+        if (!path.empty()) {
+            std::error_code ignored;
+            std::filesystem::remove(path, ignored);
+        }
+        path = std::move(other.path);
+        other.path.clear();
+        return *this;
+    }
+
     ~TemporaryFile()
     {
         if (!path.empty()) {
@@ -250,6 +276,262 @@ struct TemporaryFile {
         }
     }
 };
+
+std::uint32_t crc24(const std::string_view content)
+{
+    std::uint32_t crc = 0xB704CEU;
+    for (const unsigned char byte : content) {
+        crc ^= static_cast<std::uint32_t>(byte) << 16U;
+        for (unsigned int bit = 0U; bit < 8U; ++bit) {
+            crc <<= 1U;
+            if ((crc & 0x1000000U) != 0U) {
+                crc ^= 0x1864CFBU;
+            }
+        }
+    }
+    return crc & 0xFFFFFFU;
+}
+
+bool valid_base64_line(const std::string_view line)
+{
+    if (line.empty()) {
+        return false;
+    }
+    for (const unsigned char ch : line) {
+        if ((ch >= 'A' && ch <= 'Z') ||
+            (ch >= 'a' && ch <= 'z') ||
+            (ch >= '0' && ch <= '9') ||
+            ch == '+' || ch == '/' || ch == '=') {
+            continue;
+        }
+        return false;
+    }
+    return true;
+}
+
+bool dearmor_public_keys(
+    const std::string_view armored,
+    std::string &binary,
+    std::string &error)
+{
+    static constexpr std::string_view begin_marker =
+        "-----BEGIN PGP PUBLIC KEY BLOCK-----";
+    static constexpr std::string_view end_marker =
+        "-----END PGP PUBLIC KEY BLOCK-----";
+
+    binary.clear();
+    error.clear();
+    std::size_t cursor = 0U;
+    bool found = false;
+
+    while (cursor < armored.size()) {
+        const std::size_t begin = armored.find(begin_marker, cursor);
+        if (begin == std::string_view::npos) {
+            break;
+        }
+        found = true;
+
+        std::size_t position = armored.find('\n', begin);
+        if (position == std::string_view::npos) {
+            error = "ASCII-armored repository key has no body.";
+            binary.clear();
+            return false;
+        }
+        ++position;
+
+        bool body_started = false;
+        std::string payload;
+        std::string checksum;
+        std::size_t end_after = std::string_view::npos;
+
+        while (position <= armored.size()) {
+            const std::size_t newline = armored.find('\n', position);
+            const std::size_t line_end =
+                newline == std::string_view::npos
+                    ? armored.size()
+                    : newline;
+            std::string line =
+                trim(armored.substr(position, line_end - position));
+            position =
+                newline == std::string_view::npos
+                    ? armored.size() + 1U
+                    : newline + 1U;
+
+            if (!body_started) {
+                if (line.empty()) {
+                    body_started = true;
+                }
+                continue;
+            }
+
+            if (line == end_marker) {
+                end_after = position;
+                break;
+            }
+            if (line.empty()) {
+                continue;
+            }
+            if (line.front() == '=') {
+                if (!checksum.empty() || line.size() != 5U ||
+                    !valid_base64_line(line.substr(1U))) {
+                    error =
+                        "ASCII-armored repository key has an invalid CRC line.";
+                    binary.clear();
+                    return false;
+                }
+                checksum = line.substr(1U);
+                continue;
+            }
+            if (!checksum.empty() || !valid_base64_line(line)) {
+                error =
+                    "ASCII-armored repository key contains invalid base64 data.";
+                binary.clear();
+                return false;
+            }
+            payload += line;
+        }
+
+        if (end_after == std::string_view::npos || payload.empty()) {
+            error =
+                "ASCII-armored repository key block is incomplete.";
+            binary.clear();
+            return false;
+        }
+
+        gsize decoded_size = 0U;
+        guchar *decoded =
+            g_base64_decode(payload.c_str(), &decoded_size);
+        if (decoded == nullptr || decoded_size == 0U) {
+            g_free(decoded);
+            error =
+                "Unable to decode ASCII-armored repository key.";
+            binary.clear();
+            return false;
+        }
+
+        const std::string_view decoded_view(
+            reinterpret_cast<const char *>(decoded),
+            static_cast<std::size_t>(decoded_size));
+
+        if (!checksum.empty()) {
+            gsize checksum_size = 0U;
+            guchar *checksum_bytes =
+                g_base64_decode(checksum.c_str(), &checksum_size);
+            if (checksum_bytes == nullptr || checksum_size != 3U) {
+                g_free(checksum_bytes);
+                g_free(decoded);
+                error =
+                    "ASCII-armored repository key CRC is invalid.";
+                binary.clear();
+                return false;
+            }
+
+            const std::uint32_t expected =
+                (static_cast<std::uint32_t>(checksum_bytes[0]) << 16U) |
+                (static_cast<std::uint32_t>(checksum_bytes[1]) << 8U) |
+                static_cast<std::uint32_t>(checksum_bytes[2]);
+            g_free(checksum_bytes);
+
+            if (crc24(decoded_view) != expected) {
+                g_free(decoded);
+                error =
+                    "ASCII-armored repository key CRC check failed.";
+                binary.clear();
+                return false;
+            }
+        }
+
+        binary.append(decoded_view);
+        g_free(decoded);
+        cursor = end_after;
+    }
+
+    if (!found || binary.empty()) {
+        error =
+            "ASCII-armored repository key contains no public key block.";
+        binary.clear();
+        return false;
+    }
+    return true;
+}
+
+bool read_keyring(
+    const std::filesystem::path &path,
+    std::string &content,
+    std::string &error)
+{
+    std::error_code ec;
+    const std::uintmax_t size =
+        std::filesystem::file_size(path, ec);
+    if (ec || size > 16U * 1024U * 1024U) {
+        error =
+            "Unable to read repository keyring " +
+            path.string() + ".";
+        return false;
+    }
+
+    std::ifstream input(path, std::ios::binary);
+    if (!input) {
+        error =
+            "Unable to open repository keyring " +
+            path.string() + ".";
+        return false;
+    }
+    std::ostringstream stream;
+    stream << input.rdbuf();
+    if (!input.good() && !input.eof()) {
+        error =
+            "Unable to finish reading repository keyring " +
+            path.string() + ".";
+        return false;
+    }
+    content = stream.str();
+    return true;
+}
+
+bool prepare_gpgv_keyrings(
+    const std::vector<std::string> &configured,
+    std::vector<std::string> &prepared,
+    std::vector<TemporaryFile> &temporary,
+    std::string &error)
+{
+    prepared.clear();
+    temporary.clear();
+    error.clear();
+
+    for (const std::string &keyring : configured) {
+        const std::filesystem::path path(keyring);
+        if (path.extension() != ".asc") {
+            prepared.emplace_back(keyring);
+            continue;
+        }
+
+        std::string armored;
+        if (!read_keyring(path, armored, error)) {
+            return false;
+        }
+
+        std::string binary;
+        if (!dearmor_public_keys(armored, binary, error)) {
+            error =
+                "Unable to prepare repository keyring " +
+                path.string() + ": " + error;
+            return false;
+        }
+
+        TemporaryFile file;
+        if (!create_temporary_file(binary, file, error)) {
+            error =
+                "Unable to materialise repository keyring " +
+                path.string() + ": " + error;
+            return false;
+        }
+        prepared.emplace_back(file.path);
+        temporary.emplace_back(std::move(file));
+    }
+
+    return true;
+}
 
 bool create_temporary_file(
     const std::string_view content,
@@ -313,8 +595,25 @@ bool verify_gpg(
         return false;
     }
 
+    /*
+     * APT accepts ASCII-armored Signed-By key files (the recommended Docker
+     * configuration uses /etc/apt/keyrings/docker.asc), while gpgv expects
+     * binary keyring material when --keyring is supplied.  Convert only the
+     * verification copy in memory/a private temporary file; never rewrite the
+     * administrator's configured key.
+     */
+    std::vector<std::string> prepared_keyrings;
+    std::vector<TemporaryFile> temporary_keyrings;
+    if (!prepare_gpgv_keyrings(
+            keyrings,
+            prepared_keyrings,
+            temporary_keyrings,
+            error)) {
+        return false;
+    }
+
     std::vector<std::string> arguments{"gpgv", "--quiet"};
-    for (const std::string &keyring : keyrings) {
+    for (const std::string &keyring : prepared_keyrings) {
         arguments.emplace_back("--keyring");
         arguments.emplace_back(keyring);
     }
