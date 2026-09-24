@@ -2,6 +2,7 @@
 #ifndef INFILTRATOR_SOFTWARE_SOURCE_INVENTORY_HPP
 #define INFILTRATOR_SOFTWARE_SOURCE_INVENTORY_HPP
 
+#include <cstddef>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -21,6 +22,7 @@ struct SourceRecord {
     std::string detail;
     std::string scope;
     std::string backing_file;
+    std::size_t entry_index{0U};
     bool enabled{true};
 };
 
