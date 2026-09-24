@@ -154,6 +154,8 @@ target_include_directories(software-client PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_link_libraries(software-client PUBLIC
     software-core PkgConfig::GIO)
+target_compile_definitions(software-client PRIVATE
+    INFILTRATOR_SOFTWARE_VERSION="${PROJECT_VERSION}")
 
 add_library(software-apt STATIC src/backends/apt/apt_backend.cpp)
 target_include_directories(software-apt PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
@@ -194,6 +196,8 @@ add_executable(infiltrator-software-engine
     src/service/main.cpp)
 target_link_libraries(infiltrator-software-engine PRIVATE
     software-engine PkgConfig::GIO)
+target_compile_definitions(infiltrator-software-engine PRIVATE
+    INFILTRATOR_SOFTWARE_VERSION="${PROJECT_VERSION}")
 
 add_executable(infiltrator-software-tray
     src/tray/main.cpp)
