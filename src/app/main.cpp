@@ -2758,6 +2758,35 @@ void discover_install_process_complete(
         communicated != FALSE &&
         g_subprocess_get_successful(process);
 
+    if (operation != nullptr && !operation->plan.items.empty()) {
+        std::string history_message;
+        if (success) {
+            history_message = "Transaction completed successfully.";
+        } else if (g_subprocess_get_if_exited(process) &&
+                   g_subprocess_get_exit_status(process) == 126) {
+            history_message = "Administrator authentication was cancelled.";
+        } else if (stderr_text != nullptr && *stderr_text != '\0') {
+            history_message = one_line(stderr_text);
+        } else if (error != nullptr && error->message != nullptr) {
+            history_message = one_line(error->message);
+        } else {
+            history_message = "Transaction failed.";
+        }
+        record_transaction_history(
+            operation->plan, success, history_message);
+
+        if (operation->main_window != nullptr) {
+            auto *history_state = static_cast<WindowState *>(
+                g_object_get_data(
+                    G_OBJECT(operation->main_window),
+                    "infiltrator-window-state"));
+            if (history_state != nullptr &&
+                history_state->history_loaded) {
+                refresh_history(history_state);
+            }
+        }
+    }
+
     if (operation != nullptr && operation->status != nullptr) {
         if (success) {
             gtk_label_set_text(
