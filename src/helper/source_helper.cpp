@@ -1,11 +1,17 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+#include "sources/source_mutation.hpp"
+
 #include <cerrno>
 #include <cctype>
+#include <charconv>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <fcntl.h>
 #include <filesystem>
+#include <fstream>
+#include <limits>
+#include <sstream>
 #include <string>
 #include <string_view>
 #include <sys/stat.h>
@@ -13,6 +19,8 @@
 #include <unistd.h>
 
 namespace {
+
+constexpr std::uintmax_t kMaximumSourceFileBytes = 16U * 1024U * 1024U;
 
 bool safe_name(std::string_view value)
 {
@@ -92,9 +100,62 @@ std::string normalise_name(std::string value)
     return value;
 }
 
+bool safe_existing_apt_source(
+    const std::filesystem::path &path,
+    struct stat &metadata)
+{
+    const std::filesystem::path normalised =
+        path.lexically_normal();
+    if (normalised != path) {
+        return false;
+    }
+
+    const bool main_list =
+        normalised == std::filesystem::path("/etc/apt/sources.list");
+    const bool source_directory_file =
+        normalised.parent_path() ==
+            std::filesystem::path("/etc/apt/sources.list.d") &&
+        (normalised.extension() == ".list" ||
+         normalised.extension() == ".sources");
+    if (!main_list && !source_directory_file) {
+        return false;
+    }
+
+    if (lstat(normalised.c_str(), &metadata) != 0 ||
+        !S_ISREG(metadata.st_mode)) {
+        return false;
+    }
+    return true;
+}
+
+bool read_text(
+    const std::filesystem::path &path,
+    std::string &content)
+{
+    std::error_code ec;
+    const std::uintmax_t size =
+        std::filesystem::file_size(path, ec);
+    if (ec || size > kMaximumSourceFileBytes) {
+        return false;
+    }
+
+    std::ifstream input(path, std::ios::binary);
+    if (!input) {
+        return false;
+    }
+    std::ostringstream stream;
+    stream << input.rdbuf();
+    if (!input.good() && !input.eof()) {
+        return false;
+    }
+    content = stream.str();
+    return true;
+}
+
 bool write_atomic(
     const std::filesystem::path &path,
-    const std::string &content)
+    const std::string &content,
+    const struct stat *preserve = nullptr)
 {
     const std::filesystem::path directory = path.parent_path();
     std::error_code ec;
@@ -130,10 +191,18 @@ bool write_atomic(
         break;
     }
 
-    if (ok && fsync(fd) != 0) {
+    if (preserve != nullptr) {
+        if (fchown(fd, preserve->st_uid, preserve->st_gid) != 0) {
+            ok = false;
+        }
+        if (fchmod(fd, preserve->st_mode & 07777) != 0) {
+            ok = false;
+        }
+    } else if (fchmod(fd, 0644) != 0) {
         ok = false;
     }
-    if (fchmod(fd, 0644) != 0) {
+
+    if (ok && fsync(fd) != 0) {
         ok = false;
     }
     if (close(fd) != 0) {
@@ -158,6 +227,120 @@ bool write_atomic(
     }
 
     return true;
+}
+
+bool parse_index(
+    const std::string_view value,
+    std::size_t &result)
+{
+    result = 0U;
+    if (value.empty()) {
+        return false;
+    }
+    unsigned long long parsed = 0U;
+    const auto converted =
+        std::from_chars(
+            value.data(),
+            value.data() + value.size(),
+            parsed);
+    if (converted.ec != std::errc{} ||
+        converted.ptr != value.data() + value.size() ||
+        parsed == 0U ||
+        parsed >
+            static_cast<unsigned long long>(
+                std::numeric_limits<std::size_t>::max())) {
+        return false;
+    }
+    result = static_cast<std::size_t>(parsed);
+    return true;
+}
+
+int set_apt_source_enabled(
+    const char *path_text,
+    const char *entry_text,
+    const char *enabled_text)
+{
+    const std::filesystem::path path =
+        path_text == nullptr
+            ? std::filesystem::path{}
+            : std::filesystem::path(path_text);
+
+    std::size_t entry = 0U;
+    const std::string_view entry_value =
+        entry_text == nullptr
+            ? std::string_view{}
+            : std::string_view(entry_text);
+    if (!parse_index(entry_value, entry)) {
+        std::fprintf(stderr, "Invalid APT source entry identity.\n");
+        return 2;
+    }
+
+    bool enabled = false;
+    if (enabled_text != nullptr &&
+        std::strcmp(enabled_text, "yes") == 0) {
+        enabled = true;
+    } else if (enabled_text == nullptr ||
+               std::strcmp(enabled_text, "no") != 0) {
+        std::fprintf(stderr, "APT source state must be yes or no.\n");
+        return 2;
+    }
+
+    struct stat metadata {};
+    if (!safe_existing_apt_source(path, metadata)) {
+        std::fprintf(stderr, "Unsafe or unsupported APT source path.\n");
+        return 2;
+    }
+
+    std::string content;
+    if (!read_text(path, content)) {
+        std::fprintf(
+            stderr,
+            "Unable to read APT source file %s.\n",
+            path.c_str());
+        return 3;
+    }
+
+    std::string updated;
+    std::string error;
+    bool changed = false;
+    if (path.extension() == ".sources") {
+        changed =
+            infiltrator::software::set_apt_deb822_entry_enabled(
+                content,
+                entry,
+                enabled,
+                updated,
+                error);
+    } else {
+        changed =
+            infiltrator::software::set_apt_list_entry_enabled(
+                content,
+                entry,
+                enabled,
+                updated,
+                error);
+    }
+
+    if (!changed) {
+        std::fprintf(
+            stderr,
+            "Unable to change APT source: %s\n",
+            error.c_str());
+        return 4;
+    }
+    if (updated == content) {
+        return 0;
+    }
+
+    if (!write_atomic(path, updated, &metadata)) {
+        std::fprintf(
+            stderr,
+            "Unable to update %s: %s\n",
+            path.c_str(),
+            std::strerror(errno));
+        return 5;
+    }
+    return 0;
 }
 
 int add_apt_source(
@@ -231,9 +414,17 @@ int main(int argc, char **argv)
             argv[2], argv[3], argv[4], argv[5], argv[6]);
     }
 
+    if (argc == 5 &&
+        std::strcmp(argv[1], "set-apt-source-enabled") == 0) {
+        return set_apt_source_enabled(
+            argv[2], argv[3], argv[4]);
+    }
+
     std::fprintf(
         stderr,
         "Usage: infiltrator-software-helper "
-        "add-apt-source NAME HTTPS_URI SUITE COMPONENTS SIGNED_BY\n");
+        "add-apt-source NAME HTTPS_URI SUITE COMPONENTS SIGNED_BY\n"
+        "   or: infiltrator-software-helper "
+        "set-apt-source-enabled FILE ENTRY_INDEX yes|no\n");
     return 64;
 }
