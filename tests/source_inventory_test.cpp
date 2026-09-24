@@ -82,5 +82,40 @@ int main()
         assert(enabled[1].enabled);
     }
 
+    {
+        const std::string deb822 =
+            "Types: deb\n"
+            "URIs: https://no-enabled-field.invalid\n"
+            "Suites: stable\n"
+            "Components: main\n\n"
+            "Types: deb\n"
+            "URIs: https://second.invalid\n"
+            "Suites: stable\n"
+            "Components: main\n";
+
+        const auto records =
+            SourceInventory::parse_apt_deb822(
+                deb822, "/etc/apt/sources.list.d/no-enabled.sources");
+        assert(records.size() == 2U);
+        assert(records[0].entry_index == 1U);
+        assert(records[1].entry_index == 2U);
+
+        std::string updated;
+        std::string error;
+        assert(infiltrator::software::set_apt_deb822_entry_enabled(
+            deb822, records[0].entry_index, false, updated, error));
+        assert(error.empty());
+        assert(updated.find("Enabled: no\n\nTypes: deb") !=
+               std::string::npos);
+
+        const auto disabled =
+            SourceInventory::parse_apt_deb822(
+                updated, "/etc/apt/sources.list.d/no-enabled.sources");
+        assert(disabled.size() == 2U);
+        assert(!disabled[0].enabled);
+        assert(disabled[1].enabled);
+        assert(disabled[1].entry_index == 2U);
+    }
+
     return 0;
 }
