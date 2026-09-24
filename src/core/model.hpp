@@ -30,6 +30,12 @@ struct PackageRecord {
     std::string icon_sha256;
     std::string cached_icon_path;
     std::string source;
+    std::string repository_origin;
+    std::string repository_site;
+    std::string policy_provider;
+    std::string policy_reason;
+    std::string selection_reason;
+    int candidate_priority{0};
     std::string source_url;
     std::string release_url;
     std::string asset;
