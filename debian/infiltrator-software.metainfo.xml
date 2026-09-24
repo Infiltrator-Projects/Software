@@ -34,6 +34,11 @@
   <url type="homepage">https://github.com/Infiltrator-Projects/Software</url>
 
   <releases>
+    <release version="0.3.22" date="2026-09-24">
+      <description>
+        <p>Replaces the System placeholder with live kernel, driver and core operating-system inventory, current/update state, system-critical counts, refresh controls and a hand-off to the unified Updates workflow.</p>
+      </description>
+    </release>
     <release version="0.3.21" date="2026-09-24">
       <description>
         <p>Makes update recommendations understandable by displaying each preferred candidate's repository origin, active policy owner, resolved priority and selection rationale, and matches APT phased-update eligibility so staged Ubuntu updates are not recommended before the host is eligible.</p>
