@@ -2797,6 +2797,7 @@ void discover_install_process_complete(
                         ? "Update complete. Refreshing software state…"
                         : "Installation complete. Refreshing software state…");
         } else {
+            stop_update_progress(state);
             std::string message =
                 operation->action == TransactionAction::remove
                     ? "Unable to remove package."
@@ -3451,6 +3452,7 @@ void updates_complete(
     }
 
     state->updates_busy = false;
+    stop_update_progress(state);
     state->update_records = std::move(result->records);
     state->updates_from_engine = result->from_engine;
     state->selected_update_ids.clear();
@@ -3655,7 +3657,6 @@ void update_process_complete(
 
     if (state != nullptr) {
         state->updates_busy = false;
-        stop_update_progress(state);
 
         if (run != nullptr &&
             run->operation == "install" &&
