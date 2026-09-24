@@ -17,6 +17,9 @@ struct DebianPackageVersion {
     std::string sha256;
     std::string source;
     std::string priority;
+    std::string source_package;
+    std::string source_version;
+    int phased_update_percentage{-1};
     int pin_priority{0};
     std::string policy_provider;
     std::string policy_reason;
