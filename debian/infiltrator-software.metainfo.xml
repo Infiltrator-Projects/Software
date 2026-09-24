@@ -34,6 +34,11 @@
   <url type="homepage">https://github.com/Infiltrator-Projects/Software</url>
 
   <releases>
+    <release version="0.3.19" date="2026-09-24">
+      <description>
+        <p>Corrects false update counts by honoring native APT preference and repository pin priorities, including Linux Mint's higher-priority upstream layer, and reports the exact pinned Common version in the sidebar.</p>
+      </description>
+    </release>
     <release version="0.3.18" date="2026-09-24">
       <description>
         <p>Restores readable Enabled and Disabled text on interactive repository state buttons in dark/system themes by explicitly styling the GtkButton child labels and hover states.</p>

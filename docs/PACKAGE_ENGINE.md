@@ -61,7 +61,7 @@ The implementation must follow Debian version-ordering semantics rather than lex
 
 Candidate selection is deterministic and testable.
 
-It considers installed version, available versions, architecture, configured source/channel policy, repository priority, explicit hold/pin policy supported by Software and dependency satisfiability.
+It considers installed version, available versions, architecture, repository Release identity, the host's APT preference/pinning policy, default NotAutomatic/ButAutomaticUpgrades priorities, explicit holds, configured source/channel policy and dependency satisfiability.
 
 The selected candidate and the reason for selection are inspectable through the GUI details view.
 

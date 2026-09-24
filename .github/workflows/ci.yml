@@ -62,6 +62,9 @@ jobs:
           theme = Path("src/app/theme.cpp").read_text()
           backend = Path("src/backends/apt/apt_backend.cpp").read_text()
           transaction = Path("src/engine/debian_transaction.cpp").read_text()
+          candidate = Path("src/engine/debian_candidate.cpp").read_text()
+          preferences = Path("src/engine/debian_preferences.cpp").read_text()
+          state_store = Path("src/engine/package_state_store.cpp").read_text()
           helper = Path("src/helper/update_helper.cpp").read_text()
           source_helper = Path("src/helper/source_helper.cpp").read_text()
           source_mutation = Path("src/sources/source_mutation.cpp").read_text()
@@ -94,6 +97,19 @@ jobs:
           assert "plan_removal(" in transaction
           assert "Refusing to remove Essential package" in transaction
           assert "Authentication is required to install, update or remove system software." in policy
+
+          # The update inventory must follow the host's Debian candidate policy,
+          # not merely choose the numerically newest version from every source.
+          assert "/etc/apt/preferences.d" in preferences
+          assert "release_origin" in preferences
+          assert "release_archive" in preferences
+          assert "candidate.pin_priority" in candidate
+          assert "pin_priority INTEGER NOT NULL" in state_store
+
+          # The footer must report the exact pinned Common header version,
+          # never a stale hand-written version string.
+          assert "INFILTRATR_COMMON_VERSION" in app
+          assert '"Common 1.19.10"' not in app
 
           # Repositories must be an operational settings surface. Mutable APT
           # and Flatpak sources expose a real Enabled/Disabled action, while
