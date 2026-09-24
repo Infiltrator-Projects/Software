@@ -2601,10 +2601,10 @@ gboolean update_progress_tick(gpointer user_data)
                 elapsed_us / G_USEC_PER_SEC);
 
         const std::string message =
-            "Installing approved updates… " +
+            "Approved update transaction is active… " +
             std::to_string(elapsed_seconds) +
-            " s elapsed. Software is refreshing metadata, "
-            "re-validating the approved exact versions and applying packages.";
+            " s elapsed. Software may be refreshing metadata, "
+            "re-validating the approved exact versions or applying packages.";
         gtk_label_set_text(
             GTK_LABEL(state->updates_status),
             message.c_str());
@@ -3862,7 +3862,7 @@ void begin_apply_updates(WindowState *state)
     if (state->updates_status != nullptr) {
         gtk_label_set_text(
             GTK_LABEL(state->updates_status),
-            "Administrator authorization accepted. Installing approved updates…");
+            "Starting the approved update transaction; administrator authentication may be requested…");
     }
     if (state->updates_install != nullptr) {
         gtk_widget_set_sensitive(state->updates_install, false);
@@ -5669,6 +5669,11 @@ void refresh_page_if_needed(WindowState *state, const int index)
             refresh_repositories(state);
         }
         break;
+    case 5:
+        if (!state->history_loaded) {
+            refresh_history(state);
+        }
+        break;
     default:
         break;
     }
@@ -6123,14 +6128,7 @@ void activate(GtkApplication *application, gpointer)
         "repositories");
     gtk_stack_add_named(
         state->stack,
-        make_foundation_page(
-            "document-open-recent-symbolic",
-            "History",
-            "Exact software-management operations and outcomes.",
-            "Durable transaction history",
-            "Future write operations will record exact before/after versions, "
-            "source provenance and recovery linkage.",
-            "page-history"),
+        make_history_page(state),
         "history");
     gtk_stack_add_named(
         state->stack,
