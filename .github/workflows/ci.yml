@@ -104,13 +104,16 @@ jobs:
           assert "set_apt_list_entry_enabled" in source_mutation
           assert "set_apt_deb822_entry_enabled" in source_mutation
 
-          # RefreshState was added after the original v1 session service. A
-          # package upgrade can leave that old D-Bus process alive, so clients
-          # must detect/recycle it before invoking the v2 refresh contract.
+          # A package upgrade can leave the previous per-user D-Bus engine
+          # process alive even when the interface API version is unchanged.
+          # Clients must therefore match both API and exact package version and
+          # recycle a stale same-user engine before any engine operation.
           assert "constexpr guint kApiVersion = 2U;" in engine_service
+          assert '"engine-version"' in engine_service
           assert '<method name="Quit"/>' in engine_interface
-          assert "kRefreshApiVersion = 2U" in engine_client
-          assert "ensure_engine_api_version(" in engine_client
+          assert "kRequiredApiVersion = 2U" in engine_client
+          assert "kRequiredEngineVersion" in engine_client
+          assert "ensure_engine_identity(" in engine_client
           assert "GetConnectionUnixUser" in engine_client
           assert "GetConnectionUnixProcessID" in engine_client
 
