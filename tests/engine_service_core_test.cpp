@@ -110,6 +110,11 @@ int main()
     const auto updates = core.updates();
     assert(updates.size() == 2U);
 
+    const auto installed_records = core.installed();
+    assert(installed_records.size() == 2U);
+    assert(installed_records[0].kind == PackageKind::application);
+    assert(installed_records[1].kind == PackageKind::application);
+
     TransactionRequest request;
     request.action = TransactionAction::upgrade;
     request.package_ids = {"app"};
