@@ -134,6 +134,7 @@ add_library(software-engine STATIC
     src/engine/debian_package_index.cpp
     src/engine/debian_version.cpp
     src/engine/debian_candidate.cpp
+    src/engine/package_policy.cpp
     src/engine/debian_preferences.cpp
     src/engine/debian_dependency.cpp
     src/engine/debian_repository.cpp
@@ -302,6 +303,13 @@ if(BUILD_TESTING)
     add_test(
         NAME software-debian-preferences-test
         COMMAND software-debian-preferences-test)
+
+    add_executable(software-package-policy-test
+        tests/package_policy_test.cpp)
+    target_link_libraries(software-package-policy-test PRIVATE software-engine)
+    add_test(
+        NAME software-package-policy-test
+        COMMAND software-package-policy-test)
 
     add_executable(software-debian-dependency-test
         tests/debian_dependency_test.cpp)
