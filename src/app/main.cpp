@@ -4502,7 +4502,10 @@ GtkWidget *make_navigation(WindowState *state)
     GtkWidget *footer = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
     gtk_widget_add_css_class(footer, "sidebar-footer");
     GtkWidget *backend = make_label("APT/.deb backend", "sidebar-note");
-    GtkWidget *common = make_label("Common 1.19.10", "sidebar-note");
+    const std::string common_version =
+        std::string("Common ") + INFILTRATR_COMMON_VERSION;
+    GtkWidget *common =
+        make_label(common_version.c_str(), "sidebar-note");
     gtk_box_append(GTK_BOX(footer), backend);
     gtk_box_append(GTK_BOX(footer), common);
     gtk_box_append(GTK_BOX(outer), footer);
