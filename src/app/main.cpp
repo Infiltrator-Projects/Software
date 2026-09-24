@@ -96,10 +96,23 @@ struct WindowState {
     gint64 updates_last_metadata_refresh_us{0};
     guint updates_refresh_timer_id{0U};
 
+    GtkListBox *system_list{};
+    GtkWidget *system_status{};
+    GtkWidget *system_count{};
+    GtkWidget *system_updates{};
+    GtkWidget *system_critical{};
+    GtkWidget *system_refresh{};
+    GtkWidget *system_review_updates{};
+    std::vector<PackageRecord> system_records;
+    std::vector<PackageRecord> system_update_records;
+    unsigned int system_generation{0U};
+    bool system_busy{false};
+
     bool window_presented{false};
     bool discover_loaded{false};
     bool installed_loaded{false};
     bool updates_loaded{false};
+    bool system_loaded{false};
     bool repositories_loaded{false};
 };
 
@@ -107,6 +120,7 @@ void refresh_repositories(WindowState *state);
 void refresh_updates(WindowState *state, bool refresh_metadata = false);
 void refresh_discover(WindowState *state, bool force_refresh);
 void refresh_installed(WindowState *state);
+void refresh_system(WindowState *state, bool refresh_metadata = false);
 void discover_install_clicked(GtkButton *button, gpointer user_data);
 
 GtkWidget *make_icon(const char *name, int size)
@@ -891,6 +905,9 @@ std::vector<PackageRecord> read_installed_packages(
     std::vector<PackageRecord> packages;
     std::string engine_error;
     if (engine.list_installed(packages, engine_error)) {
+        for (PackageRecord &package : packages) {
+            infiltrator::software::classify_package_role(package);
+        }
         if (from_engine != nullptr) {
             *from_engine = true;
         }
@@ -902,6 +919,9 @@ std::vector<PackageRecord> read_installed_packages(
     std::string fallback_error;
     packages = fallback.list_installed(fallback_error);
     if (fallback_error.empty()) {
+        for (PackageRecord &package : packages) {
+            infiltrator::software::classify_package_role(package);
+        }
         error.clear();
         return packages;
     }
@@ -1879,6 +1899,567 @@ GtkWidget *make_installed_page(WindowState *state)
 }
 
 
+
+struct SystemResult {
+    unsigned int generation{0U};
+    std::vector<PackageRecord> components;
+    std::vector<PackageRecord> updates;
+    std::string error;
+    std::string update_warning;
+    bool from_engine{false};
+};
+
+struct SystemTaskData {
+    unsigned int generation{0U};
+    bool refresh_metadata{false};
+};
+
+std::string system_identity(const PackageRecord &package)
+{
+    return package.package_name.empty()
+        ? package.id
+        : package.package_name;
+}
+
+const char *system_icon_name(const PackageRecord &package)
+{
+    switch (package.kind) {
+    case infiltrator::software::PackageKind::kernel:
+        return "computer-symbolic";
+    case infiltrator::software::PackageKind::driver:
+        return "preferences-system-symbolic";
+    case infiltrator::software::PackageKind::system:
+        return "applications-system-symbolic";
+    default:
+        return "application-x-executable-symbolic";
+    }
+}
+
+GtkWidget *make_system_row(
+    const PackageRecord &package,
+    const PackageRecord *update)
+{
+    GtkWidget *row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
+    gtk_widget_add_css_class(row, "package-row");
+    gtk_widget_set_margin_top(row, 6);
+    gtk_widget_set_margin_bottom(row, 6);
+    gtk_widget_set_margin_start(row, 8);
+    gtk_widget_set_margin_end(row, 8);
+
+    GtkWidget *icon =
+        make_icon(system_icon_name(package), 24);
+    gtk_widget_add_css_class(icon, "package-icon");
+    gtk_box_append(GTK_BOX(row), icon);
+
+    GtkWidget *identity =
+        gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
+    gtk_widget_set_hexpand(identity, true);
+
+    GtkWidget *name =
+        make_label(package.name.c_str(), "card-title");
+    gtk_label_set_ellipsize(
+        GTK_LABEL(name), PANGO_ELLIPSIZE_END);
+    gtk_box_append(GTK_BOX(identity), name);
+
+    std::string version = package.installed_version;
+    if (update != nullptr &&
+        !update->available_version.empty()) {
+        version += "  →  " + update->available_version;
+    }
+    GtkWidget *version_label =
+        make_label(version.c_str(), "card-copy");
+    gtk_label_set_ellipsize(
+        GTK_LABEL(version_label), PANGO_ELLIPSIZE_END);
+    gtk_box_append(GTK_BOX(identity), version_label);
+
+    std::string meta =
+        std::string(
+            infiltrator::software::package_kind_name(
+                package.kind));
+    if (!package.architecture.empty()) {
+        meta += "  •  " + package.architecture;
+    }
+    if (update != nullptr) {
+        std::string source_name = update->repository_origin;
+        if (source_name.empty()) {
+            source_name = update->repository_site;
+        }
+        if (source_name.empty()) {
+            source_name = update->source;
+        }
+        if (!source_name.empty()) {
+            meta += "  •  Source: " + source_name;
+        }
+    }
+    GtkWidget *meta_label =
+        make_label(meta.c_str(), "discover-meta");
+    gtk_label_set_ellipsize(
+        GTK_LABEL(meta_label), PANGO_ELLIPSIZE_END);
+    gtk_box_append(GTK_BOX(identity), meta_label);
+
+    gtk_box_append(GTK_BOX(row), identity);
+
+    const char *status_text = "Current";
+    const char *status_class = "state-success";
+    if (update != nullptr) {
+        status_text = update->system_critical
+            ? "Recommended • System-critical"
+            : "Recommended update";
+        status_class = update->system_critical
+            ? "state-warning"
+            : "state-available";
+    } else if (package.system_critical) {
+        status_text = "Core system";
+        status_class = "state-info";
+    }
+
+    GtkWidget *status =
+        make_label(status_text, status_class);
+    gtk_widget_set_valign(status, GTK_ALIGN_CENTER);
+    gtk_box_append(GTK_BOX(row), status);
+
+    return row;
+}
+
+void rebuild_system(WindowState *state)
+{
+    if (state == nullptr || state->system_list == nullptr) {
+        return;
+    }
+
+    GtkWidget *child =
+        gtk_widget_get_first_child(
+            GTK_WIDGET(state->system_list));
+    while (child != nullptr) {
+        GtkWidget *next =
+            gtk_widget_get_next_sibling(child);
+        gtk_list_box_remove(state->system_list, child);
+        child = next;
+    }
+
+    std::unordered_map<std::string, const PackageRecord *> updates;
+    updates.reserve(state->system_update_records.size());
+    std::size_t critical_count = 0U;
+    for (const PackageRecord &update :
+         state->system_update_records) {
+        updates[system_identity(update)] = &update;
+        if (update.system_critical) {
+            ++critical_count;
+        }
+    }
+
+    for (const PackageRecord &package :
+         state->system_records) {
+        const auto found =
+            updates.find(system_identity(package));
+        const PackageRecord *update =
+            found == updates.end()
+                ? nullptr
+                : found->second;
+
+        GtkWidget *row = gtk_list_box_row_new();
+        gtk_list_box_row_set_child(
+            GTK_LIST_BOX_ROW(row),
+            make_system_row(package, update));
+        gtk_list_box_append(state->system_list, row);
+    }
+
+    if (state->system_count != nullptr) {
+        const std::string count =
+            std::to_string(state->system_records.size());
+        gtk_label_set_text(
+            GTK_LABEL(state->system_count), count.c_str());
+    }
+    if (state->system_updates != nullptr) {
+        const std::string count =
+            std::to_string(
+                state->system_update_records.size());
+        gtk_label_set_text(
+            GTK_LABEL(state->system_updates), count.c_str());
+    }
+    if (state->system_critical != nullptr) {
+        const std::string count =
+            std::to_string(critical_count);
+        gtk_label_set_text(
+            GTK_LABEL(state->system_critical), count.c_str());
+    }
+    if (state->system_review_updates != nullptr) {
+        gtk_widget_set_sensitive(
+            state->system_review_updates,
+            !state->system_update_records.empty());
+    }
+}
+
+void system_worker(
+    GTask *task,
+    gpointer,
+    gpointer task_data,
+    GCancellable *)
+{
+    auto *data =
+        static_cast<SystemTaskData *>(task_data);
+    auto *result = new SystemResult{};
+    result->generation =
+        data == nullptr ? 0U : data->generation;
+
+    std::vector<PackageRecord> installed =
+        read_installed_packages(
+            result->error,
+            &result->from_engine);
+    if (result->error.empty()) {
+        for (PackageRecord &package : installed) {
+            infiltrator::software::classify_package_role(
+                package);
+            if (infiltrator::software::is_system_component(
+                    package)) {
+                result->components.emplace_back(
+                    std::move(package));
+            }
+        }
+    }
+
+    if (data != nullptr) {
+        EngineClient engine;
+        if (data->refresh_metadata) {
+            if (!engine.refresh(result->update_warning)) {
+                result->update_warning =
+                    "Update refresh failed: " +
+                    result->update_warning;
+            }
+        }
+
+        std::vector<PackageRecord> updates;
+        std::string update_error;
+        if (result->update_warning.empty() &&
+            !engine.list_updates(updates, update_error) &&
+            !data->refresh_metadata) {
+            std::string refresh_error;
+            if (engine.refresh(refresh_error)) {
+                update_error.clear();
+                (void)engine.list_updates(
+                    updates, update_error);
+            } else {
+                update_error =
+                    "Native update state unavailable: " +
+                    refresh_error;
+            }
+        }
+        if (!update_error.empty()) {
+            result->update_warning = update_error;
+        }
+
+        for (PackageRecord &package : updates) {
+            infiltrator::software::classify_package_role(
+                package);
+            if (infiltrator::software::is_system_component(
+                    package)) {
+                result->updates.emplace_back(
+                    std::move(package));
+            }
+        }
+    }
+
+    auto rank = [](const PackageRecord &package) {
+        switch (package.kind) {
+        case infiltrator::software::PackageKind::kernel:
+            return 0;
+        case infiltrator::software::PackageKind::driver:
+            return 1;
+        case infiltrator::software::PackageKind::system:
+            return 2;
+        default:
+            return 3;
+        }
+    };
+    std::stable_sort(
+        result->components.begin(),
+        result->components.end(),
+        [&](const PackageRecord &left,
+            const PackageRecord &right) {
+            const int left_rank = rank(left);
+            const int right_rank = rank(right);
+            if (left_rank != right_rank) {
+                return left_rank < right_rank;
+            }
+            return left.name < right.name;
+        });
+
+    g_task_return_pointer(
+        task,
+        result,
+        [](gpointer pointer) {
+            delete static_cast<SystemResult *>(pointer);
+        });
+}
+
+void system_complete(
+    GObject *source_object,
+    GAsyncResult *async_result,
+    gpointer)
+{
+    auto *window = GTK_WINDOW(source_object);
+    auto *state = static_cast<WindowState *>(
+        g_object_get_data(
+            G_OBJECT(window),
+            "infiltrator-window-state"));
+    auto *result = static_cast<SystemResult *>(
+        g_task_propagate_pointer(
+            G_TASK(async_result), nullptr));
+
+    if (state == nullptr || result == nullptr) {
+        delete result;
+        return;
+    }
+    if (result->generation != state->system_generation) {
+        delete result;
+        return;
+    }
+
+    state->system_busy = false;
+    state->system_records =
+        std::move(result->components);
+    state->system_update_records =
+        std::move(result->updates);
+
+    const std::string error = result->error;
+    const std::string warning = result->update_warning;
+    const bool from_engine = result->from_engine;
+    delete result;
+
+    rebuild_system(state);
+
+    if (state->system_status != nullptr) {
+        std::ostringstream message;
+        if (!error.empty()) {
+            message
+                << "System inventory unavailable: "
+                << error;
+        } else {
+            message
+                << state->system_records.size()
+                << " kernel, driver and core system components read "
+                << (from_engine
+                        ? "from the shared native package engine."
+                        : "from direct Debian package state.");
+            if (!warning.empty()) {
+                message
+                    << " Update status: "
+                    << warning;
+            } else if (state->system_update_records.empty()) {
+                message
+                    << " No preferred system updates are currently available.";
+            } else {
+                message
+                    << " "
+                    << state->system_update_records.size()
+                    << " preferred system update"
+                    << (state->system_update_records.size() == 1U
+                            ? " is"
+                            : "s are")
+                    << " available.";
+            }
+        }
+        gtk_label_set_text(
+            GTK_LABEL(state->system_status),
+            message.str().c_str());
+    }
+
+    if (state->system_refresh != nullptr) {
+        gtk_widget_set_sensitive(
+            state->system_refresh, true);
+    }
+}
+
+void refresh_system(
+    WindowState *state,
+    const bool refresh_metadata)
+{
+    if (state == nullptr ||
+        state->window == nullptr ||
+        state->system_list == nullptr ||
+        state->system_busy) {
+        return;
+    }
+
+    state->system_loaded = true;
+    state->system_busy = true;
+    ++state->system_generation;
+
+    if (state->system_status != nullptr) {
+        gtk_label_set_text(
+            GTK_LABEL(state->system_status),
+            refresh_metadata
+                ? "Refreshing repository state and system components…"
+                : "Reading system components from shared state…");
+    }
+    if (state->system_refresh != nullptr) {
+        gtk_widget_set_sensitive(
+            state->system_refresh, false);
+    }
+
+    auto *data = new SystemTaskData{
+        state->system_generation,
+        refresh_metadata};
+    GTask *task = g_task_new(
+        G_OBJECT(state->window),
+        nullptr,
+        system_complete,
+        nullptr);
+    g_task_set_task_data(
+        task,
+        data,
+        [](gpointer pointer) {
+            delete static_cast<SystemTaskData *>(pointer);
+        });
+    g_task_run_in_thread(task, system_worker);
+    g_object_unref(task);
+}
+
+void system_refresh_clicked(
+    GtkButton *,
+    gpointer user_data)
+{
+    refresh_system(
+        static_cast<WindowState *>(user_data),
+        true);
+}
+
+void system_review_updates_clicked(
+    GtkButton *,
+    gpointer user_data)
+{
+    auto *state =
+        static_cast<WindowState *>(user_data);
+    if (state == nullptr ||
+        state->navigation_list == nullptr) {
+        return;
+    }
+
+    GtkListBoxRow *updates =
+        gtk_list_box_get_row_at_index(
+            state->navigation_list, 2);
+    if (updates != nullptr) {
+        gtk_list_box_select_row(
+            state->navigation_list,
+            updates);
+    }
+}
+
+GtkWidget *make_system_page(WindowState *state)
+{
+    GtkWidget *page =
+        gtk_box_new(GTK_ORIENTATION_VERTICAL, 16);
+    gtk_widget_add_css_class(page, "content");
+    gtk_widget_add_css_class(page, "page-system");
+
+    gtk_box_append(
+        GTK_BOX(page),
+        make_page_intro(
+            "computer-symbolic",
+            "System",
+            "Kernels, drivers and core operating-system components."));
+
+    GtkWidget *stats = gtk_grid_new();
+    gtk_grid_set_column_spacing(GTK_GRID(stats), 10);
+    gtk_grid_set_column_homogeneous(
+        GTK_GRID(stats), true);
+    gtk_grid_attach(
+        GTK_GRID(stats),
+        make_stat_card(
+            "COMPONENTS", "0", "stat-info",
+            &state->system_count),
+        0, 0, 1, 1);
+    gtk_grid_attach(
+        GTK_GRID(stats),
+        make_stat_card(
+            "UPDATES", "0", "stat-operation",
+            &state->system_updates),
+        1, 0, 1, 1);
+    gtk_grid_attach(
+        GTK_GRID(stats),
+        make_stat_card(
+            "SYSTEM-CRITICAL", "0", "stat-warning",
+            &state->system_critical),
+        2, 0, 1, 1);
+    gtk_box_append(GTK_BOX(page), stats);
+
+    GtkWidget *controls =
+        gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    gtk_widget_add_css_class(controls, "card");
+
+    state->system_status =
+        make_label(
+            "System inventory has not been loaded yet.",
+            "card-copy");
+    gtk_label_set_wrap(
+        GTK_LABEL(state->system_status), true);
+    gtk_widget_set_hexpand(
+        state->system_status, true);
+    gtk_box_append(
+        GTK_BOX(controls), state->system_status);
+
+    state->system_refresh =
+        gtk_button_new_with_label("Refresh");
+    gtk_widget_add_css_class(
+        state->system_refresh, "control-button");
+    g_signal_connect(
+        state->system_refresh,
+        "clicked",
+        G_CALLBACK(system_refresh_clicked),
+        state);
+    gtk_box_append(
+        GTK_BOX(controls), state->system_refresh);
+
+    state->system_review_updates =
+        gtk_button_new_with_label("Review system updates");
+    gtk_widget_add_css_class(
+        state->system_review_updates, "accent-button");
+    gtk_widget_set_sensitive(
+        state->system_review_updates, false);
+    g_signal_connect(
+        state->system_review_updates,
+        "clicked",
+        G_CALLBACK(system_review_updates_clicked),
+        state);
+    gtk_box_append(
+        GTK_BOX(controls),
+        state->system_review_updates);
+
+    gtk_box_append(GTK_BOX(page), controls);
+
+    GtkWidget *card =
+        gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
+    gtk_widget_add_css_class(card, "card");
+    gtk_widget_add_css_class(card, "card-info");
+    gtk_widget_set_vexpand(card, true);
+
+    GtkWidget *heading =
+        make_label(
+            "Installed system components",
+            "card-title");
+    gtk_box_append(GTK_BOX(card), heading);
+
+    GtkWidget *list = gtk_list_box_new();
+    state->system_list = GTK_LIST_BOX(list);
+    gtk_widget_add_css_class(list, "package-list");
+    gtk_list_box_set_selection_mode(
+        state->system_list,
+        GTK_SELECTION_NONE);
+
+    GtkWidget *scroll =
+        gtk_scrolled_window_new();
+    gtk_widget_set_vexpand(scroll, true);
+    gtk_scrolled_window_set_policy(
+        GTK_SCROLLED_WINDOW(scroll),
+        GTK_POLICY_NEVER,
+        GTK_POLICY_AUTOMATIC);
+    gtk_scrolled_window_set_child(
+        GTK_SCROLLED_WINDOW(scroll), list);
+    gtk_box_append(GTK_BOX(card), scroll);
+    gtk_box_append(GTK_BOX(page), card);
+
+    return page;
+}
 
 struct UpdatesResult {
     unsigned int generation{0U};
@@ -4429,6 +5010,11 @@ void refresh_page_if_needed(WindowState *state, const int index)
             refresh_updates(state, true);
         }
         break;
+    case 3:
+        if (!state->system_busy) {
+            refresh_system(state, false);
+        }
+        break;
     case 4:
         if (!state->repositories_loaded) {
             refresh_repositories(state);
@@ -4880,14 +5466,7 @@ void activate(GtkApplication *application, gpointer)
         "updates");
     gtk_stack_add_named(
         state->stack,
-        make_foundation_page(
-            "computer-symbolic",
-            "System",
-            "Kernels, drivers and core operating-system components.",
-            "System changes stay distinct",
-            "System-critical updates will remain visually and operationally "
-            "distinct without forcing a second updater application.",
-            "page-system"),
+        make_system_page(state),
         "system");
     gtk_stack_add_named(
         state->stack,
