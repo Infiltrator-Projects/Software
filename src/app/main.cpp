@@ -5168,6 +5168,428 @@ GtkWidget *make_repositories_page(WindowState *state)
     return page;
 }
 
+
+struct HistoryResult {
+    unsigned int generation{0U};
+    std::vector<TransactionHistoryItem> records;
+    std::string error;
+};
+
+struct HistoryTaskData {
+    unsigned int generation{0U};
+};
+
+std::string history_timestamp(const std::int64_t unix_time)
+{
+    GDateTime *value =
+        g_date_time_new_from_unix_local(
+            static_cast<gint64>(unix_time));
+    if (value == nullptr) {
+        return "Unknown time";
+    }
+
+    gchar *formatted =
+        g_date_time_format(value, "%Y-%m-%d %H:%M:%S");
+    std::string result =
+        formatted == nullptr
+            ? "Unknown time"
+            : std::string(formatted);
+    g_free(formatted);
+    g_date_time_unref(value);
+    return result;
+}
+
+GtkWidget *make_history_transaction_card(
+    const std::vector<TransactionHistoryItem> &records,
+    const std::size_t first,
+    const std::size_t last)
+{
+    const TransactionHistoryItem &head = records[first];
+
+    GtkWidget *card =
+        gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
+    gtk_widget_add_css_class(card, "card");
+    gtk_widget_add_css_class(
+        card,
+        head.success ? "card-info" : "card-warning");
+
+    GtkWidget *header =
+        gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+
+    const std::string title =
+        "Transaction #" +
+        std::to_string(head.transaction_id) +
+        "  •  " +
+        history_timestamp(head.completed_at_unix);
+    GtkWidget *title_label =
+        make_label(title.c_str(), "card-title");
+    gtk_widget_set_hexpand(title_label, true);
+    gtk_box_append(GTK_BOX(header), title_label);
+
+    GtkWidget *outcome =
+        make_label(
+            head.success ? "Completed" : "Failed",
+            head.success ? "state-installed" : "state-warning");
+    gtk_box_append(GTK_BOX(header), outcome);
+    gtk_box_append(GTK_BOX(card), header);
+
+    const std::size_t item_count = last - first;
+    std::string summary =
+        std::to_string(item_count) +
+        (item_count == 1U
+             ? " package change"
+             : " package changes");
+    if (!head.message.empty()) {
+        summary += "  •  " + head.message;
+    }
+    GtkWidget *summary_label =
+        make_label(summary.c_str(), "card-copy");
+    gtk_label_set_wrap(GTK_LABEL(summary_label), true);
+    gtk_box_append(GTK_BOX(card), summary_label);
+
+    for (std::size_t index = first; index < last; ++index) {
+        const TransactionHistoryItem &entry = records[index];
+
+        GtkWidget *row =
+            gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+        gtk_widget_add_css_class(row, "package-row");
+
+        GtkWidget *identity =
+            gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
+        gtk_widget_set_hexpand(identity, true);
+
+        std::string package_title = entry.package_id;
+        if (entry.requested) {
+            package_title += "  •  requested";
+        }
+        GtkWidget *package_label =
+            make_label(package_title.c_str(), "source-name");
+        gtk_box_append(GTK_BOX(identity), package_label);
+
+        std::string versions;
+        if (entry.action == TransactionAction::remove) {
+            versions =
+                entry.from_version.empty()
+                    ? "removed"
+                    : entry.from_version + "  →  removed";
+        } else if (entry.from_version.empty()) {
+            versions =
+                "installed  →  " + entry.to_version;
+        } else {
+            versions =
+                entry.from_version + "  →  " +
+                entry.to_version;
+        }
+        GtkWidget *versions_label =
+            make_label(versions.c_str(), "card-copy");
+        gtk_box_append(GTK_BOX(identity), versions_label);
+
+        if (!entry.source.empty()) {
+            const std::string source =
+                "Source: " + entry.source;
+            GtkWidget *source_label =
+                make_label(source.c_str(), "discover-meta");
+            gtk_label_set_ellipsize(
+                GTK_LABEL(source_label),
+                PANGO_ELLIPSIZE_END);
+            gtk_box_append(
+                GTK_BOX(identity), source_label);
+        }
+
+        gtk_box_append(GTK_BOX(row), identity);
+
+        GtkWidget *action =
+            make_label(
+                std::string(
+                    infiltrator::software::transaction_action_name(
+                        entry.action)).c_str(),
+                entry.system_critical
+                    ? "state-warning"
+                    : "state-info");
+        gtk_widget_set_valign(action, GTK_ALIGN_CENTER);
+        gtk_box_append(GTK_BOX(row), action);
+        gtk_box_append(GTK_BOX(card), row);
+    }
+
+    return card;
+}
+
+void rebuild_history(WindowState *state)
+{
+    if (state == nullptr || state->history_list == nullptr) {
+        return;
+    }
+
+    GtkWidget *child =
+        gtk_widget_get_first_child(
+            GTK_WIDGET(state->history_list));
+    while (child != nullptr) {
+        GtkWidget *next =
+            gtk_widget_get_next_sibling(child);
+        gtk_list_box_remove(state->history_list, child);
+        child = next;
+    }
+
+    std::size_t transaction_count = 0U;
+    std::size_t index = 0U;
+    while (index < state->history_records.size()) {
+        const std::int64_t transaction_id =
+            state->history_records[index].transaction_id;
+        std::size_t end = index + 1U;
+        while (end < state->history_records.size() &&
+               state->history_records[end].transaction_id ==
+                   transaction_id) {
+            ++end;
+        }
+
+        GtkWidget *row = gtk_list_box_row_new();
+        gtk_list_box_row_set_child(
+            GTK_LIST_BOX_ROW(row),
+            make_history_transaction_card(
+                state->history_records, index, end));
+        gtk_list_box_append(state->history_list, row);
+
+        ++transaction_count;
+        index = end;
+    }
+
+    if (state->history_count != nullptr) {
+        const std::string count =
+            std::to_string(transaction_count);
+        gtk_label_set_text(
+            GTK_LABEL(state->history_count),
+            count.c_str());
+    }
+}
+
+void history_worker(
+    GTask *task,
+    gpointer,
+    gpointer task_data,
+    GCancellable *)
+{
+    auto *data =
+        static_cast<HistoryTaskData *>(task_data);
+    auto *result = new HistoryResult{};
+    result->generation =
+        data == nullptr ? 0U : data->generation;
+
+    const std::filesystem::path path =
+        transaction_history_path();
+    if (path.empty()) {
+        result->error =
+            "The user data directory is unavailable.";
+    } else {
+        TransactionHistoryStore store(path.string());
+        result->records =
+            store.load_recent(100U, result->error);
+    }
+
+    g_task_return_pointer(
+        task,
+        result,
+        [](gpointer pointer) {
+            delete static_cast<HistoryResult *>(pointer);
+        });
+}
+
+void history_complete(
+    GObject *,
+    GAsyncResult *async_result,
+    gpointer user_data)
+{
+    auto *state = static_cast<WindowState *>(user_data);
+    auto *result = static_cast<HistoryResult *>(
+        g_task_propagate_pointer(
+            G_TASK(async_result), nullptr));
+
+    if (state == nullptr || result == nullptr) {
+        delete result;
+        return;
+    }
+    if (result->generation != state->history_generation) {
+        delete result;
+        return;
+    }
+
+    state->history_busy = false;
+    state->history_records =
+        std::move(result->records);
+    const std::string error = result->error;
+    delete result;
+
+    rebuild_history(state);
+
+    if (state->history_status != nullptr) {
+        if (!error.empty()) {
+            const std::string message =
+                "Unable to read transaction history: " +
+                one_line(error);
+            gtk_label_set_text(
+                GTK_LABEL(state->history_status),
+                message.c_str());
+        } else if (state->history_records.empty()) {
+            gtk_label_set_text(
+                GTK_LABEL(state->history_status),
+                "No completed software transactions have been recorded yet.");
+        } else {
+            std::unordered_set<std::int64_t> transactions;
+            for (const TransactionHistoryItem &entry :
+                 state->history_records) {
+                transactions.insert(entry.transaction_id);
+            }
+            const std::string message =
+                std::to_string(transactions.size()) +
+                (transactions.size() == 1U
+                     ? " recent transaction loaded."
+                     : " recent transactions loaded.");
+            gtk_label_set_text(
+                GTK_LABEL(state->history_status),
+                message.c_str());
+        }
+    }
+
+    if (state->history_refresh != nullptr) {
+        gtk_widget_set_sensitive(
+            state->history_refresh, true);
+    }
+}
+
+void refresh_history(WindowState *state)
+{
+    if (state == nullptr ||
+        state->history_list == nullptr ||
+        state->history_busy) {
+        return;
+    }
+
+    state->history_loaded = true;
+    state->history_busy = true;
+    ++state->history_generation;
+
+    if (state->history_status != nullptr) {
+        gtk_label_set_text(
+            GTK_LABEL(state->history_status),
+            "Reading durable transaction history…");
+    }
+    if (state->history_refresh != nullptr) {
+        gtk_widget_set_sensitive(
+            state->history_refresh, false);
+    }
+
+    auto *data = new HistoryTaskData{
+        state->history_generation};
+    GTask *task = g_task_new(
+        nullptr, nullptr, history_complete, state);
+    g_task_set_task_data(
+        task,
+        data,
+        [](gpointer pointer) {
+            delete static_cast<HistoryTaskData *>(pointer);
+        });
+    g_task_run_in_thread(task, history_worker);
+    g_object_unref(task);
+}
+
+void history_refresh_clicked(
+    GtkButton *,
+    gpointer user_data)
+{
+    refresh_history(
+        static_cast<WindowState *>(user_data));
+}
+
+GtkWidget *make_history_page(WindowState *state)
+{
+    GtkWidget *page =
+        gtk_box_new(GTK_ORIENTATION_VERTICAL, 16);
+    gtk_widget_add_css_class(page, "content");
+    gtk_widget_add_css_class(page, "page-history");
+
+    gtk_box_append(
+        GTK_BOX(page),
+        make_page_intro(
+            "document-open-recent-symbolic",
+            "History",
+            "Exact software-management operations and outcomes."));
+
+    GtkWidget *stats = gtk_grid_new();
+    gtk_grid_set_column_spacing(GTK_GRID(stats), 10);
+    gtk_grid_set_column_homogeneous(
+        GTK_GRID(stats), true);
+    gtk_grid_attach(
+        GTK_GRID(stats),
+        make_stat_card(
+            "RECENT TRANSACTIONS",
+            "0",
+            "stat-info",
+            &state->history_count),
+        0, 0, 1, 1);
+    gtk_grid_attach(
+        GTK_GRID(stats),
+        make_stat_card(
+            "STORAGE",
+            "Durable",
+            "stat-success"),
+        1, 0, 1, 1);
+    gtk_grid_attach(
+        GTK_GRID(stats),
+        make_stat_card(
+            "DETAIL",
+            "Exact versions",
+            "stat-operation"),
+        2, 0, 1, 1);
+    gtk_box_append(GTK_BOX(page), stats);
+
+    GtkWidget *controls =
+        gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    gtk_widget_add_css_class(controls, "card");
+
+    state->history_status =
+        make_label(
+            "Transaction history has not been loaded yet.",
+            "card-copy");
+    gtk_label_set_wrap(
+        GTK_LABEL(state->history_status), true);
+    gtk_widget_set_hexpand(
+        state->history_status, true);
+    gtk_box_append(
+        GTK_BOX(controls), state->history_status);
+
+    state->history_refresh =
+        gtk_button_new_with_label("Refresh history");
+    gtk_widget_add_css_class(
+        state->history_refresh, "control-button");
+    g_signal_connect(
+        state->history_refresh,
+        "clicked",
+        G_CALLBACK(history_refresh_clicked),
+        state);
+    gtk_box_append(
+        GTK_BOX(controls), state->history_refresh);
+
+    gtk_box_append(GTK_BOX(page), controls);
+
+    GtkWidget *list = gtk_list_box_new();
+    state->history_list = GTK_LIST_BOX(list);
+    gtk_widget_add_css_class(list, "package-list");
+    gtk_list_box_set_selection_mode(
+        state->history_list,
+        GTK_SELECTION_NONE);
+
+    GtkWidget *scroll = gtk_scrolled_window_new();
+    gtk_widget_set_vexpand(scroll, true);
+    gtk_scrolled_window_set_policy(
+        GTK_SCROLLED_WINDOW(scroll),
+        GTK_POLICY_NEVER,
+        GTK_POLICY_AUTOMATIC);
+    gtk_scrolled_window_set_child(
+        GTK_SCROLLED_WINDOW(scroll), list);
+    gtk_box_append(GTK_BOX(page), scroll);
+
+    return page;
+}
+
 GtkWidget *make_nav_row(
     const char *icon_name, const char *text, const char *semantic_class)
 {
