@@ -113,9 +113,11 @@ Flatpak dependency/runtime mechanics remain owned by Flatpak.
 
 For the Debian-compatibility phase, the engine passes a resolved immutable transaction to the privileged executor.
 
-The executor applies staged .deb payloads through the supported low-level installer boundary and reports structured progress/results.
+The executor applies staged .deb payloads through the supported low-level installer boundary. While this compatibility executor is still an opaque privileged subprocess, the GUI keeps an indeterminate activity indicator and elapsed-time status visible through metadata refresh, exact-plan revalidation, package application and final state verification instead of implying that the application has stalled.
 
-The long-term native payload installer can replace this boundary without changing the package engine API.
+Approved transaction outcomes are persisted in the user's durable History store with transaction identity, exact before/after versions, action, source provenance and requested/system-critical flags. Failed approved executions are recorded as failures rather than disappearing from the audit trail.
+
+The long-term native payload installer can replace this boundary with structured stage/progress events without changing the package engine's transaction model.
 
 ## Migration from 0.3
 

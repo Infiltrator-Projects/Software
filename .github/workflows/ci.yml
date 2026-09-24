@@ -68,6 +68,7 @@ jobs:
           preferences = Path("src/engine/debian_preferences.cpp").read_text()
           reconcile = Path("src/engine/debian_reconcile.cpp").read_text()
           state_store = Path("src/engine/package_state_store.cpp").read_text()
+          history = Path("src/core/transaction_history.cpp").read_text()
           helper = Path("src/helper/update_helper.cpp").read_text()
           source_helper = Path("src/helper/source_helper.cpp").read_text()
           source_mutation = Path("src/sources/source_mutation.cpp").read_text()
@@ -131,6 +132,17 @@ jobs:
           assert "classify_package_role" in Path("src/core/model.cpp").read_text()
           assert "is_system_component" in Path("src/core/model.cpp").read_text()
           assert '"System changes stay distinct"' not in app
+
+          # History is durable and update execution must remain visibly active.
+          assert "make_history_page(state)" in app
+          assert '"Durable transaction history"' not in app
+          assert "TransactionHistoryStore" in app
+          assert '"history.sqlite3"' in app
+          assert "CREATE TABLE IF NOT EXISTS transactions" in history
+          assert "CREATE TABLE IF NOT EXISTS transaction_items" in history
+          assert "updates_progress" in app
+          assert "Approved update transaction is active" in app
+          assert "Installation completed; verifying final package state" in app
 
           # The footer must report the exact pinned Common header version,
           # never a stale hand-written version string.

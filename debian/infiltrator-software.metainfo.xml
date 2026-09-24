@@ -34,6 +34,11 @@
   <url type="homepage">https://github.com/Infiltrator-Projects/Software</url>
 
   <releases>
+    <release version="0.3.23" date="2026-09-24">
+      <description>
+        <p>Adds visible elapsed install activity and final-state verification, and replaces the History placeholder with a durable SQLite-backed transaction view containing exact outcomes, package version changes and provenance.</p>
+      </description>
+    </release>
     <release version="0.3.22" date="2026-09-24">
       <description>
         <p>Replaces the System placeholder with live kernel, driver and core operating-system inventory, current/update state, system-critical counts, refresh controls and a hand-off to the unified Updates workflow.</p>

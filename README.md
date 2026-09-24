@@ -6,7 +6,7 @@
 
 Infiltrator Software is the software-management application for the Infiltrator project family. It presents software discovery, installation, removal, updates, system components, repositories, release channels, history and repair as one coherent graphical product.
 
-**Current source version:** 0.3.22  
+**Current source version:** 0.3.23  
 **Language:** C++17 application/core with native GTK4 Linux shell; C11 Common foundation  
 **Shared foundation:** Common 1.19.24  
 **Current package compatibility:** Debian repositories and .deb packages; Flatpak and AppStream catalogue integration  
@@ -40,10 +40,10 @@ The primary navigation contract is:
 
 - **Discover** — merged catalogue of verified Infiltrator applications, host AppStream applications and configured Flatpak sources.
 - **Installed** — installed applications and components with versions, source, size and state.
-- **Updates** — preferred application, library, kernel and system update candidates with per-package/subset selection, visible repository/policy provenance, and complete preflight planning before authorization.
+- **Updates** — preferred application, library, kernel and system update candidates with per-package/subset selection, visible repository/policy provenance, complete preflight planning before authorization, and visible elapsed activity through privileged execution and final state verification.
 - **System** — live kernel, driver and core operating-system inventory with installed/current versions, preferred update state, system-critical counts, repository refresh and a direct hand-off to the unified Updates workflow.
 - **Repositories** — Debian/Infiltrator sources, Flatpak remotes, channels, trust and health, with graphical enable/disable controls for mutable configured sources.
-- **History** — planned durable transaction history with before/after versions and outcomes; the current page remains a milestone placeholder.
+- **History** — live durable transaction history with completed/failed outcomes, exact before/after versions, requested and dependency-driven changes, source provenance and transaction identifiers.
 - **Repair** — diagnostics and guided recovery for package, repository and interrupted-transaction problems.
 
 Advanced technical information remains available through GUI details views with copyable diagnostics; it is not exposed by forcing the user into a shell.
