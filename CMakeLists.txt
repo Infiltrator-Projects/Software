@@ -134,6 +134,7 @@ add_library(software-engine STATIC
     src/engine/debian_package_index.cpp
     src/engine/debian_version.cpp
     src/engine/debian_candidate.cpp
+    src/engine/debian_preferences.cpp
     src/engine/debian_dependency.cpp
     src/engine/debian_repository.cpp
     src/engine/debian_source_configuration.cpp
