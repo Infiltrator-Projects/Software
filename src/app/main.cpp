@@ -3725,6 +3725,7 @@ void update_process_complete(
                 run->operation == "install";
             refresh_updates(state);
         } else {
+            stop_update_progress(state);
             std::string message =
                 run->operation == "refresh"
                     ? "Unable to refresh package lists."
