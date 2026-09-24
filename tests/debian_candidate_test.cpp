@@ -49,6 +49,7 @@ int main()
 
     std::vector<PackageRecord> current{
         installed("alpha", "1.0"),
+        installed("base-files", "13ubuntu10mint22.3.0"),
         installed("beta", "5.0"),
         installed("gamma", "3.0"),
         installed("held", "1.0"),
@@ -61,6 +62,14 @@ int main()
 
     std::vector<DebianPackageVersion> repository{
         available("alpha", "1.1", "stable"),
+        available(
+            "base-files",
+            "13ubuntu10mint22.3.0",
+            "mint-upstream"),
+        available(
+            "base-files",
+            "13ubuntu10.5",
+            "ubuntu-updates"),
         available("alpha", "1.2", "testing"),
         available("beta", "4.0", "stable"),
         available("gamma", "2.0", "forced"),
@@ -74,6 +83,9 @@ int main()
         available("infiltrator-calendar", "1.0.46", "stable"),
         available("native-current", "1.0.46", "stable")
     };
+
+    repository[1].pin_priority = 700;
+    repository[2].pin_priority = 500;
 
     DebianCandidatePolicy policy;
     policy.source_priorities["stable"] = 500;
@@ -106,6 +118,13 @@ int main()
     assert(alpha.candidate_priority == 500);
     assert(alpha.upgrade_available);
     assert(!alpha.downgrade_selected);
+
+    const auto &base_files = find("base-files");
+    assert(base_files.candidate.has_value());
+    assert(base_files.candidate->source == "mint-upstream");
+    assert(base_files.candidate->version == "13ubuntu10mint22.3.0");
+    assert(!base_files.upgrade_available);
+    assert(!base_files.downgrade_selected);
 
     const auto &beta = find("beta");
     assert(!beta.candidate.has_value());
