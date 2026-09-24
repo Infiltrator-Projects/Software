@@ -59,6 +59,7 @@ infiltrator::software::DebianPackageVersion available(
     package.sha256 = "deadbeef";
     package.source = "stable";
     package.priority = "optional";
+    package.pin_priority = 700;
     package.depends = "libc6 (>= 2.38)";
     package.size_bytes = 1024U;
     package.installed_size_bytes = 2048U;
@@ -98,6 +99,7 @@ int main()
     assert(first->source_fingerprint == "fixture-a");
     assert(first->installed.size() == 1U);
     assert(first->available.size() == 1U);
+    assert(first->available[0].pin_priority == 700);
     assert(first->installed[0].depends == "libcore (>= 1.0)");
     assert(first->installed[0].pre_depends == "init-base");
     assert(first->installed[0].provides == "virtual-alpha (= 1.0)");
