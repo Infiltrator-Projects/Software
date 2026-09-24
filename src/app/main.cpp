@@ -2601,10 +2601,14 @@ gboolean update_progress_tick(gpointer user_data)
                 elapsed_us / G_USEC_PER_SEC);
 
         const std::string message =
-            "Approved update transaction is active… " +
-            std::to_string(elapsed_seconds) +
-            " s elapsed. Software may be refreshing metadata, "
-            "re-validating the approved exact versions or applying packages.";
+            state->updates_post_install_refresh
+                ? "Installation completed; verifying final package state… " +
+                    std::to_string(elapsed_seconds) +
+                    " s elapsed."
+                : "Approved update transaction is active… " +
+                    std::to_string(elapsed_seconds) +
+                    " s elapsed. Software may be refreshing metadata, "
+                    "re-validating the approved exact versions or applying packages.";
         gtk_label_set_text(
             GTK_LABEL(state->updates_status),
             message.c_str());
