@@ -2,6 +2,7 @@
 #include "engine/debian_reconcile.hpp"
 
 #include "engine/debian_installed_state.hpp"
+#include "engine/debian_preferences.hpp"
 #include "engine/debian_repository.hpp"
 #include "engine/debian_source_configuration.hpp"
 
@@ -65,6 +66,9 @@ std::string build_fingerprint(
         checksum_field(checksum, package.source);
         checksum_field(checksum, package.filename);
         checksum_field(checksum, package.sha256);
+        checksum_field(
+            checksum,
+            std::to_string(package.pin_priority));
     }
 
     const char *digest = g_checksum_get_string(checksum);
@@ -103,6 +107,16 @@ bool DebianReconciler::reconcile(
         DebianSourceConfiguration::read(error);
     if (!error.empty()) return false;
 
+    std::string preferences_error;
+    const DebianAptPreferences preferences =
+        DebianAptPreferences::read(preferences_error);
+    if (!preferences_error.empty()) {
+        error =
+            "Unable to read APT package preferences: " +
+            preferences_error;
+        return false;
+    }
+
     std::vector<DebianRepositorySource> active;
     std::vector<DebianPackageVersion> available;
     for (const DebianRepositorySource &source : configured) {
@@ -117,6 +131,11 @@ bool DebianReconciler::reconcile(
                 source.suite + ": " + refresh_error;
             return false;
         }
+        for (DebianPackageVersion &package : snapshot.packages) {
+            package.pin_priority =
+                preferences.priority_for(package);
+        }
+
         active.emplace_back(source);
         available.insert(
             available.end(),
