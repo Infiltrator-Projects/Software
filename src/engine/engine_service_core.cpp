@@ -16,15 +16,6 @@
 namespace infiltrator::software {
 namespace {
 
-std::string package_base(const std::string_view identity)
-{
-    const std::size_t colon = identity.find(':');
-    return std::string(
-        colon == std::string_view::npos
-            ? identity
-            : identity.substr(0U, colon));
-}
-
 std::vector<PackageRecord> build_updates(
     const PackageStateSnapshot &snapshot,
     const DebianCandidatePolicy &policy)
