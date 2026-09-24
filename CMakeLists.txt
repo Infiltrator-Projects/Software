@@ -170,7 +170,8 @@ target_link_libraries(software-catalogue PUBLIC
     PkgConfig::APPSTREAM PkgConfig::CURL PkgConfig::JSON_GLIB)
 
 add_library(software-sources STATIC
-    src/sources/source_inventory.cpp)
+    src/sources/source_inventory.cpp
+    src/sources/source_mutation.cpp)
 target_include_directories(software-sources PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/src")
 
@@ -181,6 +182,8 @@ target_include_directories(software-apt-plan-guard PUBLIC
 
 add_executable(infiltrator-software-helper
     src/helper/source_helper.cpp)
+target_link_libraries(infiltrator-software-helper PRIVATE
+    software-sources)
 
 add_executable(infiltrator-software-update-helper
     src/helper/update_helper.cpp)
