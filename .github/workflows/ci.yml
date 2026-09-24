@@ -124,6 +124,14 @@ jobs:
           assert '"Policy: " + policy_name' in app
           assert '"Recommended update"' in app
 
+          # System is an operational inventory, not a milestone placeholder.
+          assert "make_system_page(state)" in app
+          assert '"COMPONENTS", "0"' in app
+          assert '"Review system updates"' in app
+          assert "classify_package_role" in Path("src/core/model.cpp").read_text()
+          assert "is_system_component" in Path("src/core/model.cpp").read_text()
+          assert '"System changes stay distinct"' not in app
+
           # The footer must report the exact pinned Common header version,
           # never a stale hand-written version string.
           assert "INFILTRATR_COMMON_VERSION" in app
