@@ -151,6 +151,14 @@ target_link_libraries(software-engine PUBLIC software-core
             PkgConfig::CURL PkgConfig::GLIB PkgConfig::ZLIB PkgConfig::LZMA
             PkgConfig::SQLITE3)
 
+add_library(software-history STATIC
+    src/core/transaction_history.cpp)
+target_include_directories(software-history PUBLIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_link_libraries(software-history PUBLIC
+    software-core
+    PRIVATE PkgConfig::SQLITE3)
+
 add_library(software-client STATIC
     src/client/engine_client.cpp)
 target_include_directories(software-client PUBLIC
@@ -211,7 +219,7 @@ add_executable(infiltrator-software
     src/app/main.cpp
     src/app/theme.cpp)
 target_link_libraries(infiltrator-software PRIVATE
-    software-core software-client software-apt
+    software-core software-history software-client software-apt
     software-catalogue software-sources
     InfiltratrCommon::Common PkgConfig::GTK4)
 
@@ -248,7 +256,7 @@ install(FILES ${SOFTWARE_FONT_FILES}
 install(FILES LICENSE DESTINATION share/doc/infiltrator-software)
 
 foreach(target IN ITEMS
-        software-core software-engine software-client software-apt software-catalogue software-sources
+        software-core software-history software-engine software-client software-apt software-catalogue software-sources
         software-apt-plan-guard
         infiltrator-software-helper infiltrator-software-update-helper
         infiltrator-software-engine infiltrator-software-tray
@@ -263,6 +271,14 @@ if(BUILD_TESTING)
     add_executable(software-model-test tests/model_test.cpp)
     target_link_libraries(software-model-test PRIVATE software-core)
     add_test(NAME software-model-test COMMAND software-model-test)
+
+    add_executable(software-transaction-history-test
+        tests/transaction_history_test.cpp)
+    target_link_libraries(software-transaction-history-test PRIVATE
+        software-history)
+    add_test(
+        NAME software-transaction-history-test
+        COMMAND software-transaction-history-test)
 
     add_executable(software-update-freshness-test
         tests/update_freshness_test.cpp)
