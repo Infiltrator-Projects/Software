@@ -68,6 +68,30 @@ It directly understands supported Debian repository metadata and installed dpkg 
 
 The engine does not use apt, apt-get, apt-cache, or APT's private binary cache files as authoritative state.
 
+Package mechanics and distribution policy are separate layers. Debian mechanics
+answer questions such as version ordering, dependency validity and repository
+format semantics. Candidate permission and precedence flow through an ordered
+package-policy stack:
+
+    repository defaults / Debian Release metadata
+                    ▲
+                    │ fallback
+    host compatibility policy (APT preferences today)
+                    ▲
+                    │ optional higher-precedence override
+    Infiltrator distribution policy (as packages migrate)
+                    ▲
+                    │
+              candidate selector
+
+On a current Mint host, the host compatibility provider protects Mint-specific
+packages exactly as the host policy requires. That provider is an adapter, not
+the permanent definition of Infiltrator policy. As Infiltrator OS takes
+ownership of selected packages, an Infiltrator provider can be inserted ahead
+of the host provider for only those packages. Everything not yet migrated keeps
+the existing host policy, so the transition does not accidentally replace the
+working base system.
+
 The 0.3 backends/apt implementation remains legacy migration code until the native engine reaches parity and is deleted.
 
 See [Package Engine](PACKAGE_ENGINE.md).
