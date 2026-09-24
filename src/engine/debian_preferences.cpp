@@ -315,7 +315,7 @@ bool parse_release_pin(
                 trim(std::string_view(item).substr(
                     equals + 1U));
             if (key.size() != 1U ||
-                std::string("anocl vb").find(key[0]) ==
+                std::string("anoclvb").find(key[0]) ==
                     std::string::npos ||
                 pattern.empty()) {
                 return false;
@@ -357,7 +357,7 @@ bool parse_pin(
 
     if (kind == "origin") {
         rule.kind = DebianPinKind::origin;
-        if (value == """" || value == "''") {
+        if (value == "\"\"" || value == "''") {
             rule.pattern.clear();
         } else {
             rule.pattern = value;
