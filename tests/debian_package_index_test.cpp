@@ -14,6 +14,8 @@ int main()
         "Version: 1:2.3-4\n"
         "ARCHITECTURE: amd64\n"
         "Priority: optional\n"
+        "Source: alpha-source (1:2.3-4)\n"
+        "Phased-Update-Percentage: 40\n"
         "Essential: yes\n"
         "Multi-Arch: same\n"
         "Depends: libc6 (>= 2.38), libssl3 | libssl3t64\n"
@@ -55,6 +57,9 @@ int main()
     assert(alpha.architecture == "amd64");
     assert(alpha.source == "example stable/main");
     assert(alpha.priority == "optional");
+    assert(alpha.source_package == "alpha-source");
+    assert(alpha.source_version == "1:2.3-4");
+    assert(alpha.phased_update_percentage == 40);
     assert(alpha.essential);
     assert(alpha.multi_arch == "same");
     assert(alpha.depends ==
