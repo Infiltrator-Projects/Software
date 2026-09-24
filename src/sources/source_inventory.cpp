@@ -228,8 +228,10 @@ std::vector<SourceRecord> SourceInventory::parse_apt_list(
     std::vector<SourceRecord> result;
     std::istringstream input{std::string(content)};
     std::string line;
+    std::size_t line_number = 0U;
 
     while (std::getline(input, line)) {
+        ++line_number;
         std::string clean = trim(line);
         bool enabled = true;
 
@@ -271,6 +273,7 @@ std::vector<SourceRecord> SourceInventory::parse_apt_list(
         record.location = words[index];
         record.scope = "System";
         record.backing_file = std::string(backing_file);
+        record.entry_index = line_number;
         record.enabled = enabled;
 
         std::ostringstream detail;
@@ -291,8 +294,10 @@ std::vector<SourceRecord> SourceInventory::parse_apt_deb822(
 {
     std::vector<SourceRecord> result;
     std::size_t start = 0U;
+    std::size_t stanza_number = 0U;
 
     while (start < content.size()) {
+        ++stanza_number;
         std::size_t end = content.find("\n\n", start);
         if (end == std::string_view::npos) {
             end = content.size();
@@ -321,6 +326,7 @@ std::vector<SourceRecord> SourceInventory::parse_apt_deb822(
                 record.location = uri;
                 record.scope = "System";
                 record.backing_file = std::string(backing_file);
+                record.entry_index = stanza_number;
                 record.enabled = enabled;
 
                 record.detail = suites->second;
