@@ -55,13 +55,16 @@ Pin-Priority: 1000
 )";
 
     std::string error;
-    const DebianAptPreferences policy =
+    const DebianAptPreferences host_policy =
         DebianAptPreferences::parse(
             preferences,
             "fixture.pref",
             error);
     assert(error.empty());
-    assert(!policy.empty());
+    assert(!host_policy.empty());
+
+    DebianPolicyStack policy;
+    policy.add(host_policy);
 
     const auto mint = package(
         "base-files",
@@ -71,7 +74,7 @@ Pin-Priority: 1000
         "zena",
         "upstream",
         "packages.linuxmint.com");
-    assert(policy.priority_for(mint) == 700);
+    assert(policy.evaluate(mint).priority == 700);
 
     const auto ubuntu = package(
         "base-files",
@@ -81,7 +84,7 @@ Pin-Priority: 1000
         "noble",
         "main",
         "archive.ubuntu.com");
-    assert(policy.priority_for(ubuntu) == 500);
+    assert(policy.evaluate(ubuntu).priority == 500);
 
     const auto third_party = package(
         "example",
@@ -91,7 +94,7 @@ Pin-Priority: 1000
         "stable",
         "main",
         "packages.example.invalid");
-    assert(policy.priority_for(third_party) == 650);
+    assert(policy.evaluate(third_party).priority == 650);
 
     const auto snap = package(
         "snapd",
@@ -101,7 +104,7 @@ Pin-Priority: 1000
         "noble",
         "main",
         "archive.ubuntu.com");
-    assert(policy.priority_for(snap) == -10);
+    assert(policy.evaluate(snap).priority == -10);
 
     const auto firefox = package(
         "firefox",
@@ -111,7 +114,7 @@ Pin-Priority: 1000
         "mozilla",
         "main",
         "packages.mozilla.org");
-    assert(policy.priority_for(firefox) == 1000);
+    assert(policy.evaluate(firefox).priority == 1000);
 
     const auto backports = package(
         "backported",
@@ -122,7 +125,7 @@ Pin-Priority: 1000
         "main",
         "archive.ubuntu.com",
         100);
-    assert(policy.priority_for(backports) == 100);
+    assert(policy.evaluate(backports).priority == 100);
 
     return 0;
 }
