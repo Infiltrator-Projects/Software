@@ -24,7 +24,9 @@ constexpr const char *kInterfaceName =
 constexpr int kInventoryCallTimeoutMs = 750;
 constexpr int kControlCallTimeoutMs = 5000;
 constexpr int kRefreshCallTimeoutMs = 125000;
-constexpr guint32 kRefreshApiVersion = 2U;
+constexpr guint32 kRequiredApiVersion = 2U;
+constexpr const char *kRequiredEngineVersion =
+    INFILTRATOR_SOFTWARE_VERSION;
 constexpr guint kEngineRestartAttempts = 40U;
 constexpr gulong kEngineRestartDelayUs = 50000U;
 
@@ -85,11 +87,13 @@ GVariant *call_engine(
     return reply;
 }
 
-bool engine_api_version(
-    guint32 &version,
+bool engine_identity(
+    guint32 &api_version,
+    std::string &engine_version,
     std::string &error)
 {
-    version = 0U;
+    api_version = 0U;
+    engine_version.clear();
     GVariant *reply =
         call_engine(
             "GetStatus",
@@ -110,15 +114,26 @@ bool engine_api_version(
         return false;
     }
 
-    const gboolean found =
+    const gboolean api_found =
         g_variant_lookup(
             dictionary,
             "api-version",
             "u",
-            &version);
+            &api_version);
+    const gchar *version_text = nullptr;
+    const gboolean version_found =
+        g_variant_lookup(
+            dictionary,
+            "engine-version",
+            "&s",
+            &version_text);
+    if (version_found && version_text != nullptr) {
+        engine_version = version_text;
+    }
     g_variant_unref(dictionary);
-    if (!found || version == 0U) {
-        version = 0U;
+
+    if (!api_found || api_version == 0U) {
+        api_version = 0U;
         error =
             "Package engine did not report an API version.";
         return false;
@@ -170,17 +185,23 @@ bool engine_owner_value(
     return true;
 }
 
-bool wait_for_engine_api(
-    const guint32 required_version,
+bool wait_for_engine_identity(
+    const guint32 required_api_version,
+    const std::string_view required_engine_version,
     std::string &error)
 {
     for (guint attempt = 0U;
          attempt < kEngineRestartAttempts;
          ++attempt) {
-        guint32 version = 0U;
+        guint32 api_version = 0U;
+        std::string engine_version;
         std::string probe_error;
-        if (engine_api_version(version, probe_error) &&
-            version >= required_version) {
+        if (engine_identity(
+                api_version,
+                engine_version,
+                probe_error) &&
+            api_version >= required_api_version &&
+            engine_version == required_engine_version) {
             error.clear();
             return true;
         }
@@ -191,13 +212,16 @@ bool wait_for_engine_api(
     }
 
     error =
-        "Package engine did not restart with API version " +
-        std::to_string(required_version) + ".";
+        "Package engine did not restart as version " +
+        std::string(required_engine_version) +
+        " with API version " +
+        std::to_string(required_api_version) + ".";
     return false;
 }
 
 bool recycle_engine_service(
-    const guint32 required_version,
+    const guint32 required_api_version,
+    const std::string_view required_engine_version,
     std::string &error)
 {
     /*
@@ -216,8 +240,10 @@ bool recycle_engine_service(
             quit_error);
     if (quit_reply != nullptr) {
         g_variant_unref(quit_reply);
-        return wait_for_engine_api(
-            required_version, error);
+        return wait_for_engine_identity(
+            required_api_version,
+            required_engine_version,
+            error);
     }
 
     guint32 owner_uid = 0U;
@@ -256,25 +282,33 @@ bool recycle_engine_service(
         return false;
     }
 
-    return wait_for_engine_api(
-        required_version, error);
+    return wait_for_engine_identity(
+        required_api_version,
+        required_engine_version,
+        error);
 }
 
-bool ensure_engine_api_version(
-    const guint32 required_version,
-    std::string &error)
+bool ensure_engine_identity(std::string &error)
 {
-    guint32 version = 0U;
-    if (!engine_api_version(version, error)) {
+    guint32 api_version = 0U;
+    std::string engine_version;
+    if (!engine_identity(
+            api_version,
+            engine_version,
+            error)) {
         return false;
     }
-    if (version >= required_version) {
+
+    if (api_version >= kRequiredApiVersion &&
+        engine_version == kRequiredEngineVersion) {
         error.clear();
         return true;
     }
 
     return recycle_engine_service(
-        required_version, error);
+        kRequiredApiVersion,
+        kRequiredEngineVersion,
+        error);
 }
 
 std::string lookup_string(
@@ -478,6 +512,11 @@ bool EngineClient::list_installed(
     std::vector<PackageRecord> &packages,
     std::string &error) const
 {
+    if (!ensure_engine_identity(error)) {
+        packages.clear();
+        return false;
+    }
+
     GVariant *reply =
         call_engine(
             "ListInstalled",
@@ -494,6 +533,11 @@ bool EngineClient::list_updates(
     std::vector<PackageRecord> &packages,
     std::string &error) const
 {
+    if (!ensure_engine_identity(error)) {
+        packages.clear();
+        return false;
+    }
+
     GVariant *reply =
         call_engine(
             "ListUpdates",
@@ -510,6 +554,10 @@ std::optional<TransactionPlan> EngineClient::plan(
     const TransactionRequest &request,
     std::string &error) const
 {
+    if (!ensure_engine_identity(error)) {
+        return std::nullopt;
+    }
+
     const std::string action =
         action_text(request.action);
     if (action.empty() ||
@@ -603,6 +651,10 @@ std::optional<TransactionPlan> EngineClient::plan(
 
 bool EngineClient::reload(std::string &error) const
 {
+    if (!ensure_engine_identity(error)) {
+        return false;
+    }
+
     GVariant *reply =
         call_engine(
             "ReloadState",
@@ -620,8 +672,7 @@ bool EngineClient::reload(std::string &error) const
 
 bool EngineClient::refresh(std::string &error) const
 {
-    if (!ensure_engine_api_version(
-            kRefreshApiVersion, error)) {
+    if (!ensure_engine_identity(error)) {
         return false;
     }
 
