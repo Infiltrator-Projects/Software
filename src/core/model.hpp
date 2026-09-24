@@ -88,6 +88,8 @@ std::string_view channel_name(Channel channel) noexcept;
 std::string_view package_kind_name(PackageKind kind) noexcept;
 std::string_view transaction_action_name(TransactionAction action) noexcept;
 bool valid_identity(const PackageRecord &package) noexcept;
+void classify_package_role(PackageRecord &package) noexcept;
+bool is_system_component(const PackageRecord &package) noexcept;
 
 } // namespace infiltrator::software
 #endif
