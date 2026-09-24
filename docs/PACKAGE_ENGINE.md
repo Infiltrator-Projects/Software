@@ -41,12 +41,15 @@ Repository refresh performs:
 
 A failed refresh leaves the last verified generation readable and clearly marks freshness/error state.
 
-The per-user D-Bus engine interface is explicitly versioned. Clients check the
-reported API version before using methods introduced after v1. If a package
-upgrade leaves an older activated engine running in the desktop session, the
-client first requests a clean service exit when supported and otherwise
-recycles only the verified same-user stale engine process. D-Bus then activates
-the newly installed engine binary before the newer method is retried.
+The per-user D-Bus engine reports both its interface API version and the exact
+Software package version that built it. Clients require both identities to
+match before any engine operation. This matters even when the D-Bus API itself
+has not changed: a package upgrade may replace repository, resolver or state
+logic while leaving the previous per-user engine process alive in the desktop
+session. On any package-version mismatch, the client first requests a clean
+service exit when supported and otherwise recycles only the verified same-user
+stale engine process. D-Bus then activates the newly installed engine binary
+before the operation is retried.
 
 ## Debian package model
 

@@ -34,6 +34,11 @@
   <url type="homepage">https://github.com/Infiltrator-Projects/Software</url>
 
   <releases>
+    <release version="0.3.17" date="2026-09-24">
+      <description>
+        <p>Ensures an in-session package upgrade cannot keep an older native engine implementation alive merely because its D-Bus API version is unchanged; clients now match the exact engine package version and recycle stale same-user services automatically.</p>
+      </description>
+    </release>
     <release version="0.3.16" date="2026-09-24">
       <description>
         <p>Fixes native repository signature verification for APT Signed-By ASCII-armored keyrings, including Docker's recommended docker.asc configuration, while preserving strict signature and Release integrity checks.</p>
