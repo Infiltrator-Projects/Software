@@ -1,3 +1,11 @@
+infiltrator-software (0.3.27) unstable; urgency=medium
+
+  * Align page hero titles with the 28 px publisher-wide desktop heading scale.
+  * Keep navigation, cards, package behaviour, dependencies and Common APIs
+    unchanged.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Thu, 24 Sep 2026 19:12:00 +1000
+
 infiltrator-software (0.3.26) unstable; urgency=high
 
   * Restore readable repository navigation contrast on dark/system themes by

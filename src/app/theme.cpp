@@ -367,7 +367,7 @@ void ThemeController::apply()
         << "; border: 1px solid " << status_border << "; }"
         << ".page-icon image { color: " << info << "; }"
         << ".hero-title { font-family: \"" << typography->brand_family
-        << "\"; font-size: 27px; font-weight: " << typography->brand_weight
+        << "\"; font-size: 28px; font-weight: " << typography->brand_weight
         << "; color: " << heading << "; }"
         << ".hero-subtitle { font-size: 12px; color: " << summary << "; }"
 
