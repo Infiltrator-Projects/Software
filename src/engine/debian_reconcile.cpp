@@ -3,6 +3,7 @@
 
 #include "engine/debian_installed_state.hpp"
 #include "engine/debian_preferences.hpp"
+#include "engine/package_policy.hpp"
 #include "engine/debian_repository.hpp"
 #include "engine/debian_source_configuration.hpp"
 
@@ -108,7 +109,7 @@ bool DebianReconciler::reconcile(
     if (!error.empty()) return false;
 
     std::string preferences_error;
-    const DebianAptPreferences preferences =
+    const DebianAptPreferences host_preferences =
         DebianAptPreferences::read(preferences_error);
     if (!preferences_error.empty()) {
         error =
@@ -116,6 +117,16 @@ bool DebianReconciler::reconcile(
             preferences_error;
         return false;
     }
+
+    /*
+     * The engine consumes an ordered policy stack rather than depending on
+     * APT preferences as its permanent policy model. Today the host APT
+     * adapter is the only explicit provider. Infiltrator distribution policy
+     * can later be inserted ahead of it for migrated packages while the host
+     * adapter continues to protect packages that still belong to the base OS.
+     */
+    DebianPolicyStack policy;
+    policy.add(host_preferences);
 
     std::vector<DebianRepositorySource> active;
     std::vector<DebianPackageVersion> available;
@@ -132,8 +143,9 @@ bool DebianReconciler::reconcile(
             return false;
         }
         for (DebianPackageVersion &package : snapshot.packages) {
-            package.pin_priority =
-                preferences.priority_for(package);
+            const DebianPolicyDecision decision =
+                policy.evaluate(package);
+            package.pin_priority = decision.priority;
         }
 
         active.emplace_back(source);
