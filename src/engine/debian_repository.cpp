@@ -102,6 +102,43 @@ std::string distribution_root(const DebianRepositorySource &source)
     return join_uri(source.uri, "dists/" + source.suite + "/");
 }
 
+std::string repository_site(const std::string_view uri)
+{
+    const std::size_t scheme = uri.find("://");
+    if (scheme == std::string_view::npos) {
+        return {};
+    }
+
+    const std::size_t authority_start = scheme + 3U;
+    const std::size_t authority_end =
+        uri.find('/', authority_start);
+    std::string_view authority = uri.substr(
+        authority_start,
+        authority_end == std::string_view::npos
+            ? uri.size() - authority_start
+            : authority_end - authority_start);
+
+    const std::size_t at = authority.rfind('@');
+    if (at != std::string_view::npos) {
+        authority.remove_prefix(at + 1U);
+    }
+
+    if (!authority.empty() && authority.front() == '[') {
+        const std::size_t close = authority.find(']');
+        if (close == std::string_view::npos) {
+            return {};
+        }
+        return lower_ascii(
+            std::string(authority.substr(1U, close - 1U)));
+    }
+
+    const std::size_t colon = authority.rfind(':');
+    if (colon != std::string_view::npos) {
+        authority = authority.substr(0U, colon);
+    }
+    return lower_ascii(std::string(authority));
+}
+
 std::size_t curl_writer(
     char *data,
     const std::size_t size,
@@ -1055,10 +1092,24 @@ DebianReleaseMetadata DebianReleaseMetadata::parse(
         const std::string value =
             trim(std::string_view(line).substr(colon + 1U));
 
-        if (key == "Suite") {
+        if (key == "Origin") {
+            result.origin = value;
+        } else if (key == "Label") {
+            result.label = value;
+        } else if (key == "Version") {
+            result.version = value;
+        } else if (key == "Suite") {
             result.suite = value;
         } else if (key == "Codename") {
             result.codename = value;
+        } else if (key == "NotAutomatic") {
+            result.not_automatic =
+                lower_ascii(value) == "yes" ||
+                lower_ascii(value) == "true";
+        } else if (key == "ButAutomaticUpgrades") {
+            result.but_automatic_upgrades =
+                lower_ascii(value) == "yes" ||
+                lower_ascii(value) == "true";
         } else if (key == "Architectures") {
             result.architectures = split_words(value);
         } else if (key == "Components") {
@@ -1121,9 +1172,9 @@ DebianRepositorySnapshot DebianRepositoryRefresh::refresh(
         components = release.components;
     }
 
-    std::vector<std::string> base_indexes;
+    std::vector<std::pair<std::string, std::string>> base_indexes;
     if (!source.suite.empty() && source.suite.back() == '/') {
-        base_indexes.emplace_back("Packages");
+        base_indexes.emplace_back("Packages", std::string{});
     } else {
         if (components.empty()) {
             error =
@@ -1133,14 +1184,21 @@ DebianRepositorySnapshot DebianRepositoryRefresh::refresh(
         for (const std::string &component : components) {
             base_indexes.emplace_back(
                 component + "/binary-" +
-                std::string(architecture) + "/Packages");
+                    std::string(architecture) + "/Packages",
+                component);
         }
     }
 
     std::vector<std::string> cached_contents;
     cached_contents.reserve(base_indexes.size());
 
-    for (const std::string &base_index : base_indexes) {
+    const int default_pin_priority =
+        release.not_automatic
+            ? (release.but_automatic_upgrades ? 100 : 1)
+            : 500;
+    const std::string site = repository_site(source.uri);
+
+    for (const auto &[base_index, component] : base_indexes) {
         const DebianReleaseEntry *entry =
             preferred_index(release, base_index);
         const DebianReleaseEntry *uncompressed_entry =
@@ -1200,6 +1258,17 @@ DebianRepositorySnapshot DebianRepositoryRefresh::refresh(
                 "Unable to parse repository package index " +
                 entry->path + ": " + parse_error;
             return {};
+        }
+
+        for (DebianPackageVersion &package : packages) {
+            package.pin_priority = default_pin_priority;
+            package.release_origin = release.origin;
+            package.release_label = release.label;
+            package.release_version = release.version;
+            package.release_archive = release.suite;
+            package.release_codename = release.codename;
+            package.component = component;
+            package.site = site;
         }
 
         snapshot.packages.insert(
