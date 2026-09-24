@@ -19,6 +19,31 @@ int main()
     assert(package_kind_name(package.kind) == "Application");
     assert(transaction_action_name(TransactionAction::upgrade) == "Upgrade");
 
+    PackageRecord kernel;
+    kernel.id = "linux-image-7.0.0-31-generic";
+    kernel.name = kernel.id;
+    kernel.package_name = kernel.id;
+    classify_package_role(kernel);
+    assert(kernel.kind == PackageKind::kernel);
+    assert(kernel.system_critical);
+    assert(is_system_component(kernel));
+
+    PackageRecord driver;
+    driver.id = "nvidia-driver-550";
+    driver.name = driver.id;
+    driver.package_name = driver.id;
+    classify_package_role(driver);
+    assert(driver.kind == PackageKind::driver);
+    assert(is_system_component(driver));
+
+    PackageRecord ordinary;
+    ordinary.id = "infiltrator-calendar";
+    ordinary.name = ordinary.id;
+    ordinary.package_name = ordinary.id;
+    classify_package_role(ordinary);
+    assert(ordinary.kind == PackageKind::application);
+    assert(!is_system_component(ordinary));
+
     TransactionPlan plan;
     plan.items.push_back(TransactionItem{
         package.id, TransactionAction::upgrade, "0.1.36", "0.1.37",
