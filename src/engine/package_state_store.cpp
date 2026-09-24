@@ -16,7 +16,7 @@
 namespace infiltrator::software {
 namespace {
 
-constexpr int kSchemaVersion = 2;
+constexpr int kSchemaVersion = 3;
 
 struct Database {
     sqlite3 *handle{nullptr};
@@ -258,7 +258,8 @@ bool ensure_schema(
         return false;
     }
 
-    if (version != 0 && version != 1 && version != kSchemaVersion) {
+    if (version != 0 && version != 1 &&
+        version != 2 && version != kSchemaVersion) {
         error =
             "Unsupported package-state schema version " +
             std::to_string(version) + ".";
@@ -305,6 +306,7 @@ bool ensure_schema(
         " sha256 TEXT NOT NULL,"
         " source TEXT NOT NULL,"
         " priority TEXT NOT NULL,"
+        " pin_priority INTEGER NOT NULL DEFAULT 0,"
         " multi_arch TEXT NOT NULL,"
         " depends_text TEXT NOT NULL,"
         " pre_depends TEXT NOT NULL,"
@@ -339,14 +341,22 @@ bool ensure_schema(
             "ALTER TABLE installed_packages ADD COLUMN priority TEXT NOT NULL DEFAULT '';"
             "ALTER TABLE installed_packages ADD COLUMN multi_arch TEXT NOT NULL DEFAULT '';"
             "ALTER TABLE installed_packages ADD COLUMN essential INTEGER NOT NULL DEFAULT 0;"
-            "PRAGMA user_version=2;";
+            "ALTER TABLE available_packages ADD COLUMN pin_priority INTEGER NOT NULL DEFAULT 0;"
+            "PRAGMA user_version=3;";
+        if (!exec_sql(database, migration, error)) {
+            return false;
+        }
+    } else if (version == 2) {
+        static constexpr const char *migration =
+            "ALTER TABLE available_packages ADD COLUMN pin_priority INTEGER NOT NULL DEFAULT 0;"
+            "PRAGMA user_version=3;";
         if (!exec_sql(database, migration, error)) {
             return false;
         }
     } else if (version == 0) {
         if (!exec_sql(
                 database,
-                "PRAGMA user_version=2;",
+                "PRAGMA user_version=3;",
                 error)) {
             return false;
         }
@@ -538,13 +548,13 @@ bool insert_available(
             database,
             "INSERT INTO available_packages("
             " generation_id, package_name, version, architecture,"
-            " filename, sha256, source, priority, multi_arch,"
-            " depends_text, pre_depends, recommends, provides,"
+            " filename, sha256, source, priority, pin_priority,"
+            " multi_arch, depends_text, pre_depends, recommends, provides,"
             " conflicts, breaks_text, replaces, description,"
             " size_bytes, installed_size_bytes, essential"
             ") VALUES("
             " ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,"
-            " ?, ?, ?, ?, ?, ?, ?, ?, ?, ?"
+            " ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?"
             ");",
             statement,
             error)) {
@@ -561,27 +571,30 @@ bool insert_available(
             !bind_text(statement.handle, 6, package.sha256) ||
             !bind_text(statement.handle, 7, package.source) ||
             !bind_text(statement.handle, 8, package.priority) ||
-            !bind_text(statement.handle, 9, package.multi_arch) ||
-            !bind_text(statement.handle, 10, package.depends) ||
-            !bind_text(statement.handle, 11, package.pre_depends) ||
-            !bind_text(statement.handle, 12, package.recommends) ||
-            !bind_text(statement.handle, 13, package.provides) ||
-            !bind_text(statement.handle, 14, package.conflicts) ||
-            !bind_text(statement.handle, 15, package.breaks) ||
-            !bind_text(statement.handle, 16, package.replaces) ||
-            !bind_text(statement.handle, 17, package.description) ||
-            sqlite3_bind_int64(
-                statement.handle,
-                18,
-                to_sqlite_integer(package.size_bytes)) != SQLITE_OK ||
+            sqlite3_bind_int(
+                statement.handle, 9,
+                package.pin_priority) != SQLITE_OK ||
+            !bind_text(statement.handle, 10, package.multi_arch) ||
+            !bind_text(statement.handle, 11, package.depends) ||
+            !bind_text(statement.handle, 12, package.pre_depends) ||
+            !bind_text(statement.handle, 13, package.recommends) ||
+            !bind_text(statement.handle, 14, package.provides) ||
+            !bind_text(statement.handle, 15, package.conflicts) ||
+            !bind_text(statement.handle, 16, package.breaks) ||
+            !bind_text(statement.handle, 17, package.replaces) ||
+            !bind_text(statement.handle, 18, package.description) ||
             sqlite3_bind_int64(
                 statement.handle,
                 19,
+                to_sqlite_integer(package.size_bytes)) != SQLITE_OK ||
+            sqlite3_bind_int64(
+                statement.handle,
+                20,
                 to_sqlite_integer(
                     package.installed_size_bytes)) != SQLITE_OK ||
             sqlite3_bind_int(
                 statement.handle,
-                20,
+                21,
                 package.essential ? 1 : 0) != SQLITE_OK) {
             error = sqlite_error(database);
             return false;
@@ -830,8 +843,8 @@ PackageStateStore::load_current(
         if (!prepare(
                 database.handle,
                 "SELECT package_name, version, architecture,"
-                " filename, sha256, source, priority, multi_arch,"
-                " depends_text, pre_depends, recommends, provides,"
+                " filename, sha256, source, priority, pin_priority,"
+                " multi_arch, depends_text, pre_depends, recommends, provides,"
                 " conflicts, breaks_text, replaces, description,"
                 " size_bytes, installed_size_bytes, essential"
                 " FROM available_packages"
@@ -868,26 +881,28 @@ PackageStateStore::load_current(
             package.sha256 = column_text(statement.handle, 4);
             package.source = column_text(statement.handle, 5);
             package.priority = column_text(statement.handle, 6);
-            package.multi_arch = column_text(statement.handle, 7);
-            package.depends = column_text(statement.handle, 8);
-            package.pre_depends = column_text(statement.handle, 9);
-            package.recommends = column_text(statement.handle, 10);
-            package.provides = column_text(statement.handle, 11);
-            package.conflicts = column_text(statement.handle, 12);
-            package.breaks = column_text(statement.handle, 13);
-            package.replaces = column_text(statement.handle, 14);
-            package.description = column_text(statement.handle, 15);
+            package.pin_priority =
+                sqlite3_column_int(statement.handle, 7);
+            package.multi_arch = column_text(statement.handle, 8);
+            package.depends = column_text(statement.handle, 9);
+            package.pre_depends = column_text(statement.handle, 10);
+            package.recommends = column_text(statement.handle, 11);
+            package.provides = column_text(statement.handle, 12);
+            package.conflicts = column_text(statement.handle, 13);
+            package.breaks = column_text(statement.handle, 14);
+            package.replaces = column_text(statement.handle, 15);
+            package.description = column_text(statement.handle, 16);
             package.size_bytes =
                 from_sqlite_unsigned(
                     sqlite3_column_int64(
-                        statement.handle, 16));
+                        statement.handle, 17));
             package.installed_size_bytes =
                 from_sqlite_unsigned(
                     sqlite3_column_int64(
-                        statement.handle, 17));
+                        statement.handle, 18));
             package.essential =
                 sqlite3_column_int(
-                    statement.handle, 18) != 0;
+                    statement.handle, 19) != 0;
             snapshot.available.emplace_back(std::move(package));
         }
     }
