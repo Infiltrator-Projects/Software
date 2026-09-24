@@ -34,6 +34,11 @@
   <url type="homepage">https://github.com/Infiltrator-Projects/Software</url>
 
   <releases>
+    <release version="0.3.16" date="2026-09-24">
+      <description>
+        <p>Fixes native repository signature verification for APT Signed-By ASCII-armored keyrings, including Docker's recommended docker.asc configuration, while preserving strict signature and Release integrity checks.</p>
+      </description>
+    </release>
     <release version="0.3.15" date="2026-09-24">
       <description>
         <p>Makes the Repositories Enabled/Disabled state interactive for configured APT sources and Flatpak remotes, with exact source targeting, authenticated atomic APT edits, and immediate refresh of dependent software state.</p>
