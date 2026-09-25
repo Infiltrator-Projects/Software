@@ -72,6 +72,7 @@ struct WindowState {
     GtkWidget *discover_count{};
     GtkWidget *discover_source{};
     GtkWidget *discover_state{};
+    GtkWidget *discover_spotlight{};
     std::vector<PackageRecord> discover_records;
     std::vector<std::string> discover_search_texts;
     unsigned int discover_generation{0U};
@@ -916,6 +917,227 @@ GtkWidget *make_discover_category_shortcut(
     return button;
 }
 
+GtkWidget *make_spotlight_chip(
+    const char *text,
+    const char *css_class)
+{
+    GtkWidget *label =
+        make_label(text, css_class);
+    gtk_label_set_ellipsize(
+        GTK_LABEL(label),
+        PANGO_ELLIPSIZE_END);
+    return label;
+}
+
+void rebuild_discover_spotlight(
+    WindowState *state,
+    const PackageRecord *record)
+{
+    if (state == nullptr ||
+        state->discover_spotlight == nullptr) {
+        return;
+    }
+
+    GtkWidget *child =
+        gtk_widget_get_first_child(
+            state->discover_spotlight);
+    while (child != nullptr) {
+        GtkWidget *next =
+            gtk_widget_get_next_sibling(child);
+        gtk_box_remove(
+            GTK_BOX(state->discover_spotlight),
+            child);
+        child = next;
+    }
+
+    if (record == nullptr) {
+        GtkWidget *empty =
+            gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
+        gtk_widget_set_hexpand(empty, true);
+        gtk_widget_set_valign(
+            empty, GTK_ALIGN_CENTER);
+
+        GtkWidget *kicker =
+            make_label("FEATURED", "spotlight-kicker");
+        GtkWidget *title =
+            make_label(
+                "No software matches this view",
+                "spotlight-title");
+        GtkWidget *copy =
+            make_label(
+                "Change the search or category to explore the catalogue.",
+                "spotlight-copy");
+        gtk_label_set_wrap(GTK_LABEL(copy), true);
+
+        gtk_box_append(GTK_BOX(empty), kicker);
+        gtk_box_append(GTK_BOX(empty), title);
+        gtk_box_append(GTK_BOX(empty), copy);
+        gtk_box_append(
+            GTK_BOX(state->discover_spotlight),
+            empty);
+        return;
+    }
+
+    GtkWidget *copy_column =
+        gtk_box_new(GTK_ORIENTATION_VERTICAL, 9);
+    gtk_widget_set_hexpand(copy_column, true);
+    gtk_widget_set_valign(
+        copy_column, GTK_ALIGN_CENTER);
+
+    GtkWidget *kicker =
+        make_label("FEATURED SOFTWARE", "spotlight-kicker");
+    gtk_box_append(GTK_BOX(copy_column), kicker);
+
+    GtkWidget *title =
+        make_label(
+            record->name.c_str(),
+            "spotlight-title");
+    gtk_label_set_wrap(GTK_LABEL(title), true);
+    gtk_box_append(GTK_BOX(copy_column), title);
+
+    GtkWidget *description =
+        make_label(
+            record->description.c_str(),
+            "spotlight-copy");
+    gtk_label_set_wrap(
+        GTK_LABEL(description), true);
+    gtk_label_set_lines(
+        GTK_LABEL(description), 3);
+    gtk_label_set_ellipsize(
+        GTK_LABEL(description),
+        PANGO_ELLIPSIZE_END);
+    gtk_label_set_max_width_chars(
+        GTK_LABEL(description), 62);
+    gtk_box_append(
+        GTK_BOX(copy_column), description);
+
+    GtkWidget *chips =
+        gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+    gtk_widget_add_css_class(
+        chips, "spotlight-chips");
+
+    const std::string category_text =
+        record->category.empty()
+            ? "Software"
+            : record->category;
+    gtk_box_append(
+        GTK_BOX(chips),
+        make_spotlight_chip(
+            category_text.c_str(),
+            "spotlight-chip"));
+
+    if (!record->available_version.empty()) {
+        gtk_box_append(
+            GTK_BOX(chips),
+            make_spotlight_chip(
+                record->available_version.c_str(),
+                "spotlight-chip"));
+    }
+
+    if (!record->source.empty()) {
+        gtk_box_append(
+            GTK_BOX(chips),
+            make_spotlight_chip(
+                record->source.c_str(),
+                "spotlight-chip-source"));
+    }
+    gtk_box_append(
+        GTK_BOX(copy_column), chips);
+
+    GtkWidget *actions =
+        gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+
+    GtkWidget *details =
+        gtk_button_new_with_label("Explore");
+    gtk_widget_add_css_class(
+        details, "spotlight-secondary-action");
+    g_object_set_data_full(
+        G_OBJECT(details),
+        "discover-record",
+        new PackageRecord(*record),
+        package_record_destroy);
+    g_signal_connect(
+        details, "clicked",
+        G_CALLBACK(discover_details_clicked),
+        state);
+    gtk_box_append(GTK_BOX(actions), details);
+
+    if (!record->package_name.empty()) {
+        const bool installed =
+            record->state ==
+            infiltrator::software::InstallState::installed;
+        const bool upgradable =
+            record->state ==
+            infiltrator::software::InstallState::upgradable;
+
+        GtkWidget *action =
+            gtk_button_new_with_label(
+                installed
+                    ? "Remove"
+                    : (upgradable ? "Update" : "Install"));
+        gtk_widget_add_css_class(
+            action,
+            installed
+                ? "destructive-action"
+                : "suggested-action");
+        gtk_widget_add_css_class(
+            action, "spotlight-primary-action");
+        g_object_set_data_full(
+            G_OBJECT(action),
+            "discover-install-record",
+            new PackageRecord(*record),
+            package_record_destroy);
+        g_signal_connect(
+            action, "clicked",
+            G_CALLBACK(discover_install_clicked),
+            state);
+        gtk_box_append(
+            GTK_BOX(actions), action);
+    }
+
+    gtk_box_append(
+        GTK_BOX(copy_column), actions);
+    gtk_box_append(
+        GTK_BOX(state->discover_spotlight),
+        copy_column);
+
+    GtkWidget *art =
+        gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    gtk_widget_add_css_class(
+        art, "spotlight-art");
+    gtk_widget_set_size_request(
+        art, 190, 176);
+    gtk_widget_set_halign(
+        art, GTK_ALIGN_END);
+    gtk_widget_set_valign(
+        art, GTK_ALIGN_CENTER);
+
+    GtkWidget *icon_well =
+        gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    gtk_widget_add_css_class(
+        icon_well, "spotlight-icon-well");
+    gtk_widget_set_halign(
+        icon_well, GTK_ALIGN_CENTER);
+    gtk_widget_set_valign(
+        icon_well, GTK_ALIGN_CENTER);
+    gtk_widget_set_size_request(
+        icon_well, 132, 132);
+
+    GtkWidget *icon =
+        catalogue_icon(*record, 104);
+    gtk_widget_set_halign(
+        icon, GTK_ALIGN_CENTER);
+    gtk_widget_set_valign(
+        icon, GTK_ALIGN_CENTER);
+    gtk_box_append(
+        GTK_BOX(icon_well), icon);
+    gtk_box_append(GTK_BOX(art), icon_well);
+
+    gtk_box_append(
+        GTK_BOX(state->discover_spotlight),
+        art);
+}
+
 void rebuild_discover(WindowState *state)
 {
     if (state == nullptr || state->discover_visible == nullptr) {
@@ -933,6 +1155,7 @@ void rebuild_discover(WindowState *state)
 
     std::vector<std::string> indices;
     indices.reserve(state->discover_records.size());
+    std::optional<std::size_t> first_visible;
 
     const bool cached_search_text =
         state->discover_search_texts.size() ==
@@ -961,8 +1184,18 @@ void rebuild_discover(WindowState *state)
             }
         }
 
+        if (!first_visible.has_value()) {
+            first_visible = index;
+        }
         indices.emplace_back(std::to_string(index));
     }
+
+    rebuild_discover_spotlight(
+        state,
+        first_visible.has_value()
+            ? &state->discover_records[
+                  *first_visible]
+            : nullptr);
 
     std::vector<const char *> additions;
     additions.reserve(indices.size() + 1U);
@@ -1733,25 +1966,58 @@ GtkWidget *make_discover_page(WindowState *state)
             "Discover",
             "Browse Infiltrator, system repository and Flatpak applications."));
 
-    GtkWidget *stats = gtk_grid_new();
-    gtk_grid_set_column_spacing(GTK_GRID(stats), 10);
-    gtk_grid_set_column_homogeneous(GTK_GRID(stats), true);
-    gtk_grid_attach(
-        GTK_GRID(stats),
-        make_stat_card("APPLICATIONS", "0", "stat-info",
-                       &state->discover_count),
-        0, 0, 1, 1);
-    gtk_grid_attach(
-        GTK_GRID(stats),
-        make_stat_card("SOURCE", "Repository", "stat-operation",
-                       &state->discover_source),
-        1, 0, 1, 1);
-    gtk_grid_attach(
-        GTK_GRID(stats),
-        make_stat_card("STATE", "Loading", "stat-success",
-                       &state->discover_state),
-        2, 0, 1, 1);
-    gtk_box_append(GTK_BOX(page), stats);
+    GtkWidget *showcase =
+        gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
+    gtk_widget_add_css_class(
+        showcase, "discover-showcase");
+
+    state->discover_spotlight =
+        gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 20);
+    gtk_widget_add_css_class(
+        state->discover_spotlight,
+        "discover-spotlight");
+    gtk_widget_set_hexpand(
+        state->discover_spotlight, true);
+    gtk_widget_set_size_request(
+        state->discover_spotlight, -1, 218);
+    rebuild_discover_spotlight(state, nullptr);
+    gtk_box_append(
+        GTK_BOX(showcase),
+        state->discover_spotlight);
+
+    GtkWidget *glance =
+        gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
+    gtk_widget_add_css_class(
+        glance, "discover-glance");
+    gtk_widget_set_size_request(
+        glance, 280, -1);
+
+    GtkWidget *glance_kicker =
+        make_label(
+            "AT A GLANCE",
+            "glance-kicker");
+    gtk_box_append(
+        GTK_BOX(glance), glance_kicker);
+
+    gtk_box_append(
+        GTK_BOX(glance),
+        make_stat_card(
+            "APPLICATIONS", "0", "stat-info",
+            &state->discover_count));
+    gtk_box_append(
+        GTK_BOX(glance),
+        make_stat_card(
+            "SOURCE", "Repository", "stat-operation",
+            &state->discover_source));
+    gtk_box_append(
+        GTK_BOX(glance),
+        make_stat_card(
+            "STATE", "Loading", "stat-success",
+            &state->discover_state));
+
+    gtk_box_append(
+        GTK_BOX(showcase), glance);
+    gtk_box_append(GTK_BOX(page), showcase);
 
     GtkWidget *controls = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
     gtk_widget_add_css_class(controls, "discover-controls");
@@ -1812,6 +2078,41 @@ GtkWidget *make_discover_page(WindowState *state)
             state, "System Tools", "System",
             "applications-system-symbolic"));
     gtk_box_append(GTK_BOX(page), shortcuts);
+
+    GtkWidget *catalogue_heading =
+        gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    gtk_widget_add_css_class(
+        catalogue_heading,
+        "catalogue-section-heading");
+    GtkWidget *catalogue_icon_widget =
+        make_icon("view-grid-symbolic", 20);
+    gtk_widget_add_css_class(
+        catalogue_icon_widget,
+        "catalogue-section-icon");
+    GtkWidget *catalogue_copy =
+        gtk_box_new(GTK_ORIENTATION_VERTICAL, 1);
+    gtk_widget_set_hexpand(
+        catalogue_copy, true);
+    GtkWidget *catalogue_title =
+        make_label(
+            "Explore software",
+            "catalogue-section-title");
+    GtkWidget *catalogue_note =
+        make_label(
+            "Applications from Infiltrator, system repositories and Flatpak.",
+            "catalogue-section-note");
+    gtk_box_append(
+        GTK_BOX(catalogue_copy), catalogue_title);
+    gtk_box_append(
+        GTK_BOX(catalogue_copy), catalogue_note);
+    gtk_box_append(
+        GTK_BOX(catalogue_heading),
+        catalogue_icon_widget);
+    gtk_box_append(
+        GTK_BOX(catalogue_heading),
+        catalogue_copy);
+    gtk_box_append(
+        GTK_BOX(page), catalogue_heading);
 
     state->discover_status = make_label(
         "Refreshing Infiltrator, system and Flatpak metadata…",
