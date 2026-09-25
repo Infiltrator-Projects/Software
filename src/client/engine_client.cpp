@@ -694,6 +694,27 @@ bool EngineClient::reload(std::string &error) const
     return true;
 }
 
+bool EngineClient::refresh_installed(std::string &error) const
+{
+    if (!ensure_engine_identity(error)) {
+        return false;
+    }
+
+    GVariant *reply =
+        call_engine(
+            "RefreshInstalledState",
+            nullptr,
+            G_VARIANT_TYPE("(a{sv})"),
+            15000,
+            error);
+    if (reply == nullptr) {
+        return false;
+    }
+    g_variant_unref(reply);
+    error.clear();
+    return true;
+}
+
 bool EngineClient::refresh(std::string &error) const
 {
     if (!ensure_engine_identity(error)) {
