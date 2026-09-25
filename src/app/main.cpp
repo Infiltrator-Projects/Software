@@ -2478,6 +2478,15 @@ GtkWidget *make_dashboard_card(
 
 GtkWidget *make_discover_welcome_hero()
 {
+    static constexpr const char kDiscoverHeroBase64[] =
+#include "discover_hero_part01.inc"
+#include "discover_hero_part02.inc"
+#include "discover_hero_part03.inc"
+#include "discover_hero_part04.inc"
+#include "discover_hero_part05.inc"
+#include "discover_hero_part06.inc"
+        ;
+
     GtkWidget *hero =
         gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
     gtk_widget_add_css_class(
@@ -2486,15 +2495,56 @@ GtkWidget *make_discover_welcome_hero()
         hero, GTK_OVERFLOW_HIDDEN);
 
     /*
-     * The hero is compiled into the application as a GResource.  Do not load
-     * this high-visibility artwork from an external filesystem path: a missing
-     * or misplaced package asset previously degraded silently into an empty
-     * panel.  The resource is part of the executable build and therefore has
-     * the same lifetime and deployment identity as the UI that consumes it.
+     * The approved Discover hero is compiled into the executable as raster
+     * image data.  This deliberately avoids a runtime filesystem lookup: the
+     * previous package could contain the JPEG while GtkPicture still rendered
+     * an empty panel on the installed desktop.  Decoding the embedded bytes
+     * makes the visible artwork part of the program itself.
      */
+    gsize image_size = 0;
+    guchar *image_data =
+        g_base64_decode(
+            kDiscoverHeroBase64,
+            &image_size);
+
+    GBytes *image_bytes =
+        g_bytes_new_take(
+            image_data,
+            image_size);
+    GError *texture_error = nullptr;
+    GdkTexture *texture =
+        gdk_texture_new_from_bytes(
+            image_bytes,
+            &texture_error);
+    g_bytes_unref(image_bytes);
+
+    if (texture == nullptr) {
+        g_critical(
+            "Embedded Discover hero raster failed to decode: %s",
+            texture_error != nullptr
+                ? texture_error->message
+                : "unknown image decoder error");
+        g_clear_error(&texture_error);
+
+        GtkWidget *error =
+            gtk_label_new(
+                "Discover artwork failed to load");
+        gtk_widget_add_css_class(
+            error, "welcome-artwork-error");
+        gtk_widget_set_size_request(
+            error, -1, 166);
+        gtk_widget_set_valign(
+            error, GTK_ALIGN_CENTER);
+        gtk_box_append(
+            GTK_BOX(hero), error);
+        return hero;
+    }
+
     GtkWidget *picture =
-        gtk_picture_new_for_resource(
-            "/net/ssmith/infiltrator/software/artwork/discover-hero.jpg");
+        gtk_picture_new_for_paintable(
+            GDK_PAINTABLE(texture));
+    g_object_unref(texture);
+
     gtk_widget_add_css_class(
         picture, "welcome-artwork");
     gtk_picture_set_content_fit(
@@ -2506,23 +2556,6 @@ GtkWidget *make_discover_welcome_hero()
         picture, true);
     gtk_widget_set_size_request(
         picture, -1, 166);
-
-    if (gtk_picture_get_paintable(GTK_PICTURE(picture)) == nullptr) {
-        g_critical(
-            "Embedded Discover hero resource failed to load");
-        GtkWidget *error =
-            gtk_label_new(
-                "Discover artwork failed to load");
-        gtk_widget_add_css_class(
-            error, "welcome-artwork-error");
-        gtk_widget_set_vexpand(
-            error, true);
-        gtk_widget_set_valign(
-            error, GTK_ALIGN_CENTER);
-        gtk_box_append(
-            GTK_BOX(hero), error);
-        return hero;
-    }
 
     gtk_box_append(
         GTK_BOX(hero), picture);
