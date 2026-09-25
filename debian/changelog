@@ -1,3 +1,24 @@
+infiltrator-software (0.3.33) unstable; urgency=high
+
+  * Continue convergence toward the checked-in Software UI target with a
+    substantially more graphical Discover landing experience.
+  * Add a dynamic Featured Software spotlight driven by the current filtered
+    catalogue rather than static promotional data, with large application
+    artwork, concise metadata chips and direct Explore/Install/Update/Remove
+    actions.
+  * Replace Discover's flat summary strip with a two-part showcase: the
+    featured application surface plus a compact graphical At a Glance column
+    for catalogue size, source and state.
+  * Add an explicit Explore Software section treatment so the application grid
+    reads as a browsable visual catalogue rather than the first item in an
+    administrative form.
+  * Add spotlight artwork wells, layered depth, richer typography and compact
+    metadata chips while retaining native GTK behaviour and accessibility.
+  * Record the third convergence layer in the UI vision and guard its core
+    graphical primitives in CI.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Fri, 25 Sep 2026 17:40:00 +1000
+
 infiltrator-software (0.3.32) unstable; urgency=high
 
   * Continue the GUI-first redesign toward the checked-in visual target.
