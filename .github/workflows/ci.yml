@@ -230,6 +230,19 @@ jobs:
           assert ".spotlight-art" in theme
           assert ".catalogue-section-heading" in theme
 
+          # Fourth visual pass: the shell now owns brand/search while Discover
+          # exposes dashboard navigation before catalogue detail.
+          assert "global_search" in app
+          assert '"Search for software, applications, and packages…"' in app
+          assert '"Welcome to Infiltrator Software"' in app
+          assert "make_dashboard_card" in app
+          assert '"Available Updates"' in app
+          assert '"System Health"' in app
+          assert '"Repositories"' in app
+          assert ".discover-welcome" in theme
+          assert ".dashboard-card" in theme
+          assert ".global-search" in theme
+
           # The footer must report the exact pinned Common header version,
           # never a stale hand-written version string.
           assert "INFILTRATR_COMMON_VERSION" in app
