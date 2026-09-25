@@ -1,3 +1,24 @@
+infiltrator-software (0.3.30) unstable; urgency=high
+
+  * Make Updates refresh substantially faster by reusing verified Packages
+    indexes when the current signed Release metadata is unchanged.
+  * Reconcile installed dpkg state locally after package transactions instead
+    of immediately repeating a full network repository refresh.
+  * Treat stale update plans whose exact final versions are already installed
+    as successful no-ops, clearing completed updates instead of recording a
+    false failed transaction.
+  * Implement the Repair page with live engine/source/dpkg diagnostics,
+    interrupted-package detection, verified repository-state rebuild and a
+    constrained authenticated dpkg --configure -a recovery action.
+  * Give History a permanently visible vertical scrollbar and correct the
+    low-contrast Exact versions detail treatment.
+  * Keep assert-based regression checks active in Release builds and extend CI
+    contracts for the Updates, Repair, repository-cache and History fixes.
+  * Update performance, recovery and roadmap documentation to match the
+    implemented behaviour.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Fri, 25 Sep 2026 15:45:00 +1000
+
 infiltrator-software (0.3.29) unstable; urgency=high
 
   * Complete the forensic functionality, documentation and code-comment audit.
