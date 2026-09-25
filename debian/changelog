@@ -1,3 +1,23 @@
+infiltrator-software (0.3.34) unstable; urgency=high
+
+  * Continue convergence toward the checked-in target by moving product
+    identity and global search into the application titlebar.
+  * Remove duplicate branding from the sidebar so navigation begins immediately
+    below the chrome, matching the intended software-centre composition.
+  * Replace Discover's generic page intro with a Welcome to Infiltrator
+    Software hero and colourful visual status orbs.
+  * Add direct graphical dashboard cards for Available Updates, System Health
+    and Repositories; the cards navigate to their full pages and update their
+    summary values when those real subsystems are loaded.
+  * Synchronise the global search field with Discover search so typing in the
+    application chrome immediately opens and filters the software catalogue.
+  * Increase the default canvas for the richer dashboard composition and fix
+    low-contrast Source and spotlight-button treatments visible in the live UI.
+  * Extend CI contracts and UI-vision documentation for this fourth visual
+    convergence pass.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Fri, 25 Sep 2026 17:58:00 +1000
+
 infiltrator-software (0.3.33) unstable; urgency=high
 
   * Continue convergence toward the checked-in Software UI target with a
