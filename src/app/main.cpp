@@ -128,6 +128,10 @@ struct WindowState {
     GtkWidget *repair_engine{};
     GtkWidget *repair_sources{};
     GtkWidget *repair_issues{};
+    GtkWidget *repair_health_banner{};
+    GtkWidget *repair_health_icon{};
+    GtkWidget *repair_health_title{};
+    GtkWidget *repair_health_copy{};
     GtkWidget *repair_recheck{};
     GtkWidget *repair_rebuild{};
     GtkWidget *repair_configure{};
@@ -832,6 +836,84 @@ std::string selected_category(WindowState *state)
     const char *value =
         gtk_string_object_get_string(GTK_STRING_OBJECT(item));
     return value == nullptr ? std::string("All") : std::string(value);
+}
+
+void discover_quick_category_clicked(
+    GtkButton *button,
+    gpointer user_data)
+{
+    auto *state = static_cast<WindowState *>(user_data);
+    const char *category = static_cast<const char *>(
+        g_object_get_data(
+            G_OBJECT(button),
+            "discover-quick-category"));
+    if (state == nullptr || state->discover_category == nullptr ||
+        state->discover_categories == nullptr ||
+        category == nullptr) {
+        return;
+    }
+
+    const guint count =
+        g_list_model_get_n_items(
+            G_LIST_MODEL(state->discover_categories));
+    for (guint index = 0U; index < count; ++index) {
+        GObject *object =
+            g_list_model_get_item(
+                G_LIST_MODEL(state->discover_categories),
+                index);
+        if (object == nullptr) {
+            continue;
+        }
+
+        bool matched = false;
+        if (GTK_IS_STRING_OBJECT(object)) {
+            const char *value =
+                gtk_string_object_get_string(
+                    GTK_STRING_OBJECT(object));
+            matched =
+                value != nullptr &&
+                std::strcmp(value, category) == 0;
+        }
+        g_object_unref(object);
+
+        if (matched) {
+            gtk_drop_down_set_selected(
+                GTK_DROP_DOWN(state->discover_category),
+                index);
+            return;
+        }
+    }
+}
+
+GtkWidget *make_discover_category_shortcut(
+    WindowState *state,
+    const char *category,
+    const char *label,
+    const char *icon_name)
+{
+    GtkWidget *button = gtk_button_new();
+    gtk_widget_add_css_class(
+        button, "category-shortcut");
+
+    GtkWidget *content =
+        gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 7);
+    GtkWidget *icon = make_icon(icon_name, 18);
+    GtkWidget *text = make_label(label, "category-shortcut-label");
+    gtk_box_append(GTK_BOX(content), icon);
+    gtk_box_append(GTK_BOX(content), text);
+    gtk_button_set_child(GTK_BUTTON(button), content);
+
+    g_object_set_data_full(
+        G_OBJECT(button),
+        "discover-quick-category",
+        g_strdup(category),
+        g_free);
+    g_signal_connect(
+        button,
+        "clicked",
+        G_CALLBACK(discover_quick_category_clicked),
+        state);
+    return button;
 }
 
 void rebuild_discover(WindowState *state)
@@ -1699,6 +1781,37 @@ GtkWidget *make_discover_page(WindowState *state)
         state);
     gtk_box_append(GTK_BOX(controls), state->discover_category);
     gtk_box_append(GTK_BOX(page), controls);
+
+    GtkWidget *shortcuts =
+        gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+    gtk_widget_add_css_class(
+        shortcuts, "category-shortcuts");
+    gtk_box_append(
+        GTK_BOX(shortcuts),
+        make_discover_category_shortcut(
+            state, "All", "All software",
+            "view-grid-symbolic"));
+    gtk_box_append(
+        GTK_BOX(shortcuts),
+        make_discover_category_shortcut(
+            state, "Productivity", "Productivity",
+            "accessories-calculator-symbolic"));
+    gtk_box_append(
+        GTK_BOX(shortcuts),
+        make_discover_category_shortcut(
+            state, "Graphics", "Graphics",
+            "applications-graphics-symbolic"));
+    gtk_box_append(
+        GTK_BOX(shortcuts),
+        make_discover_category_shortcut(
+            state, "Internet", "Internet",
+            "applications-internet-symbolic"));
+    gtk_box_append(
+        GTK_BOX(shortcuts),
+        make_discover_category_shortcut(
+            state, "System Tools", "System",
+            "applications-system-symbolic"));
+    gtk_box_append(GTK_BOX(page), shortcuts);
 
     state->discover_status = make_label(
         "Refreshing Infiltrator, system and Flatpak metadata…",
@@ -3339,14 +3452,17 @@ GtkWidget *make_update_row(
 {
     GtkWidget *row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
     gtk_widget_add_css_class(row, "package-row");
-    gtk_widget_set_margin_top(row, 6);
-    gtk_widget_set_margin_bottom(row, 6);
-    gtk_widget_set_margin_start(row, 8);
-    gtk_widget_set_margin_end(row, 8);
+    gtk_widget_add_css_class(row, "update-item");
+    gtk_widget_set_margin_top(row, 5);
+    gtk_widget_set_margin_bottom(row, 5);
+    gtk_widget_set_margin_start(row, 6);
+    gtk_widget_set_margin_end(row, 6);
 
     const std::string identity_key = update_identity(package);
     GtkWidget *selected = gtk_check_button_new();
-    gtk_widget_set_tooltip_text(selected, "Include this package in the update");
+    gtk_widget_add_css_class(selected, "update-selector");
+    gtk_widget_set_tooltip_text(
+        selected, "Include this package in the update");
     gtk_widget_set_valign(selected, GTK_ALIGN_CENTER);
     gtk_check_button_set_active(
         GTK_CHECK_BUTTON(selected),
@@ -3363,23 +3479,58 @@ GtkWidget *make_update_row(
         G_CALLBACK(update_selection_toggled), state);
     gtk_box_append(GTK_BOX(row), selected);
 
-    GtkWidget *icon = make_icon(update_icon_name(package), 24);
+    GtkWidget *icon_well =
+        gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    gtk_widget_add_css_class(
+        icon_well, "update-icon-well");
+    gtk_widget_set_size_request(icon_well, 46, 46);
+    GtkWidget *icon =
+        make_icon(update_icon_name(package), 24);
     gtk_widget_add_css_class(icon, "package-icon");
-    gtk_box_append(GTK_BOX(row), icon);
+    gtk_widget_set_halign(icon, GTK_ALIGN_CENTER);
+    gtk_widget_set_valign(icon, GTK_ALIGN_CENTER);
+    gtk_box_append(GTK_BOX(icon_well), icon);
+    gtk_box_append(GTK_BOX(row), icon_well);
 
-    GtkWidget *identity = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
+    GtkWidget *identity =
+        gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
     gtk_widget_set_hexpand(identity, true);
 
-    GtkWidget *name = make_label(package.name.c_str(), "card-title");
-    gtk_label_set_ellipsize(GTK_LABEL(name), PANGO_ELLIPSIZE_END);
-    gtk_box_append(GTK_BOX(identity), name);
-
-    std::string version =
-        package.installed_version + "  →  " + package.available_version;
-    GtkWidget *version_label = make_label(version.c_str(), "card-copy");
+    GtkWidget *title_line =
+        gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+    GtkWidget *name =
+        make_label(package.name.c_str(), "update-name");
     gtk_label_set_ellipsize(
-        GTK_LABEL(version_label), PANGO_ELLIPSIZE_END);
-    gtk_box_append(GTK_BOX(identity), version_label);
+        GTK_LABEL(name), PANGO_ELLIPSIZE_END);
+    gtk_widget_set_hexpand(name, true);
+    gtk_box_append(GTK_BOX(title_line), name);
+
+    GtkWidget *kind =
+        make_label(
+            infiltrator::software::package_kind_name(
+                package.kind),
+            "update-kind-chip");
+    gtk_box_append(GTK_BOX(title_line), kind);
+    gtk_box_append(GTK_BOX(identity), title_line);
+
+    GtkWidget *version_line =
+        gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 7);
+    GtkWidget *from =
+        make_label(
+            package.installed_version.empty()
+                ? "Not installed"
+                : package.installed_version.c_str(),
+            "version-chip");
+    GtkWidget *arrow =
+        make_label("→", "version-arrow", 0.5F);
+    GtkWidget *to =
+        make_label(
+            package.available_version.c_str(),
+            "version-chip-new");
+    gtk_box_append(GTK_BOX(version_line), from);
+    gtk_box_append(GTK_BOX(version_line), arrow);
+    gtk_box_append(GTK_BOX(version_line), to);
+    gtk_box_append(GTK_BOX(identity), version_line);
 
     std::string source_name = package.repository_origin;
     if (source_name.empty()) {
@@ -3388,10 +3539,23 @@ GtkWidget *make_update_row(
     if (source_name.empty()) {
         source_name = package.source;
     }
-    if (!package.repository_site.empty() &&
-        package.repository_site != source_name) {
-        source_name += " (" + package.repository_site + ")";
+    if (source_name.empty()) {
+        source_name = "Repository";
     }
+
+    GtkWidget *source_line =
+        gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 7);
+    GtkWidget *source_icon =
+        make_icon("network-workgroup-symbolic", 14);
+    gtk_widget_add_css_class(
+        source_icon, "update-source-icon");
+    GtkWidget *source =
+        make_label(
+            source_name.c_str(), "update-source");
+    gtk_label_set_ellipsize(
+        GTK_LABEL(source), PANGO_ELLIPSIZE_END);
+    gtk_box_append(GTK_BOX(source_line), source_icon);
+    gtk_box_append(GTK_BOX(source_line), source);
 
     std::string policy_name = "Repository default";
     if (package.policy_provider == "host-apt-preferences") {
@@ -3404,54 +3568,139 @@ GtkWidget *make_update_row(
         policy_name = package.policy_provider;
     }
 
-    std::string source_meta =
-        std::string(infiltrator::software::package_kind_name(package.kind));
-    if (!source_name.empty()) {
-        source_meta += "  •  Source: " + source_name;
-    }
-    GtkWidget *source_label =
-        make_label(source_meta.c_str(), "discover-meta");
-    gtk_label_set_ellipsize(
-        GTK_LABEL(source_label), PANGO_ELLIPSIZE_END);
-    gtk_box_append(GTK_BOX(identity), source_label);
-
-    std::string policy_meta =
-        "Policy: " + policy_name;
+    std::string explanation =
+        "Selection policy: " + policy_name;
     if (package.candidate_priority != 0) {
-        policy_meta +=
-            "  •  priority " +
+        explanation +=
+            " • priority " +
             std::to_string(package.candidate_priority);
     }
-    GtkWidget *policy_label =
-        make_label(policy_meta.c_str(), "discover-meta");
-    gtk_label_set_ellipsize(
-        GTK_LABEL(policy_label), PANGO_ELLIPSIZE_END);
-    std::string explanation = package.policy_reason;
+    if (!package.policy_reason.empty()) {
+        explanation += " • " + package.policy_reason;
+    }
     if (!package.selection_reason.empty()) {
-        if (!explanation.empty()) {
-            explanation += " ";
-        }
-        explanation += package.selection_reason;
+        explanation += " " + package.selection_reason;
     }
-    if (!explanation.empty()) {
-        gtk_widget_set_tooltip_text(
-            policy_label, explanation.c_str());
-    }
-    gtk_box_append(GTK_BOX(identity), policy_label);
+    gtk_widget_set_tooltip_text(
+        source_line, explanation.c_str());
 
+    gtk_box_append(GTK_BOX(identity), source_line);
     gtk_box_append(GTK_BOX(row), identity);
 
     GtkWidget *recommended =
         make_label(
             package.system_critical
-                ? "Recommended • System-critical"
-                : "Recommended update",
+                ? "System-critical"
+                : "Recommended",
             package.system_critical
                 ? "state-warning"
                 : "state-available");
-    gtk_widget_set_valign(recommended, GTK_ALIGN_CENTER);
+    gtk_widget_set_valign(
+        recommended, GTK_ALIGN_CENTER);
     gtk_box_append(GTK_BOX(row), recommended);
 
+    return row;
+}
+
+int update_group_index(const PackageRecord &package) noexcept
+{
+    if (package.system_critical ||
+        package.kind == infiltrator::software::PackageKind::kernel ||
+        package.kind == infiltrator::software::PackageKind::driver ||
+        package.kind == infiltrator::software::PackageKind::system) {
+        return 0;
+    }
+    if (package.kind ==
+        infiltrator::software::PackageKind::application) {
+        return 1;
+    }
+    if (package.kind ==
+            infiltrator::software::PackageKind::library ||
+        package.kind ==
+            infiltrator::software::PackageKind::runtime) {
+        return 2;
+    }
+    return 3;
+}
+
+const char *update_group_title(const int group) noexcept
+{
+    switch (group) {
+    case 0: return "System";
+    case 1: return "Applications";
+    case 2: return "Libraries & runtimes";
+    default: return "Other software";
+    }
+}
+
+const char *update_group_subtitle(const int group) noexcept
+{
+    switch (group) {
+    case 0:
+        return "Kernels, drivers and operating-system components";
+    case 1:
+        return "Desktop applications and user-facing tools";
+    case 2:
+        return "Shared components used by installed software";
+    default:
+        return "Additional package updates";
+    }
+}
+
+const char *update_group_icon(const int group) noexcept
+{
+    switch (group) {
+    case 0: return "computer-symbolic";
+    case 1: return "view-grid-symbolic";
+    case 2: return "applications-system-symbolic";
+    default: return "package-x-generic-symbolic";
+    }
+}
+
+GtkWidget *make_update_group_header(
+    const int group,
+    const std::size_t count)
+{
+    GtkWidget *row =
+        gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    gtk_widget_add_css_class(
+        row, "update-group-header");
+
+    GtkWidget *icon_well =
+        gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    gtk_widget_add_css_class(
+        icon_well, "update-group-icon-well");
+    GtkWidget *icon =
+        make_icon(update_group_icon(group), 20);
+    gtk_widget_set_halign(icon, GTK_ALIGN_CENTER);
+    gtk_widget_set_valign(icon, GTK_ALIGN_CENTER);
+    gtk_box_append(GTK_BOX(icon_well), icon);
+    gtk_box_append(GTK_BOX(row), icon_well);
+
+    GtkWidget *copy =
+        gtk_box_new(GTK_ORIENTATION_VERTICAL, 1);
+    gtk_widget_set_hexpand(copy, true);
+    GtkWidget *title =
+        make_label(
+            update_group_title(group),
+            "update-group-title");
+    GtkWidget *subtitle =
+        make_label(
+            update_group_subtitle(group),
+            "update-group-subtitle");
+    gtk_box_append(GTK_BOX(copy), title);
+    gtk_box_append(GTK_BOX(copy), subtitle);
+    gtk_box_append(GTK_BOX(row), copy);
+
+    const std::string count_text =
+        std::to_string(count);
+    GtkWidget *count_label =
+        make_label(
+            count_text.c_str(),
+            "update-group-count");
+    gtk_widget_set_valign(
+        count_label, GTK_ALIGN_CENTER);
+    gtk_box_append(GTK_BOX(row), count_label);
     return row;
 }
 
@@ -3462,35 +3711,76 @@ void rebuild_updates(WindowState *state)
     }
 
     GtkWidget *child =
-        gtk_widget_get_first_child(GTK_WIDGET(state->updates_list));
+        gtk_widget_get_first_child(
+            GTK_WIDGET(state->updates_list));
     while (child != nullptr) {
-        GtkWidget *next = gtk_widget_get_next_sibling(child);
-        gtk_list_box_remove(state->updates_list, child);
+        GtkWidget *next =
+            gtk_widget_get_next_sibling(child);
+        gtk_list_box_remove(
+            state->updates_list, child);
         child = next;
     }
 
     std::size_t critical_count = 0U;
-    for (const PackageRecord &package : state->update_records) {
+    std::size_t group_counts[4] = {0U, 0U, 0U, 0U};
+    for (const PackageRecord &package :
+         state->update_records) {
         if (package.system_critical) {
             ++critical_count;
         }
-        GtkWidget *row = gtk_list_box_row_new();
+        ++group_counts[
+            update_group_index(package)];
+    }
+
+    for (int group = 0; group < 4; ++group) {
+        if (group_counts[group] == 0U) {
+            continue;
+        }
+
+        GtkWidget *header_row =
+            gtk_list_box_row_new();
+        gtk_widget_add_css_class(
+            header_row, "update-group-row");
+        gtk_list_box_row_set_activatable(
+            GTK_LIST_BOX_ROW(header_row), false);
+        gtk_list_box_row_set_selectable(
+            GTK_LIST_BOX_ROW(header_row), false);
         gtk_list_box_row_set_child(
-            GTK_LIST_BOX_ROW(row), make_update_row(state, package));
-        gtk_list_box_append(state->updates_list, row);
+            GTK_LIST_BOX_ROW(header_row),
+            make_update_group_header(
+                group, group_counts[group]));
+        gtk_list_box_append(
+            state->updates_list, header_row);
+
+        for (const PackageRecord &package :
+             state->update_records) {
+            if (update_group_index(package) != group) {
+                continue;
+            }
+            GtkWidget *row =
+                gtk_list_box_row_new();
+            gtk_list_box_row_set_child(
+                GTK_LIST_BOX_ROW(row),
+                make_update_row(state, package));
+            gtk_list_box_append(
+                state->updates_list, row);
+        }
     }
 
     if (state->updates_count != nullptr) {
         const std::string count =
-            std::to_string(state->update_records.size());
+            std::to_string(
+                state->update_records.size());
         gtk_label_set_text(
-            GTK_LABEL(state->updates_count), count.c_str());
+            GTK_LABEL(state->updates_count),
+            count.c_str());
     }
     if (state->updates_critical != nullptr) {
         const std::string critical =
             std::to_string(critical_count);
         gtk_label_set_text(
-            GTK_LABEL(state->updates_critical), critical.c_str());
+            GTK_LABEL(state->updates_critical),
+            critical.c_str());
     }
 }
 
@@ -4384,9 +4674,27 @@ GtkWidget *make_updates_page(WindowState *state)
     gtk_widget_add_css_class(card, "card-info");
     gtk_widget_set_vexpand(card, true);
 
+    GtkWidget *heading_row =
+        gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    GtkWidget *heading_icon =
+        make_icon("software-update-available-symbolic", 22);
+    gtk_widget_add_css_class(
+        heading_icon, "updates-section-icon");
+    GtkWidget *heading_copy =
+        gtk_box_new(GTK_ORIENTATION_VERTICAL, 1);
+    gtk_widget_set_hexpand(
+        heading_copy, true);
     GtkWidget *heading =
         make_label("Available updates", "card-title");
-    gtk_box_append(GTK_BOX(card), heading);
+    GtkWidget *heading_note =
+        make_label(
+            "Grouped by the part of the system they affect.",
+            "card-copy");
+    gtk_box_append(GTK_BOX(heading_copy), heading);
+    gtk_box_append(GTK_BOX(heading_copy), heading_note);
+    gtk_box_append(GTK_BOX(heading_row), heading_icon);
+    gtk_box_append(GTK_BOX(heading_row), heading_copy);
+    gtk_box_append(GTK_BOX(card), heading_row);
 
     GtkWidget *list = gtk_list_box_new();
     state->updates_list = GTK_LIST_BOX(list);
@@ -6118,6 +6426,53 @@ void repair_complete(
     state->repair_interrupted = result->interrupted;
     rebuild_repair(state, *result);
 
+    if (state->repair_health_banner != nullptr) {
+        gtk_widget_remove_css_class(
+            state->repair_health_banner,
+            "repair-overview-checking");
+        gtk_widget_remove_css_class(
+            state->repair_health_banner,
+            "repair-overview-good");
+        gtk_widget_remove_css_class(
+            state->repair_health_banner,
+            "repair-overview-attention");
+        gtk_widget_add_css_class(
+            state->repair_health_banner,
+            result->issues.empty()
+                ? "repair-overview-good"
+                : "repair-overview-attention");
+    }
+    if (state->repair_health_icon != nullptr) {
+        gtk_image_set_from_icon_name(
+            GTK_IMAGE(state->repair_health_icon),
+            result->issues.empty()
+                ? "emblem-ok-symbolic"
+                : "dialog-warning-symbolic");
+    }
+    if (state->repair_health_title != nullptr) {
+        gtk_label_set_text(
+            GTK_LABEL(state->repair_health_title),
+            result->issues.empty()
+                ? "Software health is good"
+                : "Repair attention required");
+    }
+    if (state->repair_health_copy != nullptr) {
+        std::string health_copy;
+        if (result->issues.empty()) {
+            health_copy =
+                "Package state is coherent, repositories are readable and no interrupted transaction was detected.";
+        } else {
+            health_copy =
+                std::to_string(result->issues.size()) +
+                (result->issues.size() == 1U
+                    ? " diagnostic needs attention before Software can report a clean state."
+                    : " diagnostics need attention before Software can report a clean state.");
+        }
+        gtk_label_set_text(
+            GTK_LABEL(state->repair_health_copy),
+            health_copy.c_str());
+    }
+
     if (state->repair_engine != nullptr) {
         gtk_label_set_text(
             GTK_LABEL(state->repair_engine),
@@ -6201,6 +6556,37 @@ void refresh_repair(
     state->repair_loaded = true;
     state->repair_busy = true;
     ++state->repair_generation;
+
+    if (state->repair_health_banner != nullptr) {
+        gtk_widget_remove_css_class(
+            state->repair_health_banner,
+            "repair-overview-good");
+        gtk_widget_remove_css_class(
+            state->repair_health_banner,
+            "repair-overview-attention");
+        gtk_widget_add_css_class(
+            state->repair_health_banner,
+            "repair-overview-checking");
+    }
+    if (state->repair_health_icon != nullptr) {
+        gtk_image_set_from_icon_name(
+            GTK_IMAGE(state->repair_health_icon),
+            "view-refresh-symbolic");
+    }
+    if (state->repair_health_title != nullptr) {
+        gtk_label_set_text(
+            GTK_LABEL(state->repair_health_title),
+            refresh_metadata
+                ? "Rebuilding software health"
+                : "Checking software health");
+    }
+    if (state->repair_health_copy != nullptr) {
+        gtk_label_set_text(
+            GTK_LABEL(state->repair_health_copy),
+            refresh_metadata
+                ? "Repository metadata and installed package state are being rebuilt and verified."
+                : "Package engine, repositories and interrupted transactions are being checked.");
+    }
 
     if (state->repair_status != nullptr) {
         gtk_label_set_text(
@@ -6453,6 +6839,62 @@ GtkWidget *make_repair_page(
             "dialog-warning-symbolic",
             "Repair",
             "Diagnose and recover package, repository and interrupted transaction state."));
+
+    state->repair_health_banner =
+        gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 16);
+    gtk_widget_add_css_class(
+        state->repair_health_banner,
+        "repair-overview");
+    gtk_widget_add_css_class(
+        state->repair_health_banner,
+        "repair-overview-checking");
+
+    GtkWidget *health_icon_well =
+        gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    gtk_widget_add_css_class(
+        health_icon_well,
+        "repair-overview-icon-well");
+    state->repair_health_icon =
+        make_icon("view-refresh-symbolic", 30);
+    gtk_widget_set_halign(
+        state->repair_health_icon,
+        GTK_ALIGN_CENTER);
+    gtk_widget_set_valign(
+        state->repair_health_icon,
+        GTK_ALIGN_CENTER);
+    gtk_box_append(
+        GTK_BOX(health_icon_well),
+        state->repair_health_icon);
+    gtk_box_append(
+        GTK_BOX(state->repair_health_banner),
+        health_icon_well);
+
+    GtkWidget *health_copy =
+        gtk_box_new(GTK_ORIENTATION_VERTICAL, 3);
+    gtk_widget_set_hexpand(
+        health_copy, true);
+    state->repair_health_title =
+        make_label(
+            "Checking software health",
+            "repair-overview-title");
+    state->repair_health_copy =
+        make_label(
+            "Package engine, repositories and interrupted transactions are being checked.",
+            "repair-overview-copy");
+    gtk_label_set_wrap(
+        GTK_LABEL(state->repair_health_copy), true);
+    gtk_box_append(
+        GTK_BOX(health_copy),
+        state->repair_health_title);
+    gtk_box_append(
+        GTK_BOX(health_copy),
+        state->repair_health_copy);
+    gtk_box_append(
+        GTK_BOX(state->repair_health_banner),
+        health_copy);
+    gtk_box_append(
+        GTK_BOX(page),
+        state->repair_health_banner);
 
     GtkWidget *stats = gtk_grid_new();
     gtk_grid_set_column_spacing(GTK_GRID(stats), 10);
