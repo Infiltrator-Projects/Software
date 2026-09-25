@@ -5699,6 +5699,772 @@ GtkWidget *make_history_page(WindowState *state)
     return page;
 }
 
+
+struct RepairResult {
+    unsigned int generation{0U};
+    std::size_t source_count{0U};
+    std::size_t update_count{0U};
+    bool engine_ready{false};
+    bool interrupted{false};
+    bool refreshed_metadata{false};
+    std::vector<std::string> issues;
+};
+
+struct RepairTaskData {
+    unsigned int generation{0U};
+    bool refresh_metadata{false};
+};
+
+bool run_dpkg_audit(
+    std::string &diagnostic,
+    std::string &error)
+{
+    diagnostic.clear();
+    error.clear();
+
+    gchar *program = g_find_program_in_path("dpkg");
+    if (program == nullptr) {
+        error = "dpkg is not available for package-state diagnostics.";
+        return false;
+    }
+
+    gchar *argv[] = {
+        program,
+        const_cast<gchar *>("--audit"),
+        nullptr
+    };
+    gchar *standard_output = nullptr;
+    gchar *standard_error = nullptr;
+    gint wait_status = 0;
+    GError *spawn_error = nullptr;
+    const gboolean spawned =
+        g_spawn_sync(
+            nullptr,
+            argv,
+            nullptr,
+            G_SPAWN_SEARCH_PATH,
+            nullptr,
+            nullptr,
+            &standard_output,
+            &standard_error,
+            &wait_status,
+            &spawn_error);
+    g_free(program);
+
+    if (!spawned) {
+        error =
+            spawn_error != nullptr && spawn_error->message != nullptr
+                ? std::string(spawn_error->message)
+                : "Unable to run dpkg package-state diagnostics.";
+        g_clear_error(&spawn_error);
+        g_free(standard_output);
+        g_free(standard_error);
+        return false;
+    }
+
+    GError *status_error = nullptr;
+    const gboolean successful =
+        g_spawn_check_wait_status(wait_status, &status_error);
+    if (!successful) {
+        error =
+            standard_error != nullptr && *standard_error != '\0'
+                ? one_line(standard_error)
+                : status_error != nullptr &&
+                      status_error->message != nullptr
+                    ? std::string(status_error->message)
+                    : "dpkg package-state diagnostics failed.";
+        g_clear_error(&status_error);
+        g_free(standard_output);
+        g_free(standard_error);
+        return false;
+    }
+
+    if (standard_output != nullptr) {
+        diagnostic = one_line(standard_output);
+    }
+    g_free(standard_output);
+    g_free(standard_error);
+    return true;
+}
+
+bool pending_dpkg_update_fragments()
+{
+    const std::filesystem::path directory{"/var/lib/dpkg/updates"};
+    std::error_code ec;
+    if (!std::filesystem::is_directory(directory, ec) || ec) {
+        return false;
+    }
+
+    for (const auto &entry :
+         std::filesystem::directory_iterator(directory, ec)) {
+        if (ec) {
+            return false;
+        }
+        if (!entry.is_regular_file(ec) || ec) {
+            ec.clear();
+            continue;
+        }
+        const std::uintmax_t size =
+            entry.file_size(ec);
+        if (!ec && size != 0U) {
+            return true;
+        }
+        ec.clear();
+    }
+    return false;
+}
+
+std::string current_update_runtime_state()
+{
+    const std::filesystem::path path =
+        update_runtime_state_path();
+    if (path.empty()) {
+        return {};
+    }
+
+    std::ifstream input(path, std::ios::binary);
+    if (!input) {
+        return {};
+    }
+
+    std::string state;
+    std::getline(input, state);
+    return state;
+}
+
+void repair_worker(
+    GTask *task,
+    gpointer,
+    gpointer task_data,
+    GCancellable *)
+{
+    auto *data =
+        static_cast<RepairTaskData *>(task_data);
+    auto *result = new RepairResult{};
+    result->generation =
+        data == nullptr ? 0U : data->generation;
+
+    if (data == nullptr) {
+        result->issues.emplace_back(
+            "Repair task state is unavailable.");
+    } else {
+        EngineClient engine;
+        std::string engine_error;
+        const bool reconciled =
+            data->refresh_metadata
+                ? engine.refresh(engine_error)
+                : engine.refresh_installed(engine_error);
+        result->refreshed_metadata =
+            data->refresh_metadata;
+
+        if (!reconciled) {
+            result->issues.emplace_back(
+                "Native package state: " +
+                one_line(engine_error));
+        } else {
+            std::vector<PackageRecord> updates;
+            std::string update_error;
+            if (!engine.list_updates(
+                    updates, update_error)) {
+                result->issues.emplace_back(
+                    "Native update inventory: " +
+                    one_line(update_error));
+            } else {
+                result->engine_ready = true;
+                result->update_count = updates.size();
+            }
+        }
+    }
+
+    SourceInventory inventory;
+    std::string source_error;
+    const std::vector<SourceRecord> sources =
+        inventory.list(source_error);
+    if (!source_error.empty()) {
+        result->issues.emplace_back(
+            "Repository configuration: " +
+            one_line(source_error));
+    } else {
+        result->source_count = sources.size();
+    }
+
+    std::string audit;
+    std::string audit_error;
+    if (!run_dpkg_audit(audit, audit_error)) {
+        result->issues.emplace_back(
+            "dpkg audit: " + one_line(audit_error));
+    } else if (!audit.empty()) {
+        result->interrupted = true;
+        result->issues.emplace_back(
+            "dpkg reports unfinished or inconsistent package state: " +
+            audit);
+    }
+
+    if (pending_dpkg_update_fragments()) {
+        result->interrupted = true;
+        result->issues.emplace_back(
+            "dpkg has pending update fragments in /var/lib/dpkg/updates.");
+    }
+
+    const std::string runtime_state =
+        current_update_runtime_state();
+    if (runtime_state.rfind("error:", 0U) == 0U) {
+        result->issues.emplace_back(
+            "The most recent Software operation reported: " +
+            one_line(runtime_state.substr(6U)));
+    }
+
+    g_task_return_pointer(
+        task,
+        result,
+        [](gpointer pointer) {
+            delete static_cast<RepairResult *>(pointer);
+        });
+}
+
+GtkWidget *make_repair_issue_card(
+    const std::string &message,
+    const bool healthy)
+{
+    GtkWidget *card =
+        gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
+    gtk_widget_add_css_class(card, "card");
+    gtk_widget_add_css_class(
+        card,
+        healthy ? "card-info" : "card-warning");
+
+    GtkWidget *icon =
+        make_icon(
+            healthy
+                ? "emblem-ok-symbolic"
+                : "dialog-warning-symbolic",
+            22);
+    gtk_widget_add_css_class(
+        icon,
+        healthy ? "source-icon" : "package-icon");
+    gtk_widget_set_valign(icon, GTK_ALIGN_START);
+    gtk_box_append(GTK_BOX(card), icon);
+
+    GtkWidget *copy =
+        make_label(
+            message.c_str(),
+            healthy ? "card-copy" : "state-warning");
+    gtk_label_set_wrap(GTK_LABEL(copy), true);
+    gtk_widget_set_hexpand(copy, true);
+    gtk_box_append(GTK_BOX(card), copy);
+    return card;
+}
+
+void rebuild_repair(
+    WindowState *state,
+    const RepairResult &result)
+{
+    if (state == nullptr ||
+        state->repair_list == nullptr) {
+        return;
+    }
+
+    GtkWidget *child =
+        gtk_widget_get_first_child(
+            GTK_WIDGET(state->repair_list));
+    while (child != nullptr) {
+        GtkWidget *next =
+            gtk_widget_get_next_sibling(child);
+        gtk_list_box_remove(state->repair_list, child);
+        child = next;
+    }
+
+    if (result.issues.empty()) {
+        GtkWidget *row = gtk_list_box_row_new();
+        gtk_list_box_row_set_child(
+            GTK_LIST_BOX_ROW(row),
+            make_repair_issue_card(
+                "No active package, repository or interrupted-transaction problems were detected.",
+                true));
+        gtk_list_box_append(state->repair_list, row);
+        return;
+    }
+
+    for (const std::string &issue : result.issues) {
+        GtkWidget *row = gtk_list_box_row_new();
+        gtk_list_box_row_set_child(
+            GTK_LIST_BOX_ROW(row),
+            make_repair_issue_card(issue, false));
+        gtk_list_box_append(state->repair_list, row);
+    }
+}
+
+void repair_complete(
+    GObject *source_object,
+    GAsyncResult *async_result,
+    gpointer)
+{
+    auto *window = GTK_WINDOW(source_object);
+    auto *state =
+        static_cast<WindowState *>(
+            g_object_get_data(
+                G_OBJECT(window),
+                "infiltrator-window-state"));
+    auto *result =
+        static_cast<RepairResult *>(
+            g_task_propagate_pointer(
+                G_TASK(async_result), nullptr));
+
+    if (state == nullptr || result == nullptr) {
+        delete result;
+        return;
+    }
+    if (result->generation != state->repair_generation) {
+        delete result;
+        return;
+    }
+
+    state->repair_busy = false;
+    state->repair_interrupted = result->interrupted;
+    rebuild_repair(state, *result);
+
+    if (state->repair_engine != nullptr) {
+        gtk_label_set_text(
+            GTK_LABEL(state->repair_engine),
+            result->engine_ready ? "Ready" : "Attention");
+    }
+    if (state->repair_sources != nullptr) {
+        const std::string count =
+            std::to_string(result->source_count);
+        gtk_label_set_text(
+            GTK_LABEL(state->repair_sources),
+            count.c_str());
+    }
+    if (state->repair_issues != nullptr) {
+        const std::string count =
+            std::to_string(result->issues.size());
+        gtk_label_set_text(
+            GTK_LABEL(state->repair_issues),
+            count.c_str());
+    }
+
+    if (state->repair_status != nullptr) {
+        std::string message;
+        if (result->issues.empty()) {
+            message =
+                result->refreshed_metadata
+                    ? "Repository metadata and installed package state were rebuilt successfully."
+                    : "Package state is coherent. " +
+                        std::to_string(result->update_count) +
+                        (result->update_count == 1U
+                             ? " preferred update remains."
+                             : " preferred updates remain.");
+        } else {
+            message =
+                std::to_string(result->issues.size()) +
+                (result->issues.size() == 1U
+                     ? " active diagnostic needs attention."
+                     : " active diagnostics need attention.");
+        }
+        gtk_label_set_text(
+            GTK_LABEL(state->repair_status),
+            message.c_str());
+    }
+
+    if (state->repair_recheck != nullptr) {
+        gtk_widget_set_sensitive(
+            state->repair_recheck, true);
+    }
+    if (state->repair_rebuild != nullptr) {
+        gtk_widget_set_sensitive(
+            state->repair_rebuild, true);
+    }
+    if (state->repair_configure != nullptr) {
+        gtk_widget_set_sensitive(
+            state->repair_configure,
+            state->repair_interrupted);
+    }
+
+    delete result;
+}
+
+void refresh_repair(
+    WindowState *state,
+    const bool refresh_metadata)
+{
+    if (state == nullptr || state->window == nullptr ||
+        state->repair_list == nullptr ||
+        state->repair_busy) {
+        return;
+    }
+
+    state->repair_loaded = true;
+    state->repair_busy = true;
+    ++state->repair_generation;
+
+    if (state->repair_status != nullptr) {
+        gtk_label_set_text(
+            GTK_LABEL(state->repair_status),
+            refresh_metadata
+                ? "Rebuilding verified repository and installed package state…"
+                : "Checking package, repository and interrupted-transaction state…");
+    }
+    if (state->repair_recheck != nullptr) {
+        gtk_widget_set_sensitive(
+            state->repair_recheck, false);
+    }
+    if (state->repair_rebuild != nullptr) {
+        gtk_widget_set_sensitive(
+            state->repair_rebuild, false);
+    }
+    if (state->repair_configure != nullptr) {
+        gtk_widget_set_sensitive(
+            state->repair_configure, false);
+    }
+
+    auto *data = new RepairTaskData{
+        state->repair_generation,
+        refresh_metadata};
+    GTask *task =
+        g_task_new(
+            G_OBJECT(state->window),
+            nullptr,
+            repair_complete,
+            nullptr);
+    g_task_set_task_data(
+        task,
+        data,
+        [](gpointer pointer) {
+            delete static_cast<RepairTaskData *>(pointer);
+        });
+    g_task_run_in_thread(task, repair_worker);
+    g_object_unref(task);
+}
+
+void repair_recheck_clicked(
+    GtkButton *,
+    gpointer user_data)
+{
+    refresh_repair(
+        static_cast<WindowState *>(user_data),
+        false);
+}
+
+void repair_rebuild_clicked(
+    GtkButton *,
+    gpointer user_data)
+{
+    refresh_repair(
+        static_cast<WindowState *>(user_data),
+        true);
+}
+
+struct RepairProcessRun {
+    GtkWindow *window{};
+};
+
+void destroy_repair_process_run(
+    RepairProcessRun *run)
+{
+    if (run == nullptr) {
+        return;
+    }
+    if (run->window != nullptr) {
+        g_object_unref(run->window);
+    }
+    delete run;
+}
+
+void repair_configure_complete(
+    GObject *source_object,
+    GAsyncResult *async_result,
+    gpointer user_data)
+{
+    auto *run =
+        static_cast<RepairProcessRun *>(user_data);
+    auto *process =
+        G_SUBPROCESS(source_object);
+
+    GError *error = nullptr;
+    gchar *standard_output = nullptr;
+    gchar *standard_error = nullptr;
+    const gboolean communicated =
+        g_subprocess_communicate_utf8_finish(
+            process,
+            async_result,
+            &standard_output,
+            &standard_error,
+            &error);
+    const bool success =
+        communicated != FALSE &&
+        g_subprocess_get_successful(process);
+
+    auto *state =
+        run == nullptr || run->window == nullptr
+            ? nullptr
+            : static_cast<WindowState *>(
+                  g_object_get_data(
+                      G_OBJECT(run->window),
+                      "infiltrator-window-state"));
+
+    if (state != nullptr) {
+        if (state->repair_status != nullptr) {
+            if (success) {
+                gtk_label_set_text(
+                    GTK_LABEL(state->repair_status),
+                    "Interrupted package configuration finished. Rechecking package state…");
+            } else {
+                std::string message =
+                    "Unable to finish interrupted package configuration.";
+                if (standard_error != nullptr &&
+                    *standard_error != '\0') {
+                    message += " ";
+                    message += one_line(standard_error);
+                } else if (
+                    error != nullptr &&
+                    error->message != nullptr) {
+                    message += " ";
+                    message += one_line(error->message);
+                }
+                gtk_label_set_text(
+                    GTK_LABEL(state->repair_status),
+                    message.c_str());
+            }
+        }
+
+        if (success) {
+            set_update_runtime_state({});
+            refresh_repair(state, false);
+            if (state->updates_loaded) {
+                refresh_updates(state, false);
+            }
+            if (state->installed_loaded) {
+                refresh_installed(state);
+            }
+        } else {
+            if (state->repair_recheck != nullptr) {
+                gtk_widget_set_sensitive(
+                    state->repair_recheck, true);
+            }
+            if (state->repair_rebuild != nullptr) {
+                gtk_widget_set_sensitive(
+                    state->repair_rebuild, true);
+            }
+            if (state->repair_configure != nullptr) {
+                gtk_widget_set_sensitive(
+                    state->repair_configure,
+                    state->repair_interrupted);
+            }
+        }
+    }
+
+    g_free(standard_output);
+    g_free(standard_error);
+    g_clear_error(&error);
+    destroy_repair_process_run(run);
+}
+
+void repair_configure_clicked(
+    GtkButton *,
+    gpointer user_data)
+{
+    auto *state =
+        static_cast<WindowState *>(user_data);
+    if (state == nullptr || state->window == nullptr ||
+        state->repair_busy ||
+        !state->repair_interrupted) {
+        return;
+    }
+
+    static const gchar *argv[] = {
+        "pkexec",
+        "/usr/libexec/infiltrator-software-update-helper",
+        "repair-configure",
+        nullptr
+    };
+
+    GError *error = nullptr;
+    GSubprocess *process =
+        g_subprocess_newv(
+            argv,
+            static_cast<GSubprocessFlags>(
+                G_SUBPROCESS_FLAGS_STDOUT_PIPE |
+                G_SUBPROCESS_FLAGS_STDERR_PIPE),
+            &error);
+    if (process == nullptr) {
+        if (state->repair_status != nullptr) {
+            std::string message =
+                "Unable to start package configuration repair.";
+            if (error != nullptr &&
+                error->message != nullptr) {
+                message += " ";
+                message += one_line(error->message);
+            }
+            gtk_label_set_text(
+                GTK_LABEL(state->repair_status),
+                message.c_str());
+        }
+        g_clear_error(&error);
+        return;
+    }
+
+    if (state->repair_status != nullptr) {
+        gtk_label_set_text(
+            GTK_LABEL(state->repair_status),
+            "Waiting for administrator authorization to finish interrupted package configuration…");
+    }
+    if (state->repair_recheck != nullptr) {
+        gtk_widget_set_sensitive(
+            state->repair_recheck, false);
+    }
+    if (state->repair_rebuild != nullptr) {
+        gtk_widget_set_sensitive(
+            state->repair_rebuild, false);
+    }
+    if (state->repair_configure != nullptr) {
+        gtk_widget_set_sensitive(
+            state->repair_configure, false);
+    }
+
+    auto *run = new RepairProcessRun{
+        GTK_WINDOW(g_object_ref(state->window))};
+    g_subprocess_communicate_utf8_async(
+        process,
+        nullptr,
+        nullptr,
+        repair_configure_complete,
+        run);
+    g_object_unref(process);
+}
+
+GtkWidget *make_repair_page(
+    WindowState *state)
+{
+    GtkWidget *page =
+        gtk_box_new(GTK_ORIENTATION_VERTICAL, 16);
+    gtk_widget_add_css_class(page, "content");
+    gtk_widget_add_css_class(page, "page-repair");
+
+    gtk_box_append(
+        GTK_BOX(page),
+        make_page_intro(
+            "dialog-warning-symbolic",
+            "Repair",
+            "Diagnose and recover package, repository and interrupted transaction state."));
+
+    GtkWidget *stats = gtk_grid_new();
+    gtk_grid_set_column_spacing(GTK_GRID(stats), 10);
+    gtk_grid_set_column_homogeneous(
+        GTK_GRID(stats), true);
+    gtk_grid_attach(
+        GTK_GRID(stats),
+        make_stat_card(
+            "PACKAGE ENGINE",
+            "Checking",
+            "stat-info",
+            &state->repair_engine),
+        0, 0, 1, 1);
+    gtk_grid_attach(
+        GTK_GRID(stats),
+        make_stat_card(
+            "SOURCES",
+            "0",
+            "stat-operation",
+            &state->repair_sources),
+        1, 0, 1, 1);
+    gtk_grid_attach(
+        GTK_GRID(stats),
+        make_stat_card(
+            "ACTIVE ISSUES",
+            "0",
+            "stat-warning",
+            &state->repair_issues),
+        2, 0, 1, 1);
+    gtk_box_append(GTK_BOX(page), stats);
+
+    GtkWidget *controls =
+        gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
+    gtk_widget_add_css_class(controls, "card");
+
+    state->repair_status =
+        make_label(
+            "Repair diagnostics have not been run yet.",
+            "card-copy");
+    gtk_label_set_wrap(
+        GTK_LABEL(state->repair_status), true);
+    gtk_box_append(
+        GTK_BOX(controls),
+        state->repair_status);
+
+    GtkWidget *buttons =
+        gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    state->repair_recheck =
+        gtk_button_new_with_label("Recheck");
+    gtk_widget_add_css_class(
+        state->repair_recheck,
+        "control-button");
+    g_signal_connect(
+        state->repair_recheck,
+        "clicked",
+        G_CALLBACK(repair_recheck_clicked),
+        state);
+    gtk_box_append(
+        GTK_BOX(buttons),
+        state->repair_recheck);
+
+    state->repair_rebuild =
+        gtk_button_new_with_label(
+            "Rebuild repository state");
+    gtk_widget_add_css_class(
+        state->repair_rebuild,
+        "control-button");
+    g_signal_connect(
+        state->repair_rebuild,
+        "clicked",
+        G_CALLBACK(repair_rebuild_clicked),
+        state);
+    gtk_box_append(
+        GTK_BOX(buttons),
+        state->repair_rebuild);
+
+    state->repair_configure =
+        gtk_button_new_with_label(
+            "Finish interrupted configuration");
+    gtk_widget_add_css_class(
+        state->repair_configure,
+        "accent-button");
+    gtk_widget_set_sensitive(
+        state->repair_configure, false);
+    g_signal_connect(
+        state->repair_configure,
+        "clicked",
+        G_CALLBACK(repair_configure_clicked),
+        state);
+    gtk_box_append(
+        GTK_BOX(buttons),
+        state->repair_configure);
+
+    gtk_box_append(
+        GTK_BOX(controls), buttons);
+    gtk_box_append(
+        GTK_BOX(page), controls);
+
+    GtkWidget *list = gtk_list_box_new();
+    state->repair_list = GTK_LIST_BOX(list);
+    gtk_widget_add_css_class(list, "package-list");
+    gtk_list_box_set_selection_mode(
+        state->repair_list,
+        GTK_SELECTION_NONE);
+
+    GtkWidget *scroll =
+        gtk_scrolled_window_new();
+    gtk_widget_set_vexpand(scroll, true);
+    gtk_scrolled_window_set_policy(
+        GTK_SCROLLED_WINDOW(scroll),
+        GTK_POLICY_NEVER,
+        GTK_POLICY_AUTOMATIC);
+    gtk_scrolled_window_set_child(
+        GTK_SCROLLED_WINDOW(scroll), list);
+    gtk_box_append(GTK_BOX(page), scroll);
+
+    return page;
+}
+
 GtkWidget *make_nav_row(
     const char *icon_name, const char *text, const char *semantic_class)
 {
