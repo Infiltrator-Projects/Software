@@ -330,7 +330,13 @@ void ThemeController::apply()
         << "headerbar button:active image, headerbar button:checked, "
         << "headerbar button:checked label, headerbar button:checked image { color: "
         << select_fg << "; opacity: 1; }"
-        << ".titlebar-button { margin: 3px 2px; }"
+        << ".titlebar-button { margin: 3px 2px; min-width: 34px; padding: 0 8px; }"
+        << ".titlebar-brand { margin-left: 8px; margin-right: 12px; }"
+        << ".titlebar-brand-icon { color: " << operation << "; }"
+        << ".global-search { min-height: 34px; padding: 0 12px; background: "
+        << surface << "; color: " << text << "; border: 1px solid " << border
+        << "; border-radius: " << metrics->control_radius << "px; }"
+        << ".global-search:focus { border-color: " << info << "; }"
 
         << ".sidebar { background-image: linear-gradient(180deg, "
         << panel << ", " << titlebar << "); border-right: 1px solid "
@@ -432,8 +438,8 @@ void ThemeController::apply()
         << ".stat-info .stat-value, .stat-info .stat-icon-well image { color: "
         << info << "; }"
         << ".stat-operation { border-color: " << operation << "; }"
-        << ".stat-operation .stat-value, .stat-operation .stat-icon-well image { color: "
-        << operation << "; }"
+        << ".stat-operation .stat-value { color: " << heading << "; }"
+        << ".stat-operation .stat-icon-well image { color: " << operation << "; }"
         << ".stat-success { border-color: " << success_border << "; }"
         << ".stat-success .stat-value, .stat-success .stat-icon-well image { color: "
         << success << "; }"
@@ -472,6 +478,53 @@ void ThemeController::apply()
         << "listview row:selected label, listview row:selected image { color: "
         << select_fg << "; }"
 
+        << ".discover-welcome { padding: 22px 25px; min-height: 108px; "
+        << "background-image: linear-gradient(115deg, " << card << ", "
+        << surface << "); border: 1px solid " << info << "; border-radius: "
+        << metrics->card_radius << "px; box-shadow: 0 10px 28px rgba(0,0,0,0.16); }"
+        << ".welcome-kicker { font-size: 9px; font-weight: "
+        << typography->ui_bold_weight << "; color: " << operation << "; }"
+        << ".welcome-title { font-family: \"" << typography->brand_family
+        << "\"; font-size: 31px; font-weight: " << typography->brand_weight
+        << "; color: " << heading << "; }"
+        << ".welcome-subtitle { font-size: 12px; color: " << note << "; }"
+        << ".welcome-visual { margin-left: 12px; }"
+        << ".welcome-orb { min-width: 54px; min-height: 54px; border-radius: 999px; "
+        << "border: 1px solid " << border << "; background: " << panel << "; }"
+        << ".welcome-orb image { color: " << accent_fg << "; }"
+        << ".welcome-orb-a { background: " << info << "; border-color: " << info << "; }"
+        << ".welcome-orb-b { background: " << warning << "; border-color: " << warning << "; }"
+        << ".welcome-orb-c { background: " << success << "; border-color: " << success << "; }"
+        << ".discover-dashboard { margin-top: 1px; margin-bottom: 1px; }"
+        << "button.dashboard-card { min-height: 88px; padding: 12px 14px; "
+        << "background-image: linear-gradient(125deg, " << card << ", "
+        << surface << "); border: 1px solid " << border << "; border-radius: "
+        << metrics->card_radius << "px; box-shadow: 0 5px 15px rgba(0,0,0,0.12); }"
+        << "button.dashboard-card:hover { background-image: linear-gradient(125deg, "
+        << card_hover << ", " << surface << "); }"
+        << ".dashboard-icon-well { min-width: 48px; min-height: 48px; "
+        << "border-radius: " << metrics->small_radius << "px; background: "
+        << panel << "; border: 1px solid " << status_border << "; }"
+        << ".dashboard-card-title { font-size: 11px; font-weight: "
+        << typography->ui_bold_weight << "; color: " << text << "; }"
+        << ".dashboard-card-value { font-family: \"" << typography->brand_family
+        << "\"; font-size: 20px; font-weight: " << typography->ui_bold_weight
+        << "; color: " << heading << "; }"
+        << ".dashboard-card-note { font-size: 9px; color: " << summary << "; }"
+        << ".dashboard-chevron { font-size: 22px; color: " << detail_label << "; }"
+        << ".dashboard-updates { border-color: " << warning_border << "; }"
+        << ".dashboard-updates .dashboard-icon-well { background: " << warning
+        << "; border-color: " << warning << "; }"
+        << ".dashboard-updates .dashboard-icon-well image { color: " << accent_fg << "; }"
+        << ".dashboard-health { border-color: " << success_border << "; }"
+        << ".dashboard-health .dashboard-icon-well { background: " << success
+        << "; border-color: " << success << "; }"
+        << ".dashboard-health .dashboard-icon-well image { color: " << accent_fg << "; }"
+        << ".dashboard-repositories { border-color: " << info << "; }"
+        << ".dashboard-repositories .dashboard-icon-well { background: " << info
+        << "; border-color: " << info << "; }"
+        << ".dashboard-repositories .dashboard-icon-well image { color: " << accent_fg << "; }"
+
         << ".discover-controls { padding: 11px 13px; border: 1px solid "
         << status_border << "; border-radius: " << metrics->control_radius
         << "px; background-image: linear-gradient(90deg, " << surface
@@ -508,6 +561,8 @@ void ThemeController::apply()
         << "min-height: 36px; padding-left: 15px; padding-right: 15px; }"
         << "button.spotlight-secondary-action { background: " << panel
         << "; border-color: " << info << "; }"
+        << "button.spotlight-secondary-action label { color: " << text << "; }"
+        << "button.spotlight-primary-action label { color: " << accent_fg << "; }"
         << ".discover-glance { padding: 15px; background: " << panel
         << "; border: 1px solid " << border << "; border-radius: "
         << metrics->card_radius << "px; }"
