@@ -163,6 +163,7 @@ void refresh_system(WindowState *state, bool refresh_metadata = false);
 void refresh_history(WindowState *state);
 void refresh_repair(WindowState *state, bool refresh_metadata = false);
 void select_page(WindowState *state, int index);
+void settings_clicked(GtkButton *button, gpointer user_data);
 void discover_install_clicked(GtkButton *button, gpointer user_data);
 
 GtkWidget *make_icon(const char *name, int size)
