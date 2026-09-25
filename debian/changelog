@@ -1,3 +1,25 @@
+infiltrator-software (0.3.31) unstable; urgency=high
+
+  * Check in the approved Software visual north-star mock-up and UI vision as
+    durable design targets for the GTK implementation.
+  * Begin the GUI-first redesign without replacing the working package engine:
+    add a branded graphical sidebar, navigation subtitles and icon tiles,
+    richer page hero panels, colourful visual ribbons and icon-led summary
+    cards.
+  * Make Discover substantially more visual with larger artwork wells, richer
+    cards, provenance chips and direct Install/Update/Remove actions alongside
+    Details.
+  * Rework Updates into a clearer visual action bar, strengthen History as an
+    activity-card surface and give Repair a dedicated graphical recovery-action
+    presentation.
+  * Increase the default application canvas and add layered gradients, depth,
+    richer semantic colour and stronger card hierarchy while retaining the
+    Common typography/theme contract.
+  * Update the UI design contract and CI so the checked-in mock-up and first
+    redesign primitives cannot silently disappear.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Fri, 25 Sep 2026 16:50:00 +1000
+
 infiltrator-software (0.3.30) unstable; urgency=high
 
   * Make Updates refresh substantially faster by reusing verified Packages
