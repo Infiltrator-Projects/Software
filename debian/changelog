@@ -11,6 +11,9 @@ infiltrator-software (0.3.43) unstable; urgency=high
     installed state as background discovery completes.
   * Give featured cards real raster-backed artwork and preserve the intended
     two-thirds featured area versus one-third repository/activity right rail.
+  * Make the whole shell scale proportionally: navigation uses one sixth of
+    the body, content uses five sixths, and the Discover main dashboard keeps
+    its two-to-one left/right split instead of fixed pixel widths.
   * Add CI contracts for the clean JPEG hero, raster PNG identity mark and
     curated Featured Applications composition.
 
