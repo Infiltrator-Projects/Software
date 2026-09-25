@@ -310,11 +310,8 @@ void ThemeController::apply()
         << "background-image: linear-gradient(180deg, #0d1a43, #071331); "
         << "color: #f6f8ff; border-bottom: 1px solid #274075; padding: 0 12px; }"
         << ".titlebar-brand { margin-left: 8px; margin-right: 16px; min-width: 255px; }"
-        << ".titlebar-mark { margin-right: 2px; }"
-        << ".titlebar-mark-bar { border-radius: 3px; box-shadow: 0 2px 8px rgba(0,0,0,0.24); }"
-        << ".titlebar-mark-cyan { background: #16bff3; }"
-        << ".titlebar-mark-magenta { background: #d33cff; }"
-        << ".titlebar-mark-orange { background: #ff7b32; }"
+        << ".titlebar-logo { min-width: 66px; min-height: 44px; margin-right: 2px; }"
+        << ".titlebar-logo-fallback { color: #57a8ff; }"
         << ".titlebar-title { font-family: \"" << typography->ui_family
         << "\"; font-size: 18px; font-weight: " << typography->ui_bold_weight
         << "; color: #f7f9ff; }"
@@ -497,17 +494,16 @@ void ThemeController::apply()
         << ".discover-welcome { min-height: 166px; background: #07102d; "
         << "border: 1px solid #4f63c9; border-radius: "
         << metrics->card_radius << "px; box-shadow: 0 12px 30px rgba(0,0,0,0.20); }"
-        << ".welcome-artwork { background: #07102d; opacity: 0.76; }"
+        << ".welcome-artwork { background: #07102d; opacity: 1; }"
         << ".welcome-artwork-veil { "
         << "background-image: linear-gradient(90deg, "
-        << "rgba(7,16,45,0.99) 0%, rgba(7,16,45,0.97) 42%, "
-        << "rgba(7,16,45,0.40) 56%, rgba(7,16,45,0.94) 70%, "
-        << "rgba(7,16,45,0.995) 100%); }"
+        << "rgba(7,16,45,0.92) 0%, rgba(7,16,45,0.76) 34%, "
+        << "rgba(7,16,45,0.30) 58%, rgba(7,16,45,0.06) 100%); }"
         << ".welcome-copy { padding: 0; }"
         << ".welcome-kicker { color: #c8d5f4; font-size: 10px; font-weight: "
         << typography->ui_bold_weight << "; letter-spacing: 0.08em; }"
-        << ".welcome-title { font-family: \"" << typography->brand_family
-        << "\"; font-size: 34px; font-weight: " << typography->brand_weight
+        << ".welcome-title { font-family: \"" << typography->ui_family
+        << "\"; font-size: 34px; font-weight: " << typography->ui_bold_weight
         << "; color: #ffffff; }"
         << ".welcome-subtitle { color: #d8e1f5; font-size: 13px; font-weight: "
         << typography->ui_regular_weight << "; }"
@@ -542,11 +538,12 @@ void ThemeController::apply()
         << "; border-color: " << info << "; }"
         << ".dashboard-repositories .dashboard-icon-well image { color: " << accent_fg << "; }"
         << ".discover-main-dashboard { margin-top: 1px; }"
+        << ".featured-panel { min-width: 0; }"
         << ".discover-panel { padding: 13px 14px; background-image: linear-gradient(135deg, "
         << card << ", " << surface << "); border: 1px solid " << border
         << "; border-radius: " << metrics->card_radius
         << "px; box-shadow: 0 5px 16px rgba(0,0,0,0.13); }"
-        << ".featured-panel { border-color: " << info << "; }"
+        << ".featured-panel { min-height: 286px; border-color: " << info << "; }"
         << ".panel-title { font-family: \"" << typography->ui_family
         << "\"; font-size: 16px; font-weight: " << typography->ui_bold_weight
         << "; color: " << heading << "; }"
@@ -558,10 +555,13 @@ void ThemeController::apply()
         << metrics->control_radius << "px; }"
         << ".featured-card:hover { background: " << card_hover
         << "; border-color: " << info << "; }"
-        << ".featured-card-art { min-height: 76px; padding: 7px; "
-        << "background-image: linear-gradient(145deg, " << surface << ", "
-        << card_hover << "); border-radius: " << metrics->small_radius
+        << ".featured-card-art { min-height: 82px; padding: 0; "
+        << "background: #08152f; border-radius: " << metrics->small_radius
         << "px; border: 1px solid " << status_border << "; }"
+        << ".featured-card-raster { opacity: 0.82; }"
+        << ".featured-card-art-shade { background: rgba(4,11,29,0.18); }"
+        << ".featured-card-art image.discover-app-icon { "
+        << "filter: drop-shadow(0 4px 7px rgba(0,0,0,0.45)); }"
         << ".featured-card-name { font-size: 13px; font-weight: "
         << typography->ui_bold_weight << "; color: " << heading << "; }"
         << ".featured-card-meta { font-size: 10px; color: " << info << "; }"
