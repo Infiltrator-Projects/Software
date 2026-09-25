@@ -5779,24 +5779,6 @@ bool pending_dpkg_update_fragments()
     return false;
 }
 
-std::string current_update_runtime_state()
-{
-    const std::filesystem::path path =
-        update_runtime_state_path();
-    if (path.empty()) {
-        return {};
-    }
-
-    std::ifstream input(path, std::ios::binary);
-    if (!input) {
-        return {};
-    }
-
-    std::string state;
-    std::getline(input, state);
-    return state;
-}
-
 void repair_worker(
     GTask *task,
     gpointer,
