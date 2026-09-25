@@ -75,6 +75,11 @@ struct WindowState {
     GtkWidget *discover_source{};
     GtkWidget *discover_state{};
     GtkWidget *discover_spotlight{};
+    GtkWidget *discover_featured_flow{};
+    GtkWidget *discover_update_preview{};
+    GtkWidget *discover_repository_preview{};
+    GtkWidget *discover_activity_preview{};
+    GtkWidget *discover_health_banner_state{};
     GtkWidget *discover_updates_summary{};
     GtkWidget *discover_health_summary{};
     GtkWidget *discover_repositories_summary{};
@@ -85,6 +90,7 @@ struct WindowState {
     GtkWidget *repository_flow{};
     GtkWidget *repository_count{};
     GtkWidget *repository_status{};
+    std::vector<SourceRecord> repository_records;
     unsigned int repositories_generation{0U};
     bool repositories_busy{false};
 
@@ -162,6 +168,7 @@ void refresh_installed(WindowState *state);
 void refresh_system(WindowState *state, bool refresh_metadata = false);
 void refresh_history(WindowState *state);
 void refresh_repair(WindowState *state, bool refresh_metadata = false);
+std::string history_timestamp(std::int64_t unix_time);
 void select_page(WindowState *state, int index);
 void settings_clicked(GtkButton *button, gpointer user_data);
 void discover_install_clicked(GtkButton *button, gpointer user_data);
@@ -829,6 +836,373 @@ GtkWidget *make_discover_card(
     return card;
 }
 
+
+GtkWidget *make_featured_card(
+    WindowState *state,
+    const PackageRecord &record)
+{
+    GtkWidget *card =
+        gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
+    gtk_widget_add_css_class(
+        card, "featured-card");
+    gtk_widget_set_size_request(
+        card, 176, 218);
+
+    GtkWidget *art =
+        gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    gtk_widget_add_css_class(
+        art, "featured-card-art");
+    GtkWidget *icon =
+        catalogue_icon(record, 64);
+    gtk_widget_set_halign(
+        icon, GTK_ALIGN_CENTER);
+    gtk_widget_set_valign(
+        icon, GTK_ALIGN_CENTER);
+    gtk_box_append(GTK_BOX(art), icon);
+    gtk_box_append(GTK_BOX(card), art);
+
+    GtkWidget *name =
+        make_label(
+            record.name.c_str(),
+            "featured-card-name");
+    gtk_label_set_ellipsize(
+        GTK_LABEL(name),
+        PANGO_ELLIPSIZE_END);
+    gtk_box_append(GTK_BOX(card), name);
+
+    const std::string category =
+        record.category.empty()
+            ? "Application"
+            : record.category;
+    GtkWidget *meta =
+        make_label(
+            category.c_str(),
+            "featured-card-meta");
+    gtk_label_set_ellipsize(
+        GTK_LABEL(meta),
+        PANGO_ELLIPSIZE_END);
+    gtk_box_append(GTK_BOX(card), meta);
+
+    GtkWidget *description =
+        make_label(
+            record.description.c_str(),
+            "featured-card-copy");
+    gtk_label_set_wrap(
+        GTK_LABEL(description), true);
+    gtk_label_set_lines(
+        GTK_LABEL(description), 2);
+    gtk_label_set_ellipsize(
+        GTK_LABEL(description),
+        PANGO_ELLIPSIZE_END);
+    gtk_widget_set_vexpand(
+        description, true);
+    gtk_box_append(
+        GTK_BOX(card), description);
+
+    GtkWidget *action_row =
+        gtk_box_new(
+            GTK_ORIENTATION_HORIZONTAL, 5);
+    GtkWidget *details =
+        gtk_button_new_with_label("Details");
+    gtk_widget_add_css_class(
+        details, "featured-secondary");
+    g_object_set_data_full(
+        G_OBJECT(details),
+        "discover-record",
+        new PackageRecord(record),
+        package_record_destroy);
+    g_signal_connect(
+        details, "clicked",
+        G_CALLBACK(discover_details_clicked),
+        state);
+    gtk_box_append(
+        GTK_BOX(action_row), details);
+
+    if (!record.package_name.empty()) {
+        const bool installed =
+            record.state ==
+            infiltrator::software::InstallState::installed;
+        const bool upgradable =
+            record.state ==
+            infiltrator::software::InstallState::upgradable;
+        GtkWidget *action =
+            gtk_button_new_with_label(
+                installed
+                    ? "Remove"
+                    : (upgradable
+                           ? "Update"
+                           : "Install"));
+        gtk_widget_add_css_class(
+            action,
+            installed
+                ? "destructive-action"
+                : "suggested-action");
+        gtk_widget_add_css_class(
+            action,
+            "featured-primary");
+        gtk_widget_set_hexpand(
+            action, true);
+        g_object_set_data_full(
+            G_OBJECT(action),
+            "discover-install-record",
+            new PackageRecord(record),
+            package_record_destroy);
+        g_signal_connect(
+            action, "clicked",
+            G_CALLBACK(discover_install_clicked),
+            state);
+        gtk_box_append(
+            GTK_BOX(action_row), action);
+    }
+
+    gtk_box_append(
+        GTK_BOX(card), action_row);
+    return card;
+}
+
+void clear_box_children(GtkWidget *box)
+{
+    if (box == nullptr) {
+        return;
+    }
+    GtkWidget *child =
+        gtk_widget_get_first_child(box);
+    while (child != nullptr) {
+        GtkWidget *next =
+            gtk_widget_get_next_sibling(child);
+        gtk_box_remove(
+            GTK_BOX(box), child);
+        child = next;
+    }
+}
+
+GtkWidget *make_preview_row(
+    const char *icon_name,
+    const char *title,
+    const char *subtitle,
+    const char *semantic_class)
+{
+    GtkWidget *row =
+        gtk_box_new(
+            GTK_ORIENTATION_HORIZONTAL, 9);
+    gtk_widget_add_css_class(
+        row, "preview-row");
+
+    GtkWidget *icon_well =
+        gtk_box_new(
+            GTK_ORIENTATION_VERTICAL, 0);
+    gtk_widget_add_css_class(
+        icon_well, "preview-icon-well");
+    if (semantic_class != nullptr) {
+        gtk_widget_add_css_class(
+            icon_well, semantic_class);
+    }
+    GtkWidget *icon =
+        make_icon(icon_name, 18);
+    gtk_widget_set_halign(
+        icon, GTK_ALIGN_CENTER);
+    gtk_widget_set_valign(
+        icon, GTK_ALIGN_CENTER);
+    gtk_box_append(
+        GTK_BOX(icon_well), icon);
+    gtk_box_append(
+        GTK_BOX(row), icon_well);
+
+    GtkWidget *copy =
+        gtk_box_new(
+            GTK_ORIENTATION_VERTICAL, 1);
+    gtk_widget_set_hexpand(copy, true);
+    GtkWidget *heading =
+        make_label(
+            title, "preview-row-title");
+    GtkWidget *note =
+        make_label(
+            subtitle, "preview-row-note");
+    gtk_label_set_ellipsize(
+        GTK_LABEL(note),
+        PANGO_ELLIPSIZE_END);
+    gtk_box_append(
+        GTK_BOX(copy), heading);
+    gtk_box_append(
+        GTK_BOX(copy), note);
+    gtk_box_append(GTK_BOX(row), copy);
+    return row;
+}
+
+void rebuild_discover_update_preview(
+    WindowState *state)
+{
+    if (state == nullptr ||
+        state->discover_update_preview == nullptr) {
+        return;
+    }
+    clear_box_children(
+        state->discover_update_preview);
+
+    const std::size_t limit =
+        std::min<std::size_t>(
+            state->update_records.size(), 2U);
+    if (limit == 0U) {
+        gtk_box_append(
+            GTK_BOX(
+                state->discover_update_preview),
+            make_preview_row(
+                "emblem-ok-symbolic",
+                "System is up to date",
+                "No preferred updates are waiting.",
+                "preview-good"));
+        return;
+    }
+
+    for (std::size_t index = 0U;
+         index < limit;
+         ++index) {
+        const PackageRecord &record =
+            state->update_records[index];
+        std::string version =
+            record.installed_version;
+        if (!version.empty() &&
+            !record.available_version.empty()) {
+            version += "  →  " +
+                record.available_version;
+        } else if (!record.available_version.empty()) {
+            version =
+                record.available_version;
+        }
+        gtk_box_append(
+            GTK_BOX(
+                state->discover_update_preview),
+            make_preview_row(
+                update_icon_name(record),
+                record.name.c_str(),
+                version.c_str(),
+                record.system_critical
+                    ? "preview-warning"
+                    : "preview-info"));
+    }
+}
+
+void rebuild_discover_repository_preview(
+    WindowState *state)
+{
+    if (state == nullptr ||
+        state->discover_repository_preview ==
+            nullptr) {
+        return;
+    }
+    clear_box_children(
+        state->discover_repository_preview);
+
+    if (state->repository_records.empty()) {
+        gtk_box_append(
+            GTK_BOX(
+                state->discover_repository_preview),
+            make_preview_row(
+                "network-workgroup-symbolic",
+                "Repository status",
+                "Reading configured sources…",
+                "preview-info"));
+        return;
+    }
+
+    const std::size_t limit =
+        std::min<std::size_t>(
+            state->repository_records.size(),
+            3U);
+    for (std::size_t index = 0U;
+         index < limit;
+         ++index) {
+        const SourceRecord &source =
+            state->repository_records[index];
+        gtk_box_append(
+            GTK_BOX(
+                state->discover_repository_preview),
+            make_preview_row(
+                source.kind ==
+                        SourceKind::flatpak
+                    ? "package-x-generic-symbolic"
+                    : "drive-multidisk-symbolic",
+                source.name.empty()
+                    ? "Software source"
+                    : source.name.c_str(),
+                source.enabled
+                    ? "Online / enabled"
+                    : "Disabled",
+                source.enabled
+                    ? "preview-good"
+                    : "preview-warning"));
+    }
+}
+
+void rebuild_discover_activity_preview(
+    WindowState *state)
+{
+    if (state == nullptr ||
+        state->discover_activity_preview ==
+            nullptr) {
+        return;
+    }
+    clear_box_children(
+        state->discover_activity_preview);
+
+    if (state->history_records.empty()) {
+        gtk_box_append(
+            GTK_BOX(
+                state->discover_activity_preview),
+            make_preview_row(
+                "document-open-recent-symbolic",
+                "No recent activity",
+                "Completed software actions will appear here.",
+                "preview-info"));
+        return;
+    }
+
+    std::size_t index = 0U;
+    std::size_t shown = 0U;
+    while (index <
+               state->history_records.size() &&
+           shown < 4U) {
+        const TransactionHistoryItem &head =
+            state->history_records[index];
+        std::size_t end = index + 1U;
+        while (
+            end <
+                state->history_records.size() &&
+            state->history_records[end]
+                    .transaction_id ==
+                head.transaction_id) {
+            ++end;
+        }
+        const std::size_t count =
+            end - index;
+        const std::string title =
+            head.success
+                ? "Updated " +
+                      std::to_string(count) +
+                      (count == 1U
+                           ? " package"
+                           : " packages")
+                : "Software action failed";
+        const std::string note =
+            history_timestamp(
+                head.completed_at_unix);
+        gtk_box_append(
+            GTK_BOX(
+                state->discover_activity_preview),
+            make_preview_row(
+                head.success
+                    ? "emblem-ok-symbolic"
+                    : "dialog-warning-symbolic",
+                title.c_str(),
+                note.c_str(),
+                head.success
+                    ? "preview-good"
+                    : "preview-warning"));
+        index = end;
+        ++shown;
+    }
+}
+
 std::string selected_category(WindowState *state)
 {
     if (state == nullptr || state->discover_category == nullptr) {
@@ -1162,6 +1536,8 @@ void rebuild_discover(WindowState *state)
 
     std::vector<std::string> indices;
     indices.reserve(state->discover_records.size());
+    std::vector<std::size_t> featured_indices;
+    featured_indices.reserve(4U);
     std::optional<std::size_t> first_visible;
 
     const bool cached_search_text =
@@ -1194,6 +1570,9 @@ void rebuild_discover(WindowState *state)
         if (!first_visible.has_value()) {
             first_visible = index;
         }
+        if (featured_indices.size() < 4U) {
+            featured_indices.push_back(index);
+        }
         indices.emplace_back(std::to_string(index));
     }
 
@@ -1203,6 +1582,31 @@ void rebuild_discover(WindowState *state)
             ? &state->discover_records[
                   *first_visible]
             : nullptr);
+
+    if (state->discover_featured_flow != nullptr) {
+        GtkWidget *child =
+            gtk_widget_get_first_child(
+                state->discover_featured_flow);
+        while (child != nullptr) {
+            GtkWidget *next =
+                gtk_widget_get_next_sibling(child);
+            gtk_flow_box_remove(
+                GTK_FLOW_BOX(
+                    state->discover_featured_flow),
+                child);
+            child = next;
+        }
+        for (const std::size_t index :
+             featured_indices) {
+            gtk_flow_box_append(
+                GTK_FLOW_BOX(
+                    state->discover_featured_flow),
+                make_featured_card(
+                    state,
+                    state->discover_records[
+                        index]));
+        }
+    }
 
     std::vector<const char *> additions;
     additions.reserve(indices.size() + 1U);
@@ -2199,58 +2603,255 @@ GtkWidget *make_discover_page(WindowState *state)
 
     gtk_box_append(GTK_BOX(page), dashboard);
 
-    GtkWidget *showcase =
-        gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
+    GtkWidget *main_dashboard =
+        gtk_box_new(
+            GTK_ORIENTATION_HORIZONTAL, 12);
     gtk_widget_add_css_class(
-        showcase, "discover-showcase");
+        main_dashboard, "discover-main-dashboard");
 
-    state->discover_spotlight =
-        gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 20);
-    gtk_widget_add_css_class(
-        state->discover_spotlight,
-        "discover-spotlight");
+    GtkWidget *left_column =
+        gtk_box_new(
+            GTK_ORIENTATION_VERTICAL, 12);
     gtk_widget_set_hexpand(
-        state->discover_spotlight, true);
-    gtk_widget_set_size_request(
-        state->discover_spotlight, -1, 218);
-    rebuild_discover_spotlight(state, nullptr);
-    gtk_box_append(
-        GTK_BOX(showcase),
-        state->discover_spotlight);
+        left_column, true);
 
-    GtkWidget *glance =
-        gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
+    GtkWidget *featured_panel =
+        gtk_box_new(
+            GTK_ORIENTATION_VERTICAL, 10);
     gtk_widget_add_css_class(
-        glance, "discover-glance");
-    gtk_widget_set_size_request(
-        glance, 280, -1);
+        featured_panel, "discover-panel");
+    gtk_widget_add_css_class(
+        featured_panel, "featured-panel");
 
-    GtkWidget *glance_kicker =
+    GtkWidget *featured_header =
+        gtk_box_new(
+            GTK_ORIENTATION_HORIZONTAL, 10);
+    GtkWidget *featured_icon =
+        make_icon(
+            "starred-symbolic", 23);
+    gtk_widget_add_css_class(
+        featured_icon, "featured-header-icon");
+    GtkWidget *featured_copy =
+        gtk_box_new(
+            GTK_ORIENTATION_VERTICAL, 1);
+    gtk_widget_set_hexpand(
+        featured_copy, true);
+    gtk_box_append(
+        GTK_BOX(featured_copy),
         make_label(
-            "AT A GLANCE",
-            "glance-kicker");
+            "Featured Applications",
+            "panel-title"));
     gtk_box_append(
-        GTK_BOX(glance), glance_kicker);
+        GTK_BOX(featured_copy),
+        make_label(
+            "Recommended software from the current catalogue.",
+            "panel-subtitle"));
+    gtk_box_append(
+        GTK_BOX(featured_header),
+        featured_icon);
+    gtk_box_append(
+        GTK_BOX(featured_header),
+        featured_copy);
+    gtk_box_append(
+        GTK_BOX(featured_panel),
+        featured_header);
+
+    state->discover_featured_flow =
+        gtk_flow_box_new();
+    gtk_flow_box_set_selection_mode(
+        GTK_FLOW_BOX(
+            state->discover_featured_flow),
+        GTK_SELECTION_NONE);
+    gtk_flow_box_set_min_children_per_line(
+        GTK_FLOW_BOX(
+            state->discover_featured_flow),
+        4U);
+    gtk_flow_box_set_max_children_per_line(
+        GTK_FLOW_BOX(
+            state->discover_featured_flow),
+        4U);
+    gtk_flow_box_set_column_spacing(
+        GTK_FLOW_BOX(
+            state->discover_featured_flow),
+        10U);
+    gtk_widget_set_valign(
+        state->discover_featured_flow,
+        GTK_ALIGN_START);
+    gtk_box_append(
+        GTK_BOX(featured_panel),
+        state->discover_featured_flow);
+    gtk_box_append(
+        GTK_BOX(left_column),
+        featured_panel);
+
+    GtkWidget *updates_panel =
+        gtk_box_new(
+            GTK_ORIENTATION_VERTICAL, 8);
+    gtk_widget_add_css_class(
+        updates_panel, "discover-panel");
+    gtk_widget_add_css_class(
+        updates_panel, "updates-preview-panel");
+    gtk_box_append(
+        GTK_BOX(updates_panel),
+        make_label(
+            "Updates Available",
+            "panel-title"));
+    state->discover_update_preview =
+        gtk_box_new(
+            GTK_ORIENTATION_VERTICAL, 5);
+    gtk_box_append(
+        GTK_BOX(updates_panel),
+        state->discover_update_preview);
+    rebuild_discover_update_preview(state);
+
+    GtkWidget *update_all =
+        gtk_button_new_with_label(
+            "Open Updates");
+    gtk_widget_add_css_class(
+        update_all, "suggested-action");
+    g_object_set_data(
+        G_OBJECT(update_all),
+        "dashboard-page-index",
+        GINT_TO_POINTER(2));
+    g_signal_connect(
+        update_all,
+        "clicked",
+        G_CALLBACK(dashboard_nav_clicked),
+        state);
+    gtk_widget_set_halign(
+        update_all, GTK_ALIGN_END);
+    gtk_box_append(
+        GTK_BOX(updates_panel),
+        update_all);
+    gtk_box_append(
+        GTK_BOX(left_column),
+        updates_panel);
+
+    GtkWidget *health =
+        gtk_button_new();
+    gtk_widget_add_css_class(
+        health, "health-banner");
+    GtkWidget *health_row =
+        gtk_box_new(
+            GTK_ORIENTATION_HORIZONTAL, 12);
+    GtkWidget *health_icon_well =
+        gtk_box_new(
+            GTK_ORIENTATION_VERTICAL, 0);
+    gtk_widget_add_css_class(
+        health_icon_well,
+        "health-banner-icon");
+    GtkWidget *health_icon =
+        make_icon(
+            "emblem-ok-symbolic", 24);
+    gtk_widget_set_halign(
+        health_icon, GTK_ALIGN_CENTER);
+    gtk_widget_set_valign(
+        health_icon, GTK_ALIGN_CENTER);
+    gtk_box_append(
+        GTK_BOX(health_icon_well),
+        health_icon);
+    gtk_box_append(
+        GTK_BOX(health_row),
+        health_icon_well);
+
+    GtkWidget *health_copy =
+        gtk_box_new(
+            GTK_ORIENTATION_VERTICAL, 2);
+    gtk_widget_set_hexpand(
+        health_copy, true);
+    gtk_box_append(
+        GTK_BOX(health_copy),
+        make_label(
+            "Keep your system healthy",
+            "health-banner-title"));
+    state->discover_health_banner_state =
+        make_label(
+            "Checking package and repository health…",
+            "health-banner-copy");
+    gtk_box_append(
+        GTK_BOX(health_copy),
+        state->discover_health_banner_state);
+    gtk_box_append(
+        GTK_BOX(health_row),
+        health_copy);
+    gtk_box_append(
+        GTK_BOX(health_row),
+        make_label(
+            "Open Repair Center  ›",
+            "health-banner-action",
+            1.0F));
+    gtk_button_set_child(
+        GTK_BUTTON(health),
+        health_row);
+    g_object_set_data(
+        G_OBJECT(health),
+        "dashboard-page-index",
+        GINT_TO_POINTER(6));
+    g_signal_connect(
+        health,
+        "clicked",
+        G_CALLBACK(dashboard_nav_clicked),
+        state);
+    gtk_box_append(
+        GTK_BOX(left_column), health);
+
+    GtkWidget *right_column =
+        gtk_box_new(
+            GTK_ORIENTATION_VERTICAL, 12);
+    gtk_widget_set_size_request(
+        right_column, 330, -1);
+
+    GtkWidget *repository_panel =
+        gtk_box_new(
+            GTK_ORIENTATION_VERTICAL, 8);
+    gtk_widget_add_css_class(
+        repository_panel, "discover-panel");
+    gtk_box_append(
+        GTK_BOX(repository_panel),
+        make_label(
+            "Repository Status",
+            "panel-title"));
+    state->discover_repository_preview =
+        gtk_box_new(
+            GTK_ORIENTATION_VERTICAL, 5);
+    gtk_box_append(
+        GTK_BOX(repository_panel),
+        state->discover_repository_preview);
+    rebuild_discover_repository_preview(state);
+    gtk_box_append(
+        GTK_BOX(right_column),
+        repository_panel);
+
+    GtkWidget *activity_panel =
+        gtk_box_new(
+            GTK_ORIENTATION_VERTICAL, 8);
+    gtk_widget_add_css_class(
+        activity_panel, "discover-panel");
+    gtk_box_append(
+        GTK_BOX(activity_panel),
+        make_label(
+            "Recent Activity",
+            "panel-title"));
+    state->discover_activity_preview =
+        gtk_box_new(
+            GTK_ORIENTATION_VERTICAL, 5);
+    gtk_box_append(
+        GTK_BOX(activity_panel),
+        state->discover_activity_preview);
+    rebuild_discover_activity_preview(state);
+    gtk_box_append(
+        GTK_BOX(right_column),
+        activity_panel);
 
     gtk_box_append(
-        GTK_BOX(glance),
-        make_stat_card(
-            "APPLICATIONS", "0", "stat-info",
-            &state->discover_count));
+        GTK_BOX(main_dashboard),
+        left_column);
     gtk_box_append(
-        GTK_BOX(glance),
-        make_stat_card(
-            "SOURCE", "Repository", "stat-operation",
-            &state->discover_source));
+        GTK_BOX(main_dashboard),
+        right_column);
     gtk_box_append(
-        GTK_BOX(glance),
-        make_stat_card(
-            "STATE", "Loading", "stat-success",
-            &state->discover_state));
-
-    gtk_box_append(
-        GTK_BOX(showcase), glance);
-    gtk_box_append(GTK_BOX(page), showcase);
+        GTK_BOX(page),
+        main_dashboard);
 
     GtkWidget *controls = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
     gtk_widget_add_css_class(controls, "discover-controls");
@@ -4423,6 +5024,7 @@ void updates_complete(
             summary.c_str());
     }
 
+    rebuild_discover_update_preview(state);
     if (state->nav_updates_badge != nullptr) {
         const std::size_t count =
             state->update_records.size();
@@ -6071,6 +6673,9 @@ void repositories_complete(
     }
 
     state->repositories_busy = false;
+    state->repository_records =
+        result->sources;
+    rebuild_discover_repository_preview(state);
 
     GtkWidget *child =
         gtk_widget_get_first_child(state->repository_flow);
@@ -6518,6 +7123,7 @@ void history_complete(
     delete result;
 
     rebuild_history(state);
+    rebuild_discover_activity_preview(state);
 
     if (state->history_status != nullptr) {
         if (!error.empty()) {
@@ -7005,6 +7611,15 @@ void repair_complete(
             result->issues.empty()
                 ? "Good"
                 : "Attention");
+    }
+
+    if (state->discover_health_banner_state != nullptr) {
+        gtk_label_set_text(
+            GTK_LABEL(
+                state->discover_health_banner_state),
+            result->issues.empty()
+                ? "No package-state issues detected."
+                : "Repair attention is required.");
     }
 
     if (state->repair_health_banner != nullptr) {
@@ -7710,6 +8325,18 @@ void refresh_page_if_needed(WindowState *state, const int index)
     case 0:
         if (!state->discover_loaded) {
             refresh_discover(state);
+        }
+        if (!state->updates_loaded) {
+            refresh_updates(state);
+        }
+        if (!state->repositories_loaded) {
+            refresh_repositories(state);
+        }
+        if (!state->history_loaded) {
+            refresh_history(state);
+        }
+        if (!state->repair_loaded) {
+            refresh_repair(state, false);
         }
         break;
     case 1:
