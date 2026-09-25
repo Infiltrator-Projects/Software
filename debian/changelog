@@ -12,6 +12,8 @@ infiltrator-software (0.3.40) unstable; urgency=high
     JPEG start/end markers and minimum decoded size.
   * Make the graphical launch smoke test fail if the embedded raster cannot
     decode, and verify the release binary actually contains the JPEG payload.
+  * Verify the embedded payload against the release package path used by the
+    publishing workflow so packaging validation cannot reference an unset file.
   * Remove the obsolete external hero asset and GResource experiment so the
     executable is the single runtime source of truth for the Discover artwork.
   * Preserve the authored 1100:140 hero composition with GtkAspectFrame so
