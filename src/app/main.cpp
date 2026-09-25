@@ -857,7 +857,7 @@ void discover_quick_category_clicked(
         g_list_model_get_n_items(
             G_LIST_MODEL(state->discover_categories));
     for (guint index = 0U; index < count; ++index) {
-        GObject *object =
+        gpointer object =
             g_list_model_get_item(
                 G_LIST_MODEL(state->discover_categories),
                 index);
@@ -3505,10 +3505,12 @@ GtkWidget *make_update_row(
     gtk_widget_set_hexpand(name, true);
     gtk_box_append(GTK_BOX(title_line), name);
 
+    const std::string kind_text(
+        infiltrator::software::package_kind_name(
+            package.kind));
     GtkWidget *kind =
         make_label(
-            infiltrator::software::package_kind_name(
-                package.kind),
+            kind_text.c_str(),
             "update-kind-chip");
     gtk_box_append(GTK_BOX(title_line), kind);
     gtk_box_append(GTK_BOX(identity), title_line);
