@@ -5871,14 +5871,6 @@ void repair_worker(
             "dpkg has pending update fragments in /var/lib/dpkg/updates.");
     }
 
-    const std::string runtime_state =
-        current_update_runtime_state();
-    if (runtime_state.rfind("error:", 0U) == 0U) {
-        result->issues.emplace_back(
-            "The most recent Software operation reported: " +
-            one_line(runtime_state.substr(6U)));
-    }
-
     g_task_return_pointer(
         task,
         result,
@@ -6006,6 +5998,16 @@ void repair_complete(
         gtk_label_set_text(
             GTK_LABEL(state->repair_issues),
             count.c_str());
+    }
+
+    if (result->issues.empty()) {
+        /*
+         * A previous failed transaction can leave the panel error marker set
+         * even after authoritative package state is coherent. Repair is the
+         * explicit place to clear that stale runtime fault after diagnostics
+         * prove there is no active problem.
+         */
+        set_update_runtime_state({});
     }
 
     if (state->repair_status != nullptr) {
@@ -6168,6 +6170,7 @@ void repair_configure_complete(
                       "infiltrator-window-state"));
 
     if (state != nullptr) {
+        state->repair_busy = false;
         if (state->repair_status != nullptr) {
             if (success) {
                 gtk_label_set_text(
@@ -6268,6 +6271,7 @@ void repair_configure_clicked(
         return;
     }
 
+    state->repair_busy = true;
     if (state->repair_status != nullptr) {
         gtk_label_set_text(
             GTK_LABEL(state->repair_status),
