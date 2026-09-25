@@ -61,8 +61,17 @@ bool safe_package_spec(const std::string_view value)
     return true;
 }
 
-bool installed_package(const std::string &spec)
+enum class InstalledQueryState {
+    installed,
+    absent,
+    error
+};
+
+InstalledQueryState installed_version(
+    const std::string &spec,
+    std::string &version)
 {
+    version.clear();
     const std::size_t equals = spec.find('=');
     const std::string package =
         equals == std::string::npos ? spec : spec.substr(0U, equals);
@@ -74,19 +83,19 @@ bool installed_package(const std::string &spec)
                    ? "/bin/dpkg-query"
                    : nullptr);
     if (dpkg_query == nullptr) {
-        return false;
+        return InstalledQueryState::error;
     }
 
     int pipe_fd[2]{};
     if (pipe(pipe_fd) != 0) {
-        return false;
+        return InstalledQueryState::error;
     }
 
     const pid_t child = fork();
     if (child < 0) {
         close(pipe_fd[0]);
         close(pipe_fd[1]);
-        return false;
+        return InstalledQueryState::error;
     }
 
     if (child == 0) {
@@ -104,16 +113,32 @@ bool installed_package(const std::string &spec)
             dpkg_query,
             "dpkg-query",
             "-W",
-            "--showformat=${db:Status-Abbrev}",
+            "--showformat=${db:Status-Abbrev}\t${Version}",
             package.c_str(),
             static_cast<char *>(nullptr));
         _exit(127);
     }
 
     close(pipe_fd[1]);
-    char status_text[8]{};
-    const ssize_t count =
-        read(pipe_fd[0], status_text, sizeof(status_text) - 1U);
+    std::string output;
+    char buffer[1024]{};
+    bool read_failed = false;
+    for (;;) {
+        const ssize_t count =
+            read(pipe_fd[0], buffer, sizeof(buffer));
+        if (count > 0) {
+            output.append(buffer, static_cast<std::size_t>(count));
+            continue;
+        }
+        if (count == 0) {
+            break;
+        }
+        if (errno == EINTR) {
+            continue;
+        }
+        read_failed = true;
+        break;
+    }
     close(pipe_fd[0]);
 
     int status = 0;
@@ -121,14 +146,81 @@ bool installed_package(const std::string &spec)
         if (errno == EINTR) {
             continue;
         }
+        return InstalledQueryState::error;
+    }
+
+    if (read_failed || !WIFEXITED(status)) {
+        return InstalledQueryState::error;
+    }
+    if (WEXITSTATUS(status) == 1) {
+        return InstalledQueryState::absent;
+    }
+    if (WEXITSTATUS(status) != 0) {
+        return InstalledQueryState::error;
+    }
+
+    const std::size_t tab = output.find('\t');
+    if (tab == std::string::npos || tab < 2U) {
+        return InstalledQueryState::error;
+    }
+    if (output[0] != 'i' || output[1] != 'i') {
+        return InstalledQueryState::absent;
+    }
+
+    version = output.substr(tab + 1U);
+    while (!version.empty() &&
+           (version.back() == '\n' || version.back() == '\r')) {
+        version.pop_back();
+    }
+    return version.empty()
+        ? InstalledQueryState::error
+        : InstalledQueryState::installed;
+}
+
+bool installed_package(const std::string &spec)
+{
+    std::string version;
+    return installed_version(spec, version) ==
+           InstalledQueryState::installed;
+}
+
+bool approved_spec_already_satisfied(
+    const std::string &approved,
+    bool &satisfied,
+    std::string &error)
+{
+    satisfied = false;
+    error.clear();
+
+    const bool removal =
+        approved.rfind("remove:", 0U) == 0U;
+    const std::string spec =
+        removal ? approved.substr(7U) : approved;
+    const std::size_t equals = spec.find('=');
+    if (equals == std::string::npos) {
+        error = "Approved package specification has no exact version.";
         return false;
     }
 
-    return count >= 2 &&
-           status_text[0] == 'i' &&
-           status_text[1] == 'i' &&
-           WIFEXITED(status) &&
-           WEXITSTATUS(status) == 0;
+    const std::string target_version = spec.substr(equals + 1U);
+    std::string current_version;
+    const InstalledQueryState state =
+        installed_version(spec, current_version);
+    if (state == InstalledQueryState::error) {
+        error =
+            "Unable to verify the current installed state for " +
+            spec.substr(0U, equals) + ".";
+        return false;
+    }
+
+    if (removal) {
+        satisfied = state == InstalledQueryState::absent;
+    } else {
+        satisfied =
+            state == InstalledQueryState::installed &&
+            current_version == target_version;
+    }
+    return true;
 }
 
 const char *apt_get_path()
@@ -371,6 +463,34 @@ int main(int argc, char **argv)
          * identities and versions. Any added dependency, missing change,
          * architecture drift or removal aborts before system mutation.
          */
+        /*
+         * A package may already have reached the approved final version before
+         * this helper runs (for example, the user retried a stale Updates row
+         * after an earlier transaction completed). APT correctly omits such a
+         * no-op from simulation output. Verify that state directly with dpkg
+         * and remove only those already-satisfied items from the mutation set
+         * expected from APT; every still-pending mutation remains fail-closed.
+         */
+        std::vector<std::string> pending_specs;
+        pending_specs.reserve(approved_specs.size());
+        for (const std::string &approved : approved_specs) {
+            bool satisfied = false;
+            std::string state_error;
+            if (!approved_spec_already_satisfied(
+                    approved, satisfied, state_error)) {
+                std::fprintf(stderr, "%s\n", state_error.c_str());
+                return 67;
+            }
+            if (!satisfied) {
+                pending_specs.push_back(approved);
+            }
+        }
+
+        if (pending_specs.empty()) {
+            std::puts("INFILTRATOR_NO_CHANGES_REQUIRED");
+            return 0;
+        }
+
         std::vector<std::string> simulation_arguments = arguments;
         simulation_arguments.insert(simulation_arguments.begin(), "-s");
 
@@ -386,7 +506,7 @@ int main(int argc, char **argv)
 
         std::string validation_error;
         if (!infiltrator::software::helper::validate_apt_simulation(
-                approved_specs, simulation_output, validation_error)) {
+                pending_specs, simulation_output, validation_error)) {
             std::fprintf(stderr, "%s\n", validation_error.c_str());
             return 66;
         }
