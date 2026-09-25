@@ -3407,28 +3407,25 @@ void updates_worker(
         result->error = "Update task state is unavailable.";
     } else {
         EngineClient engine;
+
+        /*
+         * Ordinary inventory reads reconcile authoritative dpkg state against
+         * the already verified repository generation. This is local and fast:
+         * packages that were just installed disappear from Updates without
+         * paying for another network refresh. Explicit/periodic metadata
+         * refreshes still run the complete repository reconciliation.
+         */
         if (data->refresh_metadata) {
             result->refreshed_metadata = true;
             (void)engine.refresh(result->error);
+        } else {
+            (void)engine.refresh_installed(result->error);
         }
 
-        if (result->error.empty() &&
-            !engine.list_updates(
+        if (result->error.empty()) {
+            (void)engine.list_updates(
                 result->records,
-                result->error) &&
-            !data->refresh_metadata) {
-            std::string refresh_error;
-            if (engine.refresh(refresh_error)) {
-                result->refreshed_metadata = true;
-                result->error.clear();
-                (void)engine.list_updates(
-                    result->records,
-                    result->error);
-            } else {
-                result->error =
-                    "Native package-state refresh failed: " +
-                    refresh_error;
-            }
+                result->error);
         }
     }
 
@@ -3500,12 +3497,19 @@ void updates_complete(
             g_get_monotonic_time();
     }
 
+    const bool post_install =
+        state->updates_post_install_refresh;
+    state->updates_post_install_refresh = false;
+
     /*
-     * Present the last coherent native generation first, then reconcile once
-     * per application session.  This keeps first paint independent of network
-     * latency while ensuring the displayed candidate set becomes current.
+     * Present the coherent local generation immediately, then reconcile
+     * repository metadata once per application session. Do not start a second
+     * network refresh immediately after an install: the privileged executor
+     * has already refreshed metadata and the local dpkg reconciliation above
+     * is sufficient to prove which approved versions are now installed.
      */
     const bool schedule_auto_refresh =
+        !post_install &&
         !refreshed_metadata &&
         error.empty() &&
         state->updates_auto_refresh_pending;
@@ -3522,10 +3526,6 @@ void updates_complete(
     }
 
     rebuild_updates(state);
-
-    const bool post_install =
-        state->updates_post_install_refresh;
-    state->updates_post_install_refresh = false;
 
     if (state->updates_status != nullptr) {
         if (!error.empty()) {
@@ -3738,9 +3738,14 @@ void update_process_complete(
             state->updates_post_install_refresh =
                 run->operation == "install";
             /*
-             * Publish fresh native state before dependent views reload.
+             * Re-read authoritative dpkg state first. Repository metadata was
+             * already refreshed by the privileged helper before mutation, so
+             * repeating the full network reconciliation here only delays the
+             * UI and can leave completed packages visible as stale updates.
              */
-            refresh_updates(state, true);
+            refresh_updates(
+                state,
+                run->operation == "refresh");
         } else {
             stop_update_progress(state);
             std::string message =
