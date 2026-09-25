@@ -604,6 +604,20 @@ void check_conflicts(
     }
 }
 
+bool problem_exists(
+    const std::vector<DebianResolutionProblem> &problems,
+    const std::string_view owner,
+    const std::string_view expression)
+{
+    return std::any_of(
+        problems.begin(),
+        problems.end(),
+        [&](const DebianResolutionProblem &problem) {
+            return problem.package == owner &&
+                   problem.expression == expression;
+        });
+}
+
 void validate_final_dependencies(
     const std::unordered_map<std::string, DebianPackageVersion> &selected,
     const std::vector<PackageRecord> &installed,
@@ -629,10 +643,15 @@ void validate_final_dependencies(
                 DebianDependencyResolver::parse(
                     hard_dependencies, parse_error);
             if (!parsed.has_value()) {
-                problems.push_back({
-                    owner,
-                    hard_dependencies,
-                    "Invalid dependency expression: " + parse_error});
+                if (!problem_exists(
+                        problems,
+                        owner,
+                        hard_dependencies)) {
+                    problems.push_back({
+                        owner,
+                        hard_dependencies,
+                        "Invalid dependency expression: " + parse_error});
+                }
                 return;
             }
 
@@ -662,7 +681,9 @@ void validate_final_dependencies(
                     }
                 }
 
-                if (!satisfied) {
+                if (!satisfied &&
+                    !problem_exists(
+                        problems, owner, expression)) {
                     problems.push_back({
                         owner,
                         expression,
