@@ -477,6 +477,33 @@ int main(int argc, char **argv)
         }
 
         /*
+         * A package may already have reached the approved final version before
+         * this helper runs (for example, the user retried a stale Updates row
+         * after an earlier transaction completed). Verify that state directly
+         * with dpkg before doing any network work. If every approved final
+         * state is already true, the transaction is a successful no-op.
+         */
+        std::vector<std::string> pending_specs;
+        pending_specs.reserve(approved_specs.size());
+        for (const std::string &approved : approved_specs) {
+            bool satisfied = false;
+            std::string state_error;
+            if (!approved_spec_already_satisfied(
+                    approved, satisfied, state_error)) {
+                std::fprintf(stderr, "%s\n", state_error.c_str());
+                return 67;
+            }
+            if (!satisfied) {
+                pending_specs.push_back(approved);
+            }
+        }
+
+        if (pending_specs.empty()) {
+            std::puts("INFILTRATOR_NO_CHANGES_REQUIRED");
+            return 0;
+        }
+
+        /*
          * Refresh root-owned metadata only after the user has reviewed the
          * complete plan and PolicyKit has authorized this exact execution.
          * Every planned package mutation is explicit. Installs/upgrades are
@@ -499,34 +526,6 @@ int main(int argc, char **argv)
          * identities and versions. Any added dependency, missing change,
          * architecture drift or removal aborts before system mutation.
          */
-        /*
-         * A package may already have reached the approved final version before
-         * this helper runs (for example, the user retried a stale Updates row
-         * after an earlier transaction completed). APT correctly omits such a
-         * no-op from simulation output. Verify that state directly with dpkg
-         * and remove only those already-satisfied items from the mutation set
-         * expected from APT; every still-pending mutation remains fail-closed.
-         */
-        std::vector<std::string> pending_specs;
-        pending_specs.reserve(approved_specs.size());
-        for (const std::string &approved : approved_specs) {
-            bool satisfied = false;
-            std::string state_error;
-            if (!approved_spec_already_satisfied(
-                    approved, satisfied, state_error)) {
-                std::fprintf(stderr, "%s\n", state_error.c_str());
-                return 67;
-            }
-            if (!satisfied) {
-                pending_specs.push_back(approved);
-            }
-        }
-
-        if (pending_specs.empty()) {
-            std::puts("INFILTRATOR_NO_CHANGES_REQUIRED");
-            return 0;
-        }
-
         std::vector<std::string> simulation_arguments = arguments;
         simulation_arguments.insert(simulation_arguments.begin(), "-s");
 
