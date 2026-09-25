@@ -235,7 +235,11 @@ jobs:
           # exposes dashboard navigation before catalogue detail.
           assert "global_search" in app
           assert '"Search for software, applications, and packages…"' in app
-          assert '"Welcome to Infiltrator Software"' in app
+          assert '"Welcome to "' in app
+          assert '"Infiltrator Software"' in app
+          assert "draw_discover_welcome_art" in app
+          assert "gtk_drawing_area_set_draw_func" in app
+          assert ".welcome-title-accent" in theme
           assert "make_dashboard_card" in app
           assert '"Available Updates"' in app
           assert '"System Health"' in app
