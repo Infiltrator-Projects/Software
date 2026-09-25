@@ -249,6 +249,56 @@ bool read_schema_version(
     return true;
 }
 
+
+class SqliteTransaction final {
+public:
+    explicit SqliteTransaction(sqlite3 *database) noexcept
+        : database_(database)
+    {
+    }
+
+    SqliteTransaction(const SqliteTransaction &) = delete;
+    SqliteTransaction &operator=(const SqliteTransaction &) = delete;
+
+    ~SqliteTransaction()
+    {
+        if (active_ && database_ != nullptr) {
+            sqlite3_exec(
+                database_,
+                "ROLLBACK;",
+                nullptr,
+                nullptr,
+                nullptr);
+        }
+    }
+
+    bool begin(const char *statement, std::string &error)
+    {
+        if (active_ || database_ == nullptr ||
+            !exec_sql(database_, statement, error)) {
+            return false;
+        }
+        active_ = true;
+        return true;
+    }
+
+    bool commit(std::string &error)
+    {
+        if (!active_) {
+            return true;
+        }
+        if (!exec_sql(database_, "COMMIT;", error)) {
+            return false;
+        }
+        active_ = false;
+        return true;
+    }
+
+private:
+    sqlite3 *database_{};
+    bool active_{false};
+};
+
 bool ensure_schema(
     sqlite3 *database,
     std::string &error)
@@ -264,6 +314,11 @@ bool ensure_schema(
         error =
             "Unsupported package-state schema version " +
             std::to_string(version) + ".";
+        return false;
+    }
+
+    SqliteTransaction migration(database);
+    if (!migration.begin("BEGIN IMMEDIATE;", error)) {
         return false;
     }
 
@@ -385,7 +440,7 @@ bool ensure_schema(
         }
     }
 
-    return true;
+    return migration.commit(error);
 }
 
 bool open_ready(
@@ -764,6 +819,11 @@ PackageStateStore::load_current(
         return std::nullopt;
     }
 
+    SqliteTransaction read_transaction(database.handle);
+    if (!read_transaction.begin("BEGIN;", error)) {
+        return std::nullopt;
+    }
+
     PackageStateSnapshot snapshot;
 
     {
@@ -781,6 +841,9 @@ PackageStateStore::load_current(
 
         const int status = sqlite3_step(statement.handle);
         if (status == SQLITE_DONE) {
+            if (!read_transaction.commit(error)) {
+                return std::nullopt;
+            }
             error.clear();
             return std::nullopt;
         }
@@ -941,6 +1004,9 @@ PackageStateStore::load_current(
         }
     }
 
+    if (!read_transaction.commit(error)) {
+        return std::nullopt;
+    }
     error.clear();
     return snapshot;
 }

@@ -16,6 +16,28 @@ std::string_view without_cr(std::string_view value)
     return value;
 }
 
+
+struct StanzaBoundary {
+    std::size_t end{0U};
+    std::size_t next{0U};
+};
+
+StanzaBoundary next_stanza_boundary(
+    const std::string_view content,
+    const std::size_t start)
+{
+    const std::size_t lf = content.find("\n\n", start);
+    const std::size_t crlf = content.find("\r\n\r\n", start);
+    if (crlf != std::string_view::npos &&
+        (lf == std::string_view::npos || crlf < lf)) {
+        return {crlf, crlf + 4U};
+    }
+    if (lf != std::string_view::npos) {
+        return {lf, lf + 2U};
+    }
+    return {content.size(), content.size()};
+}
+
 std::size_t indentation_end(std::string_view line)
 {
     std::size_t index = 0U;
@@ -109,12 +131,14 @@ bool is_deb822_binary_source(std::string_view block)
 } // namespace
 
 bool set_apt_list_entry_enabled(
-    const std::string_view content,
+    std::string_view content,
     const std::size_t line_number,
     const bool enabled,
     std::string &updated,
     std::string &error)
 {
+    const std::string stable_content(content);
+    content = stable_content;
     updated.clear();
     error.clear();
     if (line_number == 0U) {
@@ -182,12 +206,14 @@ bool set_apt_list_entry_enabled(
 }
 
 bool set_apt_deb822_entry_enabled(
-    const std::string_view content,
+    std::string_view content,
     const std::size_t stanza_number,
     const bool enabled,
     std::string &updated,
     std::string &error)
 {
+    const std::string stable_content(content);
+    content = stable_content;
     updated.clear();
     error.clear();
     if (stanza_number == 0U) {
@@ -198,10 +224,9 @@ bool set_apt_deb822_entry_enabled(
     std::size_t start = 0U;
     std::size_t stanza = 0U;
     while (start < content.size()) {
-        std::size_t end = content.find("\n\n", start);
-        if (end == std::string_view::npos) {
-            end = content.size();
-        }
+        const StanzaBoundary boundary =
+            next_stanza_boundary(content, start);
+        const std::size_t end = boundary.end;
         ++stanza;
 
         if (stanza == stanza_number) {
@@ -234,9 +259,13 @@ bool set_apt_deb822_entry_enabled(
                     field_end - field_start,
                     line);
             } else {
+                const std::string_view line_break =
+                    block.find("\r\n") != std::string_view::npos
+                        ? std::string_view{"\r\n"}
+                        : std::string_view{"\n"};
                 if (!replacement.empty() &&
                     replacement.back() != '\n') {
-                    replacement.push_back('\n');
+                    replacement.append(line_break);
                 }
                 replacement +=
                     enabled ? "Enabled: yes" : "Enabled: no";
@@ -250,10 +279,7 @@ bool set_apt_deb822_entry_enabled(
             return true;
         }
 
-        start =
-            end == content.size()
-                ? content.size()
-                : end + 2U;
+        start = boundary.next;
     }
 
     error = "APT source stanza no longer exists.";

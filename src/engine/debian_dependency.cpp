@@ -299,9 +299,13 @@ int source_priority(
 {
     const auto configured =
         policy.source_priorities.find(candidate.source);
-    return configured == policy.source_priorities.end()
-        ? policy.default_source_priority
-        : configured->second;
+    if (configured != policy.source_priorities.end()) {
+        return configured->second;
+    }
+    if (candidate.pin_priority != 0) {
+        return candidate.pin_priority;
+    }
+    return policy.default_source_priority;
 }
 
 bool package_is_held(
@@ -459,7 +463,27 @@ bool selected_satisfies(
     return false;
 }
 
+bool selected_replaces_installed(
+    const std::unordered_map<std::string, DebianPackageVersion> &selected,
+    const PackageRecord &installed)
+{
+    const std::string name = base_package(installed.package_name);
+    for (const auto &entry : selected) {
+        const DebianPackageVersion &candidate = entry.second;
+        if (candidate.package != name) {
+            continue;
+        }
+        if (candidate.architecture == "all" ||
+            installed.architecture.empty() ||
+            candidate.architecture == installed.architecture) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool installed_satisfies(
+    const std::unordered_map<std::string, DebianPackageVersion> &selected,
     const std::vector<PackageRecord> &installed,
     const DebianDependencyAlternative &dependency,
     const std::string_view target_architecture)
@@ -468,8 +492,9 @@ bool installed_satisfies(
         installed.begin(),
         installed.end(),
         [&](const PackageRecord &package) {
-            return installed_matches(
-                package, dependency, target_architecture);
+            return !selected_replaces_installed(selected, package) &&
+                   installed_matches(
+                       package, dependency, target_architecture);
         });
 }
 
@@ -561,7 +586,8 @@ void check_conflicts(
                 }
 
                 for (const PackageRecord &other : installed) {
-                    if (base_package(other.package_name) == owner.package) {
+                    if (base_package(other.package_name) == owner.package ||
+                        selected_replaces_installed(selected, other)) {
                         continue;
                     }
                     if (relation_hits_installed(relation, other)) {
@@ -575,6 +601,86 @@ void check_conflicts(
                 }
             }
         }
+    }
+}
+
+void validate_final_dependencies(
+    const std::unordered_map<std::string, DebianPackageVersion> &selected,
+    const std::vector<PackageRecord> &installed,
+    const std::string_view target_architecture,
+    std::vector<DebianResolutionProblem> &problems)
+{
+    const auto validate =
+        [&](const std::string &owner,
+            const std::string &pre_depends,
+            const std::string &depends) {
+            const std::string hard_dependencies =
+                pre_depends.empty()
+                    ? depends
+                    : depends.empty()
+                        ? pre_depends
+                        : pre_depends + ", " + depends;
+            if (hard_dependencies.empty()) {
+                return;
+            }
+
+            std::string parse_error;
+            const auto parsed =
+                DebianDependencyResolver::parse(
+                    hard_dependencies, parse_error);
+            if (!parsed.has_value()) {
+                problems.push_back({
+                    owner,
+                    hard_dependencies,
+                    "Invalid dependency expression: " + parse_error});
+                return;
+            }
+
+            for (const DebianDependencyGroup &group : parsed->groups) {
+                bool satisfied = false;
+                std::string expression;
+                for (std::size_t index = 0U;
+                     index < group.alternatives.size();
+                     ++index) {
+                    const DebianDependencyAlternative &alternative =
+                        group.alternatives[index];
+                    if (index != 0U) {
+                        expression += " | ";
+                    }
+                    expression += relation_text(alternative);
+
+                    if (selected_satisfies(
+                            selected,
+                            alternative,
+                            target_architecture) ||
+                        installed_satisfies(
+                            selected,
+                            installed,
+                            alternative,
+                            target_architecture)) {
+                        satisfied = true;
+                    }
+                }
+
+                if (!satisfied) {
+                    problems.push_back({
+                        owner,
+                        expression,
+                        "Final transaction state does not satisfy this dependency."});
+                }
+            }
+        };
+
+    for (const auto &entry : selected) {
+        const DebianPackageVersion &package = entry.second;
+        validate(package.package, package.pre_depends, package.depends);
+    }
+
+    for (const PackageRecord &package : installed) {
+        if (selected_replaces_installed(selected, package)) {
+            continue;
+        }
+        validate(package.package_name, package.pre_depends, package.depends);
     }
 }
 
@@ -674,6 +780,7 @@ DebianResolution DebianDependencyResolver::resolve(
                         alternative,
                         target_architecture) ||
                     installed_satisfies(
+                        selected,
                         installed,
                         alternative,
                         target_architecture)) {
@@ -686,6 +793,7 @@ DebianResolution DebianDependencyResolver::resolve(
             }
 
             const DebianPackageVersion *chosen = nullptr;
+            const DebianDependencyAlternative *chosen_requirement = nullptr;
 
             for (const DebianDependencyAlternative &alternative :
                  group.alternatives) {
@@ -699,13 +807,26 @@ DebianResolution DebianDependencyResolver::resolve(
                         available,
                         target_architecture,
                         policy);
-                if (candidate != nullptr) {
-                    chosen = candidate;
-                    break;
+                if (candidate == nullptr) {
+                    continue;
                 }
+
+                const auto existing =
+                    selected.find(selected_key(*candidate));
+                if (existing != selected.end() &&
+                    !direct_candidate_matches(
+                        existing->second, alternative) &&
+                    !candidate_provides(
+                        existing->second, alternative)) {
+                    continue;
+                }
+
+                chosen = candidate;
+                chosen_requirement = &alternative;
+                break;
             }
 
-            if (chosen == nullptr) {
+            if (chosen == nullptr || chosen_requirement == nullptr) {
                 std::string expression;
                 for (std::size_t index = 0U;
                      index < group.alternatives.size();
@@ -726,12 +847,28 @@ DebianResolution DebianDependencyResolver::resolve(
             }
 
             const std::string chosen_key = selected_key(*chosen);
-            if (selected.emplace(chosen_key, *chosen).second) {
+            const auto existing = selected.find(chosen_key);
+            if (existing == selected.end()) {
+                selected.emplace(chosen_key, *chosen);
                 pending.push_back(chosen_key);
+            } else if (
+                !direct_candidate_matches(
+                    existing->second, *chosen_requirement) &&
+                !candidate_provides(
+                    existing->second, *chosen_requirement)) {
+                result.problems.push_back({
+                    owner.package,
+                    relation_text(*chosen_requirement),
+                    "Selected package version cannot satisfy all transaction requirements."});
             }
         }
     }
 
+    validate_final_dependencies(
+        selected,
+        installed,
+        target_architecture,
+        result.problems);
     check_conflicts(selected, installed, result.problems);
 
     result.selected.reserve(selected.size());

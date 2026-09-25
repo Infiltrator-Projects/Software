@@ -17,6 +17,28 @@
 namespace infiltrator::software {
 namespace {
 
+
+struct StanzaBoundary {
+    std::size_t end{0U};
+    std::size_t next{0U};
+};
+
+StanzaBoundary next_stanza_boundary(
+    const std::string_view content,
+    const std::size_t start)
+{
+    const std::size_t lf = content.find("\n\n", start);
+    const std::size_t crlf = content.find("\r\n\r\n", start);
+    if (crlf != std::string_view::npos &&
+        (lf == std::string_view::npos || crlf < lf)) {
+        return {crlf, crlf + 4U};
+    }
+    if (lf != std::string_view::npos) {
+        return {lf, lf + 2U};
+    }
+    return {content.size(), content.size()};
+}
+
 std::string trim(std::string_view value)
 {
     std::size_t first = 0U;
@@ -298,10 +320,9 @@ std::vector<SourceRecord> SourceInventory::parse_apt_deb822(
 
     while (start < content.size()) {
         ++stanza_number;
-        std::size_t end = content.find("\n\n", start);
-        if (end == std::string_view::npos) {
-            end = content.size();
-        }
+        const StanzaBoundary boundary =
+            next_stanza_boundary(content, start);
+        const std::size_t end = boundary.end;
 
         const std::string_view block =
             content.substr(start, end - start);
@@ -340,7 +361,7 @@ std::vector<SourceRecord> SourceInventory::parse_apt_deb822(
             }
         }
 
-        start = end == content.size() ? content.size() : end + 2U;
+        start = boundary.next;
     }
 
     return result;

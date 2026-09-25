@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 #include <unistd.h>
+#include <sqlite3.h>
 
 namespace {
 
@@ -68,6 +69,77 @@ infiltrator::software::DebianPackageVersion available(
     package.size_bytes = 1024U;
     package.installed_size_bytes = 2048U;
     return package;
+}
+
+bool execute_sql(
+    const std::filesystem::path &path,
+    const char *sql)
+{
+    sqlite3 *database = nullptr;
+    if (sqlite3_open(path.c_str(), &database) != SQLITE_OK) {
+        if (database != nullptr) sqlite3_close(database);
+        return false;
+    }
+    char *message = nullptr;
+    const int status =
+        sqlite3_exec(database, sql, nullptr, nullptr, &message);
+    sqlite3_free(message);
+    sqlite3_close(database);
+    return status == SQLITE_OK;
+}
+
+int database_user_version(
+    const std::filesystem::path &path)
+{
+    sqlite3 *database = nullptr;
+    if (sqlite3_open_v2(
+            path.c_str(), &database,
+            SQLITE_OPEN_READONLY, nullptr) != SQLITE_OK) {
+        if (database != nullptr) sqlite3_close(database);
+        return -1;
+    }
+    sqlite3_stmt *statement = nullptr;
+    int version = -1;
+    if (sqlite3_prepare_v2(
+            database, "PRAGMA user_version;", -1,
+            &statement, nullptr) == SQLITE_OK &&
+        sqlite3_step(statement) == SQLITE_ROW) {
+        version = sqlite3_column_int(statement, 0);
+    }
+    sqlite3_finalize(statement);
+    sqlite3_close(database);
+    return version;
+}
+
+bool table_has_column(
+    const std::filesystem::path &path,
+    const std::string &column)
+{
+    sqlite3 *database = nullptr;
+    if (sqlite3_open_v2(
+            path.c_str(), &database,
+            SQLITE_OPEN_READONLY, nullptr) != SQLITE_OK) {
+        if (database != nullptr) sqlite3_close(database);
+        return false;
+    }
+    sqlite3_stmt *statement = nullptr;
+    bool found = false;
+    if (sqlite3_prepare_v2(
+            database,
+            "PRAGMA table_info(available_packages);",
+            -1, &statement, nullptr) == SQLITE_OK) {
+        while (sqlite3_step(statement) == SQLITE_ROW) {
+            const auto *name = sqlite3_column_text(statement, 1);
+            if (name != nullptr &&
+                column == reinterpret_cast<const char *>(name)) {
+                found = true;
+                break;
+            }
+        }
+    }
+    sqlite3_finalize(statement);
+    sqlite3_close(database);
+    return found;
 }
 
 } // namespace
@@ -152,6 +224,50 @@ int main()
     assert(error.empty());
     assert(after_failure->generation == 2U);
     assert(after_failure->source_fingerprint == "fixture-b");
+
+    /*
+     * A failed schema migration must be all-or-nothing. This version-3
+     * fixture already contains the final site column, forcing failure after
+     * earlier ALTER TABLE statements; those earlier changes must roll back.
+     */
+    const std::filesystem::path broken_migration_path =
+        directory / "broken-migration.db";
+    assert(execute_sql(
+        broken_migration_path,
+        "CREATE TABLE available_packages ("
+        " generation_id INTEGER NOT NULL,"
+        " package_name TEXT NOT NULL,"
+        " version TEXT NOT NULL,"
+        " architecture TEXT NOT NULL,"
+        " filename TEXT NOT NULL,"
+        " sha256 TEXT NOT NULL,"
+        " source TEXT NOT NULL,"
+        " priority TEXT NOT NULL,"
+        " pin_priority INTEGER NOT NULL DEFAULT 0,"
+        " site TEXT NOT NULL DEFAULT '',"
+        " multi_arch TEXT NOT NULL,"
+        " depends_text TEXT NOT NULL,"
+        " pre_depends TEXT NOT NULL,"
+        " recommends TEXT NOT NULL,"
+        " provides TEXT NOT NULL,"
+        " conflicts TEXT NOT NULL,"
+        " breaks_text TEXT NOT NULL,"
+        " replaces TEXT NOT NULL,"
+        " description TEXT NOT NULL,"
+        " size_bytes INTEGER NOT NULL,"
+        " installed_size_bytes INTEGER NOT NULL,"
+        " essential INTEGER NOT NULL"
+        ");"
+        "PRAGMA user_version=3;"));
+
+    PackageStateStore broken_store(
+        broken_migration_path.string());
+    error.clear();
+    assert(!broken_store.initialise(error));
+    assert(!error.empty());
+    assert(database_user_version(broken_migration_path) == 3);
+    assert(!table_has_column(
+        broken_migration_path, "policy_provider"));
 
     std::filesystem::remove_all(directory);
     return 0;

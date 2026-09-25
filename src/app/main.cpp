@@ -3458,11 +3458,14 @@ gboolean auto_refresh_updates_idle(gpointer user_data)
 }
 
 void updates_complete(
-    GObject *,
+    GObject *source_object,
     GAsyncResult *async_result,
-    gpointer user_data)
+    gpointer)
 {
-    auto *state = static_cast<WindowState *>(user_data);
+    auto *window = GTK_WINDOW(source_object);
+    auto *state = static_cast<WindowState *>(
+        g_object_get_data(
+            G_OBJECT(window), "infiltrator-window-state"));
     auto *result = static_cast<UpdatesResult *>(
         g_task_propagate_pointer(G_TASK(async_result), nullptr));
 
@@ -3588,6 +3591,15 @@ void updates_complete(
 
     if (post_install) {
         stop_update_progress(state);
+        if (error.empty()) {
+            /*
+             * The native refresh has now published the authoritative
+             * post-transaction generation.  Only now may other pages reload.
+             */
+            refresh_installed(state);
+            refresh_discover(state);
+            refresh_repositories(state);
+        }
     }
 
     if (schedule_auto_refresh &&
@@ -3602,8 +3614,8 @@ void updates_complete(
 
 void refresh_updates(WindowState *state, const bool refresh_metadata)
 {
-    if (state == nullptr || state->updates_list == nullptr ||
-        state->updates_busy) {
+    if (state == nullptr || state->window == nullptr ||
+        state->updates_list == nullptr || state->updates_busy) {
         return;
     }
 
@@ -3636,7 +3648,10 @@ void refresh_updates(WindowState *state, const bool refresh_metadata)
     auto *data = new UpdatesTaskData{
         state->updates_generation, refresh_metadata};
     GTask *task = g_task_new(
-        nullptr, nullptr, updates_complete, state);
+        G_OBJECT(state->window),
+        nullptr,
+        updates_complete,
+        nullptr);
     g_task_set_task_data(
         task, data,
         [](gpointer pointer) {
@@ -3720,12 +3735,12 @@ void update_process_complete(
                         : "Updates installed. Checking system state…");
             }
 
-            refresh_installed(state);
-            refresh_discover(state);
-            refresh_repositories(state);
             state->updates_post_install_refresh =
                 run->operation == "install";
-            refresh_updates(state);
+            /*
+             * Publish fresh native state before dependent views reload.
+             */
+            refresh_updates(state, true);
         } else {
             stop_update_progress(state);
             std::string message =
@@ -3991,11 +4006,14 @@ void update_plan_worker(
 }
 
 void update_plan_complete(
-    GObject *,
+    GObject *source_object,
     GAsyncResult *async_result,
-    gpointer user_data)
+    gpointer)
 {
-    auto *state = static_cast<WindowState *>(user_data);
+    auto *window = GTK_WINDOW(source_object);
+    auto *state = static_cast<WindowState *>(
+        g_object_get_data(
+            G_OBJECT(window), "infiltrator-window-state"));
     auto *result = static_cast<UpdatePlanResult *>(
         g_task_propagate_pointer(G_TASK(async_result), nullptr));
 
@@ -4088,8 +4106,8 @@ void updates_clear_selection_clicked(GtkButton *, gpointer user_data)
 void update_install_clicked(GtkButton *, gpointer user_data)
 {
     auto *state = static_cast<WindowState *>(user_data);
-    if (state == nullptr || state->updates_busy ||
-        state->update_records.empty() ||
+    if (state == nullptr || state->window == nullptr ||
+        state->updates_busy || state->update_records.empty() ||
         state->selected_update_ids.empty()) {
         return;
     }
@@ -4121,7 +4139,10 @@ void update_install_clicked(GtkButton *, gpointer user_data)
     }
 
     GTask *task = g_task_new(
-        nullptr, nullptr, update_plan_complete, state);
+        G_OBJECT(state->window),
+        nullptr,
+        update_plan_complete,
+        nullptr);
     g_task_set_task_data(
         task, data,
         [](gpointer pointer) {
@@ -5434,11 +5455,14 @@ void history_worker(
 }
 
 void history_complete(
-    GObject *,
+    GObject *source_object,
     GAsyncResult *async_result,
-    gpointer user_data)
+    gpointer)
 {
-    auto *state = static_cast<WindowState *>(user_data);
+    auto *window = GTK_WINDOW(source_object);
+    auto *state = static_cast<WindowState *>(
+        g_object_get_data(
+            G_OBJECT(window), "infiltrator-window-state"));
     auto *result = static_cast<HistoryResult *>(
         g_task_propagate_pointer(
             G_TASK(async_result), nullptr));
@@ -5497,9 +5521,8 @@ void history_complete(
 
 void refresh_history(WindowState *state)
 {
-    if (state == nullptr ||
-        state->history_list == nullptr ||
-        state->history_busy) {
+    if (state == nullptr || state->window == nullptr ||
+        state->history_list == nullptr || state->history_busy) {
         return;
     }
 
@@ -5520,7 +5543,10 @@ void refresh_history(WindowState *state)
     auto *data = new HistoryTaskData{
         state->history_generation};
     GTask *task = g_task_new(
-        nullptr, nullptr, history_complete, state);
+        G_OBJECT(state->window),
+        nullptr,
+        history_complete,
+        nullptr);
     g_task_set_task_data(
         task,
         data,

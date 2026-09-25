@@ -6,7 +6,7 @@
 
 Infiltrator Software is the software-management application for the Infiltrator project family. It presents software discovery, installation, removal, updates, system components, repositories, release channels, history and repair as one coherent graphical product.
 
-**Current source version:** 0.3.28  
+**Current source version:** 0.3.29  
 **Language:** C++17 application/core with native GTK4 Linux shell; C11 Common foundation  
 **Shared foundation:** Common 1.19.24  
 **Current package compatibility:** Debian repositories and .deb packages; Flatpak and AppStream catalogue integration  
@@ -44,7 +44,7 @@ The primary navigation contract is:
 - **System** — live kernel, driver and core operating-system inventory with installed/current versions, preferred update state, system-critical counts, repository refresh and a direct hand-off to the unified Updates workflow.
 - **Repositories** — Debian/Infiltrator sources, Flatpak remotes, channels, trust and health, with graphical enable/disable controls for mutable configured sources.
 - **History** — live durable transaction history with completed/failed outcomes, exact before/after versions, requested and dependency-driven changes, source provenance and transaction identifiers.
-- **Repair** — diagnostics and guided recovery for package, repository and interrupted-transaction problems.
+- **Repair** — the graphical recovery surface; diagnostic and guided recovery actions remain the 0.6 implementation milestone rather than being presented as complete.
 
 Advanced technical information remains available through GUI details views with copyable diagnostics; it is not exposed by forcing the user into a shell.
 
@@ -146,7 +146,7 @@ See [UI Design](docs/UI_DESIGN.md).
 
 0.4 replaces the APT process dependency with the native Debian-compatibility engine, introduces shared package state, removes duplicate update scans, makes page loading lazy, and establishes measurable startup/performance requirements. Existing Debian repositories, .deb packages, AppStream and Flatpak support remain.
 
-The first client cutover is now implemented: Installed, ordinary Updates inventory and native update planning use the shared D-Bus engine when a published generation is available, while the panel indicator subscribes to engine state/health changes instead of owning a second resolver. The direct Debian installed-state reader remains a no-process fallback, and explicit repository refresh/update inventory retains the 0.3 compatibility path until native reconciliation publishes complete source state.
+The first client cutover is now implemented: Installed, ordinary Updates inventory and native update planning use the shared D-Bus engine when a published generation is available, while the panel indicator subscribes to engine state/health changes instead of owning a second resolver. The direct Debian installed-state reader remains a no-process fallback when shared state is unavailable; configured-source reconciliation and publication are now owned by the native engine.
 
 Discover install, update and removal workflows are now operational. Install/update resolves a complete native transaction when shared state is available, with the transitional APT planner retained only as a compatibility fallback for those non-removal operations. Removal is native-only: installed dependency/provides/Essential metadata is preserved in the shared generation, reverse dependencies are checked before authorization, and Essential-package removal fails closed. Every operation shows the complete resolved change set before authorization and executes only the exact approved mutations through the constrained privileged helper.
 

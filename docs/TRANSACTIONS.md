@@ -2,7 +2,7 @@
 
 # Transaction contract
 
-Package mutation is a first-class Software capability. The contract is backend-neutral even while the current 0.3 implementation uses APT internally and the 0.4 target uses the native Debian-compatibility engine.
+Package mutation is a first-class Software capability. The contract is backend-neutral. Current Software uses the native Debian-compatibility engine for state, policy, dependency resolution and preflight planning while a constrained APT/dpkg bridge remains only at the privileged payload-execution boundary.
 
 ## Phases
 
@@ -19,7 +19,7 @@ The engine resolves the complete intended change set before asking for privilege
 
 The plan contains exact package identities and versions, installs, upgrades, dependency-driven changes, download bytes, estimated disk delta, repository/source provenance, payload filename and SHA-256, system-critical classification and the state generation used for the calculation.
 
-The native 0.4 planner now produces install and upgrade plans from a coherent state generation. It resolves dependencies before constructing the immutable plan, distinguishes explicit requests from dependency-induced changes, enforces hold and downgrade policy, rejects unresolved conflicts, and computes aggregate download/disk impact. Native removal planning remains intentionally disabled until installed reverse-dependency state is represented, rather than guessing and risking an unsafe removal.
+The native planner produces install, upgrade and removal plans from a coherent state generation. It resolves dependencies before constructing the immutable plan, distinguishes explicit requests from dependency-induced changes, enforces hold and downgrade policy, rejects unresolved conflicts and incompatible final dependency requirements, and computes aggregate download/disk impact. Removal planning uses retained installed dependency/provides/Essential metadata, rejects Essential removal and fails closed when a retained package would lose a hard dependency.
 
 The GUI presents the meaningful consequences before authorization.
 
@@ -27,7 +27,7 @@ The GUI presents the meaningful consequences before authorization.
 
 The privileged executor receives a typed resolved plan, not an arbitrary command line.
 
-During the current compatibility bridge, the GUI serializes every non-removal item from that resolved plan as an exact `package=version` specification for the constrained helper. Discover installs and Updates use the same path. The helper prohibits removal and disables implicit Recommends/Suggests. After administrator authorization it refreshes root-owned repository metadata, then runs the exact intended APT command in simulation mode and compares every resulting install/upgrade against the approved package identity, architecture and version. Execution proceeds only when the simulated transaction matches the approved plan one-for-one; an added dependency, missing approved change, removal, architecture drift or stale/no-op plan aborts before mutation. The legacy `apply` entry point remains upgrade-only for older clients.
+During the current compatibility bridge, the GUI serializes the resolved plan as exact `package=version` specifications, with approved removals explicitly marked, for the constrained helper. Discover installs/removals and Updates use the same reviewed plan contract. After administrator authorization the helper refreshes root-owned repository metadata, then simulates the exact intended APT operation and compares every resulting mutation against the approved package identity, architecture, action and version. Execution proceeds only when the simulated transaction matches the approved plan one-for-one; an added dependency, missing approved change, unapproved removal, architecture drift or stale/no-op plan aborts before mutation. Implicit Recommends/Suggests are disabled. The legacy `apply` entry point remains upgrade-only for older clients.
 
 Every privileged request is tied to a package-state generation. If authoritative state changes enough to invalidate the plan, execution stops and the operation is resolved again.
 
@@ -57,20 +57,18 @@ The executor boundary is intentionally narrow so a future native installer can r
 
 ## Progress
 
-Execution emits structured progress events: phase, package, completed/total work, human status, technical detail and cancellability.
+The current opaque privileged compatibility subprocess cannot provide trustworthy per-package completion events. Software therefore keeps an indeterminate graphical progress indicator and elapsed-time status visible from authorization through metadata refresh, exact-plan revalidation, package application and final state refresh.
 
-The GUI renders these events as graphical progress. Technical output is available under a Details disclosure with Copy support; users are not sent to a terminal.
+Structured phase/package/completed-total/cancellability events remain the contract for the future native payload executor; the documentation does not present them as implemented today.
 
 ## Verification and history
 
-After execution, the unprivileged engine re-reads authoritative installed state and verifies the intended result.
+Before mutation, the privileged compatibility helper re-simulates the exact approved plan against refreshed metadata and refuses any mutation-set drift. After successful execution, the native engine refreshes authoritative installed/repository state and publishes a new generation before Installed and Discover reload. The current bridge verifies coherent final package state and remaining update candidates; item-by-item native postcondition verification belongs to the future native payload executor.
 
-History records transaction identity, start/end time, requested operation, resolved before/after versions, source provenance, outcome, failure detail and recovery/checkpoint linkage where applicable.
+History records transaction identity, start/end time, requested operation, resolved before/after versions, source provenance, outcome and failure detail. Recovery/checkpoint linkage is reserved for the recovery milestone.
 
 ## Recovery
 
-When InfiltratorFS is available, qualifying system transactions may request a pre-change filesystem checkpoint.
+Checkpoint creation, interrupted-transaction diagnosis and guided rollback are the 0.6 recovery milestone; the current Repair page is the graphical surface reserved for that work.
 
-The package engine records checkpoint identity, but rollback is owned by a recovery service rather than package-format code.
-
-An interrupted transaction appears in Repair with an explicit diagnosis and safe graphical recovery actions.
+When implemented, qualifying InfiltratorFS transactions may request a pre-change filesystem checkpoint. Rollback will be owned by a recovery service rather than package-format code, with checkpoint identity linked to History.

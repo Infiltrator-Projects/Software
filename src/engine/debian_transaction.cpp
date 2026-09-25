@@ -52,9 +52,13 @@ int source_priority(
 {
     const auto configured =
         policy.source_priorities.find(candidate.source);
-    return configured == policy.source_priorities.end()
-        ? policy.default_source_priority
-        : configured->second;
+    if (configured != policy.source_priorities.end()) {
+        return configured->second;
+    }
+    if (candidate.pin_priority != 0) {
+        return candidate.pin_priority;
+    }
+    return policy.default_source_priority;
 }
 
 bool architecture_matches(

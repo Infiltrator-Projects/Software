@@ -509,7 +509,7 @@ bool CatalogueSnapshotStore::save(
             path_.c_str(),
             INFILTRATR_ATOMIC_FILE_PRIVATE,
             data,
-            static_cast<std::size_t>(length));
+            static_cast<std::size_t>(length)) == 0;
 
     if (!ok) {
         error =

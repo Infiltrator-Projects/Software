@@ -40,13 +40,13 @@ Readers either see the previous complete generation or the new complete generati
 
 ## Shared engine service
 
-The package engine exposes current snapshot/generation, state-changed events, refresh requests, transaction planning, transaction progress and health/freshness.
+The package engine exposes current snapshot/generation, state-changed events, refresh requests, transaction planning and health/freshness. Structured per-package execution progress is not yet part of the D-Bus contract; the current privileged bridge exposes visible indeterminate activity and elapsed time in the GUI.
 
 Software and the panel indicator are clients.
 
 The initial D-Bus service is now implemented. It exposes `GetStatus`, `ListInstalled`, `ListUpdates`, `PlanTransaction` and `ReloadState` on `net.ssmith.infiltrator.software.Engine`, with `StateChanged` and `HealthChanged` signals. Package-state database reads are read-only and do not require clients to own or mutate the database. The service caches update state per generation so multiple clients consume the same calculation.
 
-The indicator now subscribes to StateChanged and HealthChanged and reads ListUpdates from the same engine generation used by Software. Software's Installed and ordinary Updates paths likewise prefer the service, and engine-backed update transactions use PlanTransaction. During the remaining migration window, a compatibility fallback is retained when no native generation has yet been published; that fallback is removed once the native reconciliation publisher owns configured-source refresh.
+The indicator subscribes to StateChanged and HealthChanged and reads ListUpdates from the same engine generation used by Software. Software's Installed and ordinary Updates paths likewise prefer the service, and engine-backed update transactions use PlanTransaction. Native reconciliation now owns configured-source refresh and generation publication; a compatibility fallback remains only for systems on which no usable native generation is available.
 
 ## Startup
 
@@ -88,7 +88,7 @@ The privileged executor does not accept database rows as implicit authority; it 
 
 The native engine now has a PackageStateStore that publishes installed and repository package state as immutable SQLite generations. Publication uses a single immediate transaction: generation rows, installed records, repository records and the current-generation pointer commit together or not at all. The current and immediately previous generations are retained so readers never need to observe a partially written refresh and a failed publish leaves the previous generation intact.
 
-Schema version 2 retains installed Depends, Pre-Depends, Provides, Priority, Multi-Arch and Essential metadata alongside installed identity/version/size. This relationship state is derived from authoritative dpkg status and is required for native reverse-dependency checks before package removal. Existing version-1 derived databases migrate in place; as derived state they remain rebuildable from authoritative inputs.
+Schema version 4 retains installed Depends, Pre-Depends, Provides, Priority, Multi-Arch and Essential metadata alongside installed identity/version/size, and repository policy/provenance fields used by native candidate selection. Migrations from earlier derived schemas run inside one SQLite transaction; on failure no partial DDL or version change is retained. Current-generation reads also use one read transaction so a client cannot mix rows from different published generations. Derived state remains rebuildable from authoritative inputs.
 
 
 ## Externally installed first-party native builds

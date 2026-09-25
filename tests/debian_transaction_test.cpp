@@ -298,5 +298,30 @@ int main()
     assert(!essential_plan.has_value());
     assert(error.find("Essential") != std::string::npos);
 
+    DebianPackageVersion newer_pinned =
+        available("pinned-app", "2.0", 20U, 200U, "newer");
+    newer_pinned.pin_priority = 100;
+    DebianPackageVersion preferred_pinned =
+        available("pinned-app", "1.0", 10U, 100U, "preferred");
+    preferred_pinned.pin_priority = 700;
+
+    TransactionRequest pinned_install;
+    pinned_install.action = TransactionAction::install;
+    pinned_install.package_ids = {"pinned-app"};
+    DebianCandidatePolicy pinned_policy;
+    error.clear();
+    const auto pinned_plan =
+        DebianTransactionPlanner::plan(
+            pinned_install, {},
+            {newer_pinned, preferred_pinned},
+            "amd64", 14U, "snapshot-14",
+            pinned_policy, error);
+    assert(pinned_plan.has_value());
+    assert(error.empty());
+    const TransactionItem *pinned_item =
+        find_item(*pinned_plan, "pinned-app");
+    assert(pinned_item != nullptr);
+    assert(pinned_item->to_version == "1.0");
+
     return 0;
 }

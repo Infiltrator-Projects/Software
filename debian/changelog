@@ -1,3 +1,19 @@
+infiltrator-software (0.3.29) unstable; urgency=high
+
+  * Complete the forensic functionality, documentation and code-comment audit.
+  * Honour effective Debian pin priority in dependency and transaction-root
+    selection, and reject incompatible final-state dependency requirements.
+  * Make package-state schema migrations atomic and current-generation reads
+    snapshot-consistent.
+  * Make APT source mutation safe for in-place input/output use and keep
+    deb822 LF/CRLF stanza identity consistent between inventory and mutation.
+  * Bind long-running GUI tasks to the owning window lifetime and publish the
+    post-install engine generation before Installed and Discover reload.
+  * Correct the Common atomic-write success convention used by catalogue
+    snapshots and align documentation with implemented progress/recovery scope.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Fri, 25 Sep 2026 14:00:00 +1000
+
 infiltrator-software (0.3.28) unstable; urgency=medium
 
   * Align the sidebar footer with the suite-wide solid divider treatment.

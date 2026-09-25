@@ -117,5 +117,44 @@ int main()
         assert(disabled[1].entry_index == 2U);
     }
 
+    {
+        std::string deb822 =
+            "Types: deb\r\n"
+            "URIs: https://crlf-one.invalid\r\n"
+            "Suites: stable\r\n"
+            "Components: main\r\n"
+            "Enabled: yes\r\n\r\n"
+            "Types: deb\r\n"
+            "URIs: https://crlf-two.invalid\r\n"
+            "Suites: testing\r\n"
+            "Components: main\r\n"
+            "Enabled: yes\r\n";
+
+        auto records =
+            SourceInventory::parse_apt_deb822(
+                deb822,
+                "/etc/apt/sources.list.d/crlf.sources");
+        assert(records.size() == 2U);
+        assert(records[0].entry_index == 1U);
+        assert(records[1].entry_index == 2U);
+
+        std::string error;
+        assert(infiltrator::software::set_apt_deb822_entry_enabled(
+            deb822, records[0].entry_index, false, deb822, error));
+        assert(error.empty());
+        assert(
+            deb822.find(
+                "Enabled: no\r\n\r\nTypes: deb") !=
+            std::string::npos);
+
+        records =
+            SourceInventory::parse_apt_deb822(
+                deb822,
+                "/etc/apt/sources.list.d/crlf.sources");
+        assert(records.size() == 2U);
+        assert(!records[0].enabled);
+        assert(records[1].enabled);
+    }
+
     return 0;
 }

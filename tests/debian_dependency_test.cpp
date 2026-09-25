@@ -153,5 +153,51 @@ int main()
     assert(conflicting.problems.size() == 1U);
     assert(conflicting.problems[0].package == "new-tool");
 
+    DebianPackageVersion pinned_root =
+        package("pinned-root", "1.0");
+    pinned_root.depends = "libpin";
+    DebianPackageVersion newer_pin =
+        package("libpin", "2.0", "newer");
+    newer_pin.pin_priority = 100;
+    DebianPackageVersion preferred_pin =
+        package("libpin", "1.0", "preferred");
+    preferred_pin.pin_priority = 700;
+    const DebianResolution pinned =
+        DebianDependencyResolver::resolve(
+            {pinned_root}, {}, {newer_pin, preferred_pin},
+            "amd64", {});
+    assert(pinned.complete());
+    const auto pinned_choice = std::find_if(
+        pinned.selected.begin(), pinned.selected.end(),
+        [](const DebianPackageVersion &candidate) {
+            return candidate.package == "libpin";
+        });
+    assert(pinned_choice != pinned.selected.end());
+    assert(pinned_choice->version == "1.0");
+
+    DebianPackageVersion requires_one =
+        package("requires-one", "1.0");
+    requires_one.depends = "shared (= 1.0)";
+    DebianPackageVersion requires_two =
+        package("requires-two", "1.0");
+    requires_two.depends = "shared (= 2.0)";
+    const DebianResolution incompatible =
+        DebianDependencyResolver::resolve(
+            {requires_one, requires_two}, {},
+            {package("shared", "1.0"), package("shared", "2.0")},
+            "amd64", {});
+    assert(!incompatible.complete());
+
+    DebianPackageVersion requires_installed =
+        package("requires-installed", "1.0");
+    requires_installed.depends =
+        "shared-replaced (= 1.0)";
+    const DebianResolution replaced_installed =
+        DebianDependencyResolver::resolve(
+            {requires_installed, package("shared-replaced", "2.0")},
+            {installed("shared-replaced", "1.0")},
+            {}, "amd64", {});
+    assert(!replaced_installed.complete());
+
     return 0;
 }
