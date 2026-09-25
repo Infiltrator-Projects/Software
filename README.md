@@ -44,7 +44,7 @@ The primary navigation contract is:
 - **System** — live kernel, driver and core operating-system inventory with installed/current versions, preferred update state, system-critical counts, repository refresh and a direct hand-off to the unified Updates workflow.
 - **Repositories** — Debian/Infiltrator sources, Flatpak remotes, channels, trust and health, with graphical enable/disable controls for mutable configured sources.
 - **History** — live durable transaction history with completed/failed outcomes, exact before/after versions, requested and dependency-driven changes, source provenance and transaction identifiers.
-- **Repair** — the graphical recovery surface; diagnostic and guided recovery actions remain the 0.6 implementation milestone rather than being presented as complete.
+- **Repair** — live package/repository diagnostics, native-state reconciliation, verified repository-state rebuild and constrained completion of interrupted dpkg configuration. Dependency-changing repair plans and filesystem checkpoint rollback remain later recovery work.
 
 Advanced technical information remains available through GUI details views with copyable diagnostics; it is not exposed by forcing the user into a shell.
 
