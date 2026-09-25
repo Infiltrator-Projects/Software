@@ -105,8 +105,10 @@ jobs:
           grep -qx './usr/share/icons/hicolor/scalable/apps/net.ssmith.infiltrator.software.svg' package-files.txt
           grep -qx './usr/share/icons/hicolor/scalable/apps/infiltrator-software.svg' package-files.txt
           grep -qx './usr/share/app-install/icons/infiltrator-software.svg' package-files.txt
-          grep -qx './usr/share/infiltrator-software/artwork/discover-hero.jpg' package-files.txt
           grep -qx './usr/share/metainfo/infiltrator-software.metainfo.xml' package-files.txt
+          rm -rf package-root
+          dpkg-deb -x "$package" package-root
+          strings package-root/usr/bin/infiltrator-software | grep -Fq '/9j/4AAQSkZJRgABAQAAAQABAAD/'
           grep -qx './usr/share/fonts/truetype/infiltrator-software/mb_corpo_a_cond_regular.ttf' package-files.txt
           grep -qx './usr/share/fonts/truetype/infiltrator-software/mb_corpo_s_bold.ttf' package-files.txt
           grep -qx './usr/share/fonts/truetype/infiltrator-software/mb_corpo_s_regular.ttf' package-files.txt
