@@ -911,8 +911,14 @@ GtkWidget *make_featured_card(
         gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
     gtk_widget_add_css_class(
         card, "featured-card");
+    /*
+     * This is a minimum only.  FlowBox expands four homogeneous cards across
+     * the two-thirds Featured column on wide windows, while the small minimum
+     * prevents display scaling from forcing the dashboard wider than the
+     * available content area.
+     */
     gtk_widget_set_size_request(
-        card, 150, 218);
+        card, 112, 218);
 
     GtkWidget *art =
         gtk_overlay_new();
