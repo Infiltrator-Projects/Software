@@ -2495,6 +2495,16 @@ GtkWidget *make_discover_welcome_hero()
         hero, GTK_OVERFLOW_HIDDEN);
 
     /*
+     * The embedded hero is extremely wide and GtkPicture is shrinkable.  GTK
+     * can otherwise measure this branch down to almost zero height inside the
+     * Discover column, which made 0.3.40 render the artwork as a thin blue
+     * line.  Keep the prototype's visible hero canvas as a real layout
+     * invariant rather than relying on the texture's incidental natural size.
+     */
+    gtk_widget_set_size_request(
+        hero, -1, 166);
+
+    /*
      * The approved Discover hero is compiled into the executable as raster
      * image data.  This deliberately avoids a runtime filesystem lookup: the
      * previous package could contain the JPEG while GtkPicture still rendered
@@ -2556,11 +2566,10 @@ GtkWidget *make_discover_welcome_hero()
         picture, true);
 
     /*
-     * Preserve the artwork's authored 1100:140 composition.  A fixed-height
-     * hero caused narrow windows to crop away the left title or right computer.
-     * The aspect frame instead lets the hero become shallower on narrow
-     * windows and naturally reach the prototype's ~166 px height when the
-     * content area is around 1300 px wide.
+     * Preserve the artwork's authored 1100:140 composition inside the visible
+     * 166 px hero canvas.  The aspect frame contains the complete raster, so a
+     * narrow window may letterbox it rather than cropping away either the left
+     * title or the right-hand computer.
      */
     GtkWidget *aspect =
         gtk_aspect_frame_new(
@@ -2572,6 +2581,8 @@ GtkWidget *make_discover_welcome_hero()
         GTK_ASPECT_FRAME(aspect),
         picture);
     gtk_widget_set_hexpand(
+        aspect, true);
+    gtk_widget_set_vexpand(
         aspect, true);
 
     gtk_box_append(

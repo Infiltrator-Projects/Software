@@ -496,7 +496,7 @@ void ThemeController::apply()
         << "listview row:selected label, listview row:selected image { color: "
         << select_fg << "; }"
 
-        << ".discover-welcome { background: #07102d; "
+        << ".discover-welcome { min-height: 166px; background: #07102d; "
         << "border: 1px solid #4f63c9; border-radius: "
         << metrics->card_radius << "px; box-shadow: 0 12px 30px rgba(0,0,0,0.20); }"
         << ".welcome-artwork { background: #07102d; }"

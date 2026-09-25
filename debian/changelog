@@ -1,3 +1,17 @@
+infiltrator-software (0.3.41) unstable; urgency=high
+
+  * Fix the 0.3.40 Discover hero collapsing to a thin line after the raster
+    artwork was embedded successfully.
+  * Give the Discover hero an explicit 166 px minimum canvas so GTK layout
+    cannot discard the artwork's vertical allocation.
+  * Make the GtkAspectFrame expand into that canvas while retaining the
+    authored 1100:140 composition and containing the complete raster without
+    cropping either end.
+  * Mirror the visibility invariant in theme CSS and CI source-contract checks
+    so a future sizing refactor cannot silently reintroduce a zero-height hero.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Fri, 25 Sep 2026 21:20:00 +1000
+
 infiltrator-software (0.3.40) unstable; urgency=high
 
   * Fix the blank Discover hero seen in the installed 0.3.39 build.
