@@ -16,6 +16,7 @@ infiltrator-software (0.3.40) unstable; urgency=high
     executable is the single runtime source of truth for the Discover artwork.
   * Preserve the authored 1100:140 hero composition with GtkAspectFrame so
     narrow windows scale the artwork instead of cropping its title or computer.
+  * Use the standard theme fault colour for the visible artwork-decode fallback.
   * Update the UI vision to document the embedded-raster invariant.
 
  -- Shannon Smith <infiltratr@yandex.com>  Fri, 25 Sep 2026 21:02:00 +1000
