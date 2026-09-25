@@ -2488,28 +2488,20 @@ GtkWidget *make_discover_welcome_hero()
         ;
 
     GtkWidget *hero =
-        gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+        gtk_overlay_new();
     gtk_widget_add_css_class(
         hero, "discover-welcome");
     gtk_widget_set_overflow(
         hero, GTK_OVERFLOW_HIDDEN);
-
-    /*
-     * The embedded hero is extremely wide and GtkPicture is shrinkable.  GTK
-     * can otherwise measure this branch down to almost zero height inside the
-     * Discover column, which made 0.3.40 render the artwork as a thin blue
-     * line.  Keep the prototype's visible hero canvas as a real layout
-     * invariant rather than relying on the texture's incidental natural size.
-     */
     gtk_widget_set_size_request(
         hero, -1, 166);
 
     /*
-     * The approved Discover hero is compiled into the executable as raster
-     * image data.  This deliberately avoids a runtime filesystem lookup: the
-     * previous package could contain the JPEG while GtkPicture still rendered
-     * an empty panel on the installed desktop.  Decoding the embedded bytes
-     * makes the visible artwork part of the program itself.
+     * Keep the raster as scenery only.  The source artwork contains legacy
+     * mock-up lettering and retro-computer props that are not product content;
+     * a deliberately strong art-direction veil suppresses those regions while
+     * retaining the mountain/sky colour and depth underneath.  All visible
+     * hero copy is live GTK text layered above the picture.
      */
     gsize image_size = 0;
     guchar *image_data =
@@ -2528,7 +2520,27 @@ GtkWidget *make_discover_welcome_hero()
             &texture_error);
     g_bytes_unref(image_bytes);
 
-    if (texture == nullptr) {
+    if (texture != nullptr) {
+        GtkWidget *picture =
+            gtk_picture_new_for_paintable(
+                GDK_PAINTABLE(texture));
+        g_object_unref(texture);
+
+        gtk_widget_add_css_class(
+            picture, "welcome-artwork");
+        gtk_picture_set_content_fit(
+            GTK_PICTURE(picture),
+            GTK_CONTENT_FIT_COVER);
+        gtk_picture_set_can_shrink(
+            GTK_PICTURE(picture), true);
+        gtk_widget_set_hexpand(
+            picture, true);
+        gtk_widget_set_vexpand(
+            picture, true);
+        gtk_overlay_set_child(
+            GTK_OVERLAY(hero),
+            picture);
+    } else {
         g_critical(
             "Embedded Discover hero raster failed to decode: %s",
             texture_error != nullptr
@@ -2536,57 +2548,74 @@ GtkWidget *make_discover_welcome_hero()
                 : "unknown image decoder error");
         g_clear_error(&texture_error);
 
-        GtkWidget *error =
-            gtk_label_new(
-                "Discover artwork failed to load");
+        GtkWidget *fallback =
+            gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
         gtk_widget_add_css_class(
-            error, "welcome-artwork-error");
-        gtk_widget_set_size_request(
-            error, -1, 166);
-        gtk_widget_set_valign(
-            error, GTK_ALIGN_CENTER);
-        gtk_box_append(
-            GTK_BOX(hero), error);
-        return hero;
+            fallback, "welcome-artwork-error");
+        gtk_overlay_set_child(
+            GTK_OVERLAY(hero),
+            fallback);
     }
 
-    GtkWidget *picture =
-        gtk_picture_new_for_paintable(
-            GDK_PAINTABLE(texture));
-    g_object_unref(texture);
-
+    GtkWidget *veil =
+        gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
     gtk_widget_add_css_class(
-        picture, "welcome-artwork");
-    gtk_picture_set_content_fit(
-        GTK_PICTURE(picture),
-        GTK_CONTENT_FIT_CONTAIN);
-    gtk_picture_set_can_shrink(
-        GTK_PICTURE(picture), true);
+        veil, "welcome-artwork-veil");
     gtk_widget_set_hexpand(
-        picture, true);
-
-    /*
-     * Preserve the artwork's authored 1100:140 composition inside the visible
-     * 166 px hero canvas.  The aspect frame contains the complete raster, so a
-     * narrow window may letterbox it rather than cropping away either the left
-     * title or the right-hand computer.
-     */
-    GtkWidget *aspect =
-        gtk_aspect_frame_new(
-            0.5F,
-            0.5F,
-            1100.0F / 140.0F,
-            false);
-    gtk_aspect_frame_set_child(
-        GTK_ASPECT_FRAME(aspect),
-        picture);
-    gtk_widget_set_hexpand(
-        aspect, true);
+        veil, true);
     gtk_widget_set_vexpand(
-        aspect, true);
+        veil, true);
+    gtk_widget_set_can_target(
+        veil, false);
+    gtk_overlay_add_overlay(
+        GTK_OVERLAY(hero), veil);
 
-    gtk_box_append(
-        GTK_BOX(hero), aspect);
+    GtkWidget *copy =
+        gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
+    gtk_widget_add_css_class(
+        copy, "welcome-copy");
+    gtk_widget_set_halign(
+        copy, GTK_ALIGN_START);
+    gtk_widget_set_valign(
+        copy, GTK_ALIGN_CENTER);
+    gtk_widget_set_margin_start(
+        copy, 24);
+    gtk_widget_set_margin_end(
+        copy, 24);
+    gtk_widget_set_can_target(
+        copy, false);
+
+    GtkWidget *kicker =
+        make_label(
+            "INFLITRATOR SOFTWARE",
+            "welcome-kicker");
+
+    GtkWidget *heading =
+        gtk_label_new(nullptr);
+    gtk_label_set_xalign(
+        GTK_LABEL(heading), 0.0F);
+    gtk_label_set_markup(
+        GTK_LABEL(heading),
+        "Welcome to <span foreground=\"#d93cff\">Infiltrator</span>"
+        " <span foreground=\"#57a8ff\">Software</span>");
+    gtk_widget_add_css_class(
+        heading, "welcome-title");
+
+    GtkWidget *subtitle =
+        make_label(
+            "Discover, install and keep your system up to date with the latest software.",
+            "welcome-subtitle");
+    gtk_label_set_wrap(
+        GTK_LABEL(subtitle), true);
+    gtk_label_set_max_width_chars(
+        GTK_LABEL(subtitle), 72);
+
+    gtk_box_append(GTK_BOX(copy), kicker);
+    gtk_box_append(GTK_BOX(copy), heading);
+    gtk_box_append(GTK_BOX(copy), subtitle);
+    gtk_overlay_add_overlay(
+        GTK_OVERLAY(hero), copy);
+
     return hero;
 }
 
@@ -8957,21 +8986,42 @@ GtkWidget *make_header_bar(WindowState *state)
     gtk_header_bar_set_show_title_buttons(
         GTK_HEADER_BAR(bar), false);
 
+    /*
+     * The reference shell treats the title bar as part of the product, not as
+     * a generic desktop toolbar: brand at left, a broad centred search field,
+     * product actions next, then compact window controls at the far right.
+     */
     GtkWidget *brand =
-        gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 9);
+        gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
     gtk_widget_add_css_class(
         brand, "titlebar-brand");
 
-    GtkWidget *brand_icon =
-        make_icon(
-            "net.ssmith.infiltrator.software",
-            28);
+    GtkWidget *mark =
+        gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 3);
     gtk_widget_add_css_class(
-        brand_icon, "titlebar-brand-icon");
-    gtk_box_append(GTK_BOX(brand), brand_icon);
+        mark, "titlebar-mark");
+    gtk_widget_set_valign(
+        mark, GTK_ALIGN_CENTER);
+    static constexpr const char *mark_classes[] = {
+        "titlebar-mark-cyan",
+        "titlebar-mark-magenta",
+        "titlebar-mark-orange"
+    };
+    for (const char *css_class : mark_classes) {
+        GtkWidget *bar_mark =
+            gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+        gtk_widget_add_css_class(
+            bar_mark, "titlebar-mark-bar");
+        gtk_widget_add_css_class(
+            bar_mark, css_class);
+        gtk_widget_set_size_request(
+            bar_mark, 9, 31);
+        gtk_box_append(GTK_BOX(mark), bar_mark);
+    }
+    gtk_box_append(GTK_BOX(brand), mark);
 
     GtkWidget *brand_copy =
-        gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+        gtk_box_new(GTK_ORIENTATION_VERTICAL, 1);
     GtkWidget *title =
         make_label(
             "Infiltrator Software",
@@ -8986,6 +9036,13 @@ GtkWidget *make_header_bar(WindowState *state)
     gtk_header_bar_pack_start(
         GTK_HEADER_BAR(bar), brand);
 
+    GtkWidget *search_shell =
+        gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+    gtk_widget_add_css_class(
+        search_shell, "global-search-shell");
+    gtk_widget_set_size_request(
+        search_shell, 610, -1);
+
     state->global_search =
         gtk_search_entry_new();
     gtk_widget_add_css_class(
@@ -8994,70 +9051,33 @@ GtkWidget *make_header_bar(WindowState *state)
     gtk_search_entry_set_placeholder_text(
         GTK_SEARCH_ENTRY(state->global_search),
         "Search for software, applications, and packages…");
-    gtk_widget_set_size_request(
-        state->global_search, 510, -1);
+    gtk_widget_set_hexpand(
+        state->global_search, true);
     g_signal_connect(
         state->global_search,
         "search-changed",
         G_CALLBACK(global_search_changed),
         state);
-    gtk_header_bar_set_title_widget(
-        GTK_HEADER_BAR(bar),
+    gtk_box_append(
+        GTK_BOX(search_shell),
         state->global_search);
 
-    GtkWidget *refresh =
-        gtk_button_new_from_icon_name(
-            "view-refresh-symbolic");
-    gtk_widget_set_tooltip_text(
-        refresh,
-        "Refresh the current page");
-    gtk_widget_add_css_class(
-        refresh, "titlebar-button");
-    g_signal_connect(
-        refresh, "clicked",
-        G_CALLBACK(refresh_clicked), state);
-    gtk_header_bar_pack_end(
-        GTK_HEADER_BAR(bar), refresh);
+    GtkWidget *shortcut =
+        make_label("Ctrl + K", "search-shortcut", 0.5F);
+    gtk_widget_set_valign(
+        shortcut, GTK_ALIGN_CENTER);
+    gtk_box_append(
+        GTK_BOX(search_shell), shortcut);
 
-    state->theme_button =
-        gtk_button_new_from_icon_name(
-            "video-display-symbolic");
-    gtk_widget_add_css_class(
-        state->theme_button,
-        "titlebar-button");
-    gtk_widget_set_tooltip_text(
-        state->theme_button,
-        "Cycle System, Day and Night themes");
-    g_signal_connect(
-        state->theme_button,
-        "clicked",
-        G_CALLBACK(theme_clicked),
-        state);
-    gtk_header_bar_pack_end(
+    gtk_header_bar_set_title_widget(
         GTK_HEADER_BAR(bar),
-        state->theme_button);
+        search_shell);
 
-    GtkWidget *about =
-        gtk_button_new_from_icon_name(
-            "help-about-symbolic");
-    gtk_widget_set_tooltip_text(
-        about, "About Infiltrator Software");
-    gtk_widget_add_css_class(
-        about, "titlebar-button");
-    g_signal_connect(
-        about, "clicked",
-        G_CALLBACK(about_clicked), state);
-    gtk_header_bar_pack_end(
-        GTK_HEADER_BAR(bar), about);
-
-    GtkWidget *separator =
-        gtk_separator_new(
-            GTK_ORIENTATION_VERTICAL);
-    gtk_widget_add_css_class(
-        separator, "titlebar-window-separator");
-    gtk_header_bar_pack_end(
-        GTK_HEADER_BAR(bar), separator);
-
+    /*
+     * GtkHeaderBar lays packed-end children from the outside in.  Add the
+     * native window controls first so they stay at the far right, with product
+     * actions immediately to their left as in the approved reference.
+     */
     GtkWidget *close =
         gtk_button_new_from_icon_name(
             "window-close-symbolic");
@@ -9107,6 +9127,59 @@ GtkWidget *make_header_bar(WindowState *state)
         state);
     gtk_header_bar_pack_end(
         GTK_HEADER_BAR(bar), minimize);
+
+    GtkWidget *separator =
+        gtk_separator_new(
+            GTK_ORIENTATION_VERTICAL);
+    gtk_widget_add_css_class(
+        separator, "titlebar-window-separator");
+    gtk_header_bar_pack_end(
+        GTK_HEADER_BAR(bar), separator);
+
+    GtkWidget *refresh =
+        gtk_button_new_from_icon_name(
+            "view-refresh-symbolic");
+    gtk_widget_set_tooltip_text(
+        refresh,
+        "Refresh the current page");
+    gtk_widget_add_css_class(
+        refresh, "titlebar-button");
+    g_signal_connect(
+        refresh, "clicked",
+        G_CALLBACK(refresh_clicked), state);
+    gtk_header_bar_pack_end(
+        GTK_HEADER_BAR(bar), refresh);
+
+    state->theme_button =
+        gtk_button_new_from_icon_name(
+            "video-display-symbolic");
+    gtk_widget_add_css_class(
+        state->theme_button,
+        "titlebar-button");
+    gtk_widget_set_tooltip_text(
+        state->theme_button,
+        "Cycle System, Day and Night themes");
+    g_signal_connect(
+        state->theme_button,
+        "clicked",
+        G_CALLBACK(theme_clicked),
+        state);
+    gtk_header_bar_pack_end(
+        GTK_HEADER_BAR(bar),
+        state->theme_button);
+
+    GtkWidget *about =
+        gtk_button_new_from_icon_name(
+            "help-about-symbolic");
+    gtk_widget_set_tooltip_text(
+        about, "About Infiltrator Software");
+    gtk_widget_add_css_class(
+        about, "titlebar-button");
+    g_signal_connect(
+        about, "clicked",
+        G_CALLBACK(about_clicked), state);
+    gtk_header_bar_pack_end(
+        GTK_HEADER_BAR(bar), about);
 
     update_theme_button(state);
     update_maximize_button(state);
