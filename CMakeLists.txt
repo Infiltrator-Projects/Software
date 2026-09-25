@@ -254,9 +254,6 @@ install(FILES
     DESTINATION share/icons/hicolor/scalable/status)
 install(FILES ${SOFTWARE_FONT_FILES}
     DESTINATION share/fonts/truetype/infiltrator-software)
-install(FILES
-    data/artwork/discover-hero.jpg
-    DESTINATION share/infiltrator-software/artwork)
 install(FILES LICENSE DESTINATION share/doc/infiltrator-software)
 
 foreach(target IN ITEMS
