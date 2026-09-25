@@ -50,7 +50,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for command_name in appstreamcli cmake ctest dpkg-buildpackage dpkg-deb dbus-run-session gdb git gpgv pkg-config python3 xvfb-run; do
+          for command_name in appstreamcli cmake ctest dpkg-buildpackage dpkg-deb dbus-run-session gdb git glib-compile-resources gpgv pkg-config python3 xvfb-run; do
             command -v "$command_name" >/dev/null 2>&1 || {
               echo "Self-hosted runner is missing $command_name." >&2
               exit 1
@@ -236,17 +236,23 @@ jobs:
           # exposes dashboard navigation before catalogue detail.
           assert "global_search" in app
           assert '"Search for software, applications, and packages…"' in app
-          assert "gtk_picture_new_for_filename" in app
+          assert "gtk_picture_new_for_resource" in app
           assert "GTK_CONTENT_FIT_COVER" in app
-          assert '"discover-hero.jpg"' in app
+          assert '"/net/ssmith/infiltrator/software/artwork/discover-hero.jpg"' in app
+          assert "gtk_picture_new_for_filename" not in app
+          assert "discover_hero_artwork_path" not in app
           assert "draw_discover_welcome_art" not in app
           assert "gtk_drawing_area_set_draw_func" not in app
           assert ".welcome-title-accent" not in theme
+          assert "GLIB_COMPILE_RESOURCES" in cmake
+          assert "infiltrator-software.gresource.xml" in cmake
           assert "data/artwork/discover-hero.jpg" in cmake
           hero_art = Path("data/artwork/discover-hero.jpg")
           assert hero_art.is_file()
           assert hero_art.stat().st_size > 7000
           assert hero_art.read_bytes()[:2].hex() == "ffd8"
+          resource_xml = Path("data/infiltrator-software.gresource.xml").read_text()
+          assert "artwork/discover-hero.jpg" in resource_xml
           assert "make_dashboard_card" in app
           assert '"Available Updates"' in app
           assert '"System Health"' in app
@@ -376,8 +382,12 @@ jobs:
           echo "launch exit status: $status"
           cat launch.out || true
           cat launch.err || true
+          if grep -Fq "Embedded Discover hero resource failed to load" launch.err; then
+            echo "::error::Embedded Discover raster artwork failed to load during the graphical smoke test."
+            exit 1
+          fi
           if [[ "$status" -eq 124 ]]; then
-            echo "Software remained alive for the 20 second smoke window."
+            echo "Software remained alive for the 20 second smoke window with the embedded hero loaded."
             exit 0
           fi
           echo "::error::Software exited unexpectedly during launch smoke test (status $status)."
