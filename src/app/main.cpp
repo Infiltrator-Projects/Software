@@ -2752,10 +2752,19 @@ void discover_install_process_complete(
     const bool success =
         communicated != FALSE &&
         g_subprocess_get_successful(process);
+    const bool no_changes_required =
+        success &&
+        stdout_text != nullptr &&
+        std::string_view(stdout_text).find(
+            "INFILTRATOR_NO_CHANGES_REQUIRED") !=
+            std::string_view::npos;
 
     if (operation != nullptr && !operation->plan.items.empty()) {
         std::string history_message;
-        if (success) {
+        if (no_changes_required) {
+            history_message =
+                "Approved package state was already satisfied; no package changes were required.";
+        } else if (success) {
             history_message = "Transaction completed successfully.";
         } else if (g_subprocess_get_if_exited(process) &&
                    g_subprocess_get_exit_status(process) == 126) {
@@ -2786,11 +2795,13 @@ void discover_install_process_complete(
         if (success) {
             gtk_label_set_text(
                 GTK_LABEL(operation->status),
-                operation->action == TransactionAction::remove
-                    ? "Removal complete. Refreshing software state…"
-                    : operation->action == TransactionAction::upgrade
-                        ? "Update complete. Refreshing software state…"
-                        : "Installation complete. Refreshing software state…");
+                no_changes_required
+                    ? "Package state was already current. Refreshing software state…"
+                    : operation->action == TransactionAction::remove
+                        ? "Removal complete. Refreshing software state…"
+                        : operation->action == TransactionAction::upgrade
+                            ? "Update complete. Refreshing software state…"
+                            : "Installation complete. Refreshing software state…");
         } else {
             std::string message =
                 operation->action == TransactionAction::remove
@@ -3698,6 +3709,12 @@ void update_process_complete(
 
     const bool success =
         communicated && g_subprocess_get_successful(process);
+    const bool no_changes_required =
+        success &&
+        stdout_text != nullptr &&
+        std::string_view(stdout_text).find(
+            "INFILTRATOR_NO_CHANGES_REQUIRED") !=
+            std::string_view::npos;
 
     if (state != nullptr) {
         state->updates_busy = false;
@@ -3706,7 +3723,10 @@ void update_process_complete(
             run->operation == "install" &&
             !run->plan.items.empty()) {
             std::string history_message;
-            if (success) {
+            if (no_changes_required) {
+                history_message =
+                    "Approved package versions were already installed; no package changes were required.";
+            } else if (success) {
                 history_message = "Transaction completed successfully.";
             } else if (g_subprocess_get_if_exited(process) &&
                        g_subprocess_get_exit_status(process) == 126) {
@@ -3732,7 +3752,9 @@ void update_process_complete(
                     GTK_LABEL(state->updates_status),
                     run->operation == "refresh"
                         ? "Package lists refreshed. Checking updates…"
-                        : "Updates installed. Checking system state…");
+                        : no_changes_required
+                            ? "Selected updates were already installed. Checking current package state…"
+                            : "Updates installed. Checking system state…");
             }
 
             state->updates_post_install_refresh =
