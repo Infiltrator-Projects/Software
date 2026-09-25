@@ -13,6 +13,8 @@ infiltrator-software (0.3.42) unstable; urgency=high
     and minimise/maximise/close remain at the far right.
   * Add CI source-contract checks for the live hero overlay and title-bar
     composition so the shell cannot silently regress to the generic layout.
+  * Correct the visual source-contract test to validate the new overlay/cover
+    implementation instead of the removed GtkAspectFrame implementation.
 
  -- Shannon Smith <infiltratr@yandex.com>  Fri, 25 Sep 2026 21:55:00 +1000
 
