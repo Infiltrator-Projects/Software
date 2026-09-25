@@ -1,3 +1,23 @@
+infiltrator-software (0.3.37) unstable; urgency=high
+
+  * Fix the main-window sizing regression exposed by the growing Discover
+    dashboard: keep the application explicitly resizable and remove the
+    artificial widget minimum-size request from the top-level window.
+  * Replace compositor-generated title buttons with explicit native minimise,
+    maximise/restore and close controls wired directly to GtkWindow.
+  * Keep the maximise icon synchronized when the window manager changes
+    maximised state externally.
+  * Add a real non-overlay vertical page scrollbar to Discover so the complete
+    dashboard, search controls and catalogue remain reachable at normal window
+    sizes.
+  * Keep the virtualized application catalogue in its own bounded scroller so
+    thousands of packages remain efficient while the surrounding page can
+    scroll normally.
+  * Give the page scrollbar a visible target-sized trough and thumb and extend
+    CI contracts to prevent the window/scroll usability regression returning.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Fri, 25 Sep 2026 19:31:00 +1000
+
 infiltrator-software (0.3.36) unstable; urgency=high
 
   * Continue the visual convergence toward the approved Software target.
