@@ -68,6 +68,8 @@ The first pass should move the existing GTK UI toward this target without discar
 
 ## Convergence progress
 
-The implementation now has the branded navigation shell, graphical page heroes, richer application cards, category shortcuts, grouped update cards and a stateful Repair health centre. The next convergence layer adds a dynamic Discover spotlight driven by the actual filtered catalogue, a visual at-a-glance column and a distinct Explore Software section so the landing page reads as a software centre before it reads as a package inventory.
+The implementation now has the branded navigation shell, graphical page heroes, richer application cards, category shortcuts, grouped update cards, a stateful Repair health centre and a dynamic Discover spotlight driven by the actual filtered catalogue.
+
+The next convergence layer moves identity and search into the application chrome, removes duplicate branding from the sidebar, adds a Welcome surface plus direct graphical dashboard cards for Updates, System Health and Repositories, and tightens contrast where the live implementation remained visually flatter than the target. This makes the top half of Discover read as a product dashboard rather than a decorated catalogue.
 
 Behavioural package-management code is not to be rewritten merely to achieve the visual redesign. The UI can evolve iteratively over the existing tested engine.
