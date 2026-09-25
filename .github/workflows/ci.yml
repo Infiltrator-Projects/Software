@@ -260,6 +260,22 @@ jobs:
           assert "button.sidebar-settings" in theme
           assert "#2f67ff" in theme
 
+          # Sixth visual pass: Discover now follows the target's dashboard
+          # composition with featured cards, a right rail and health banner.
+          assert "discover_featured_flow" in app
+          assert "make_featured_card" in app
+          assert '"Featured Applications"' in app
+          assert "discover_update_preview" in app
+          assert "discover_repository_preview" in app
+          assert "discover_activity_preview" in app
+          assert '"Repository Status"' in app
+          assert '"Recent Activity"' in app
+          assert '"Keep your system healthy"' in app
+          assert ".featured-card" in theme
+          assert ".preview-row" in theme
+          assert "button.health-banner" in theme
+          assert ".discover-main-dashboard" in theme
+
           # The footer must report the exact pinned Common header version,
           # never a stale hand-written version string.
           assert "INFILTRATR_COMMON_VERSION" in app
