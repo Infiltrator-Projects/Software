@@ -202,7 +202,8 @@ jobs:
 
           # The graphical redesign target is a checked-in product contract.
           assert "hero-panel" in app
-          assert "sidebar-brand" in app
+          assert "titlebar-brand" in app
+          assert "sidebar-brand" not in app
           assert "discover-icon-well" in app
           assert "history-transaction-card" in app
           assert "repair-action-panel" in app
