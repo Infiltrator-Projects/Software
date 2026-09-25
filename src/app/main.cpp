@@ -56,6 +56,7 @@ struct WindowState {
     GtkStack *stack{};
     ThemeController theme;
     GtkWidget *theme_button{};
+    GtkWidget *maximize_button{};
     GtkWidget *global_search{};
     GtkStringList *installed_strings{};
     GtkWidget *installed_status{};
@@ -2984,17 +2985,40 @@ GtkWidget *make_discover_page(WindowState *state)
     gtk_widget_add_css_class(grid, "discover-grid");
 
     GtkWidget *scroll = gtk_scrolled_window_new();
-    gtk_widget_set_vexpand(scroll, true);
+    gtk_widget_set_size_request(
+        scroll, -1, 520);
     gtk_scrolled_window_set_policy(
         GTK_SCROLLED_WINDOW(scroll),
         GTK_POLICY_NEVER,
         GTK_POLICY_AUTOMATIC);
+    gtk_scrolled_window_set_overlay_scrolling(
+        GTK_SCROLLED_WINDOW(scroll),
+        false);
     gtk_scrolled_window_set_child(
         GTK_SCROLLED_WINDOW(scroll),
         grid);
     gtk_box_append(GTK_BOX(page), scroll);
 
-    return page;
+    GtkWidget *page_scroll =
+        gtk_scrolled_window_new();
+    gtk_widget_add_css_class(
+        page_scroll, "page-scroller");
+    gtk_widget_set_hexpand(
+        page_scroll, true);
+    gtk_widget_set_vexpand(
+        page_scroll, true);
+    gtk_scrolled_window_set_policy(
+        GTK_SCROLLED_WINDOW(page_scroll),
+        GTK_POLICY_NEVER,
+        GTK_POLICY_ALWAYS);
+    gtk_scrolled_window_set_overlay_scrolling(
+        GTK_SCROLLED_WINDOW(page_scroll),
+        false);
+    gtk_scrolled_window_set_child(
+        GTK_SCROLLED_WINDOW(page_scroll),
+        page);
+
+    return page_scroll;
 }
 
 void list_item_setup(GtkSignalListItemFactory *, GtkListItem *item, gpointer)
@@ -8805,13 +8829,91 @@ void about_clicked(GtkButton *, gpointer user_data)
     gtk_window_present(GTK_WINDOW(dialog));
 }
 
+
+void update_maximize_button(WindowState *state)
+{
+    if (state == nullptr ||
+        state->window == nullptr ||
+        state->maximize_button == nullptr) {
+        return;
+    }
+
+    const bool maximized =
+        gtk_window_is_maximized(state->window);
+    gtk_button_set_icon_name(
+        GTK_BUTTON(state->maximize_button),
+        maximized
+            ? "window-restore-symbolic"
+            : "window-maximize-symbolic");
+    gtk_widget_set_tooltip_text(
+        state->maximize_button,
+        maximized
+            ? "Restore window"
+            : "Maximize window");
+}
+
+void window_maximized_changed(
+    GObject *,
+    GParamSpec *,
+    gpointer user_data)
+{
+    update_maximize_button(
+        static_cast<WindowState *>(user_data));
+}
+
+void minimize_clicked(
+    GtkButton *,
+    gpointer user_data)
+{
+    auto *state =
+        static_cast<WindowState *>(user_data);
+    if (state != nullptr &&
+        state->window != nullptr) {
+        gtk_window_minimize(state->window);
+    }
+}
+
+void maximize_clicked(
+    GtkButton *,
+    gpointer user_data)
+{
+    auto *state =
+        static_cast<WindowState *>(user_data);
+    if (state == nullptr ||
+        state->window == nullptr) {
+        return;
+    }
+
+    if (gtk_window_is_maximized(
+            state->window)) {
+        gtk_window_unmaximize(
+            state->window);
+    } else {
+        gtk_window_maximize(
+            state->window);
+    }
+    update_maximize_button(state);
+}
+
+void close_clicked(
+    GtkButton *,
+    gpointer user_data)
+{
+    auto *state =
+        static_cast<WindowState *>(user_data);
+    if (state != nullptr &&
+        state->window != nullptr) {
+        gtk_window_close(state->window);
+    }
+}
+
 GtkWidget *make_header_bar(WindowState *state)
 {
     GtkWidget *bar = gtk_header_bar_new();
     gtk_widget_add_css_class(
         bar, "infiltrator-titlebar");
     gtk_header_bar_set_show_title_buttons(
-        GTK_HEADER_BAR(bar), true);
+        GTK_HEADER_BAR(bar), false);
 
     GtkWidget *brand =
         gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 9);
@@ -8906,7 +9008,66 @@ GtkWidget *make_header_bar(WindowState *state)
     gtk_header_bar_pack_end(
         GTK_HEADER_BAR(bar), about);
 
+    GtkWidget *separator =
+        gtk_separator_new(
+            GTK_ORIENTATION_VERTICAL);
+    gtk_widget_add_css_class(
+        separator, "titlebar-window-separator");
+    gtk_header_bar_pack_end(
+        GTK_HEADER_BAR(bar), separator);
+
+    GtkWidget *close =
+        gtk_button_new_from_icon_name(
+            "window-close-symbolic");
+    gtk_widget_add_css_class(
+        close, "window-control");
+    gtk_widget_add_css_class(
+        close, "window-close-control");
+    gtk_widget_set_tooltip_text(
+        close, "Close");
+    g_signal_connect(
+        close,
+        "clicked",
+        G_CALLBACK(close_clicked),
+        state);
+    gtk_header_bar_pack_end(
+        GTK_HEADER_BAR(bar), close);
+
+    state->maximize_button =
+        gtk_button_new_from_icon_name(
+            "window-maximize-symbolic");
+    gtk_widget_add_css_class(
+        state->maximize_button,
+        "window-control");
+    gtk_widget_set_tooltip_text(
+        state->maximize_button,
+        "Maximize window");
+    g_signal_connect(
+        state->maximize_button,
+        "clicked",
+        G_CALLBACK(maximize_clicked),
+        state);
+    gtk_header_bar_pack_end(
+        GTK_HEADER_BAR(bar),
+        state->maximize_button);
+
+    GtkWidget *minimize =
+        gtk_button_new_from_icon_name(
+            "window-minimize-symbolic");
+    gtk_widget_add_css_class(
+        minimize, "window-control");
+    gtk_widget_set_tooltip_text(
+        minimize, "Minimize");
+    g_signal_connect(
+        minimize,
+        "clicked",
+        G_CALLBACK(minimize_clicked),
+        state);
+    gtk_header_bar_pack_end(
+        GTK_HEADER_BAR(bar), minimize);
+
     update_theme_button(state);
+    update_maximize_button(state);
     return bar;
 }
 
@@ -9035,10 +9196,15 @@ void activate(GtkApplication *application, gpointer)
     gtk_window_set_title(GTK_WINDOW(window), "Infiltrator Software");
     gtk_window_set_icon_name(GTK_WINDOW(window), "net.ssmith.infiltrator.software");
     gtk_window_set_default_size(GTK_WINDOW(window), 1440, 860);
-    gtk_widget_set_size_request(window, 1080, 680);
+    gtk_window_set_resizable(GTK_WINDOW(window), true);
 
     auto *state = new WindowState{};
     state->window = GTK_WINDOW(window);
+    g_signal_connect(
+        window,
+        "notify::maximized",
+        G_CALLBACK(window_maximized_changed),
+        state);
     state->theme.initialise();
     ensure_update_indicator();
 
