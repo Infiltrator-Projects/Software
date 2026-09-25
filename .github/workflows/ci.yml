@@ -276,6 +276,20 @@ jobs:
           assert "button.health-banner" in theme
           assert ".discover-main-dashboard" in theme
 
+          # Window usability: explicit native controls and a real page
+          # scrollbar must remain functional as the dashboard grows.
+          assert "gtk_window_set_resizable(GTK_WINDOW(window), true)" in app
+          assert "gtk_header_bar_set_show_title_buttons" in app
+          assert "G_CALLBACK(maximize_clicked)" in app
+          assert "gtk_window_maximize" in app
+          assert "gtk_window_unmaximize" in app
+          assert "gtk_window_minimize" in app
+          assert "gtk_window_close" in app
+          assert '"page-scroller"' in app
+          assert "GTK_POLICY_ALWAYS" in app
+          assert "gtk_scrolled_window_set_overlay_scrolling" in app
+          assert ".page-scroller scrollbar slider" in theme
+
           # The footer must report the exact pinned Common header version,
           # never a stale hand-written version string.
           assert "INFILTRATR_COMMON_VERSION" in app
