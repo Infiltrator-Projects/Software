@@ -72,4 +72,6 @@ The implementation now has the branded navigation shell, graphical page heroes, 
 
 The next convergence layer moves identity and search into the application chrome, removes duplicate branding from the sidebar, adds a Welcome surface plus direct graphical dashboard cards for Updates, System Health and Repositories, and tightens contrast where the live implementation remained visually flatter than the target. This makes the top half of Discover read as a product dashboard rather than a decorated catalogue.
 
+The fifth convergence layer concentrates on the sidebar itself: icon shapes and colours now follow the target more closely, the selected item becomes a vivid blue-violet surface, the administrative NAVIGATE label and chevrons are removed, Updates gains a real red count badge, and Settings becomes a proper bottom preferences card instead of technical backend/version text.
+
 Behavioural package-management code is not to be rewritten merely to achieve the visual redesign. The UI can evolve iteratively over the existing tested engine.
