@@ -500,7 +500,7 @@ void ThemeController::apply()
         << "border: 1px solid #4f63c9; border-radius: "
         << metrics->card_radius << "px; box-shadow: 0 12px 30px rgba(0,0,0,0.20); }"
         << ".welcome-artwork { background: #07102d; }"
-        << ".welcome-artwork-error { min-height: 110px; color: " << danger
+        << ".welcome-artwork-error { min-height: 110px; color: " << fault
         << "; background: #07102d; font-weight: " << typography->ui_bold_weight << "; }"
         << ".discover-dashboard { margin-top: 1px; margin-bottom: 1px; }"
         << "button.dashboard-card { min-height: 88px; padding: 12px 14px; "
