@@ -10,7 +10,10 @@ permissions:
   contents: read
 
 concurrency:
-  group: verify-${{ github.repository }}-${{ github.ref_name }}
+  # Development verification prefers the local runner, while release commits
+  # deliberately use GitHub-hosted Ubuntu. Keep those queues independent so
+  # an offline/busy self-hosted runner can never strand a release verification.
+  group: verify-${{ github.repository }}-${{ github.ref_name }}-${{ startsWith(github.event.head_commit.message, 'Release ') && 'release' || 'development' }}
   cancel-in-progress: true
 
 jobs:
