@@ -172,24 +172,74 @@ GtkWidget *make_label(
     return label;
 }
 
+const char *stat_icon_name(const char *caption) noexcept
+{
+    if (caption == nullptr) {
+        return "emblem-system-symbolic";
+    }
+    if (std::strstr(caption, "APPLICATION") != nullptr) {
+        return "view-grid-symbolic";
+    }
+    if (std::strstr(caption, "SOURCE") != nullptr ||
+        std::strstr(caption, "REPOSITOR") != nullptr) {
+        return "network-workgroup-symbolic";
+    }
+    if (std::strstr(caption, "AVAILABLE") != nullptr ||
+        std::strstr(caption, "UPDATE") != nullptr) {
+        return "software-update-available-symbolic";
+    }
+    if (std::strstr(caption, "CRITICAL") != nullptr ||
+        std::strstr(caption, "ISSUE") != nullptr) {
+        return "dialog-warning-symbolic";
+    }
+    if (std::strstr(caption, "TRANSACTION") != nullptr ||
+        std::strstr(caption, "HISTORY") != nullptr) {
+        return "document-open-recent-symbolic";
+    }
+    if (std::strstr(caption, "DETAIL") != nullptr) {
+        return "document-properties-symbolic";
+    }
+    if (std::strstr(caption, "BACKEND") != nullptr) {
+        return "drive-harddisk-symbolic";
+    }
+    if (std::strstr(caption, "PACKAGE") != nullptr ||
+        std::strstr(caption, "COMPONENT") != nullptr) {
+        return "application-x-executable-symbolic";
+    }
+    return "emblem-ok-symbolic";
+}
+
 GtkWidget *make_stat_card(
     const char *caption,
     const char *value,
     const char *semantic_class,
     GtkWidget **value_out = nullptr)
 {
-    GtkWidget *card = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
+    GtkWidget *card = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
     gtk_widget_add_css_class(card, "stat-card");
     if (semantic_class != nullptr) {
         gtk_widget_add_css_class(card, semantic_class);
     }
 
+    GtkWidget *icon_well =
+        gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    gtk_widget_add_css_class(icon_well, "stat-icon-well");
+    GtkWidget *icon = make_icon(stat_icon_name(caption), 22);
+    gtk_widget_set_halign(icon, GTK_ALIGN_CENTER);
+    gtk_widget_set_valign(icon, GTK_ALIGN_CENTER);
+    gtk_box_append(GTK_BOX(icon_well), icon);
+    gtk_box_append(GTK_BOX(card), icon_well);
+
+    GtkWidget *copy = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
+    gtk_widget_set_hexpand(copy, true);
+
     GtkWidget *caption_label = make_label(caption, "stat-caption");
-    gtk_box_append(GTK_BOX(card), caption_label);
+    gtk_box_append(GTK_BOX(copy), caption_label);
 
     GtkWidget *value_label = make_label(value, "stat-value");
     gtk_label_set_ellipsize(GTK_LABEL(value_label), PANGO_ELLIPSIZE_END);
-    gtk_box_append(GTK_BOX(card), value_label);
+    gtk_box_append(GTK_BOX(copy), value_label);
+    gtk_box_append(GTK_BOX(card), copy);
 
     if (value_out != nullptr) {
         *value_out = value_label;
@@ -200,24 +250,47 @@ GtkWidget *make_stat_card(
 GtkWidget *make_page_intro(
     const char *icon_name, const char *title, const char *subtitle)
 {
-    GtkWidget *hero = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 14);
+    GtkWidget *hero = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 18);
     gtk_widget_add_css_class(hero, "page-hero");
+    gtk_widget_add_css_class(hero, "hero-panel");
 
     GtkWidget *icon_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
     gtk_widget_add_css_class(icon_box, "page-icon");
-    GtkWidget *icon = make_icon(icon_name, 28);
+    gtk_widget_set_size_request(icon_box, 60, 60);
+    GtkWidget *icon = make_icon(icon_name, 32);
     gtk_widget_set_halign(icon, GTK_ALIGN_CENTER);
     gtk_widget_set_valign(icon, GTK_ALIGN_CENTER);
     gtk_box_append(GTK_BOX(icon_box), icon);
     gtk_box_append(GTK_BOX(hero), icon_box);
 
-    GtkWidget *identity = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
+    GtkWidget *identity = gtk_box_new(GTK_ORIENTATION_VERTICAL, 3);
+    gtk_widget_set_hexpand(identity, true);
+    GtkWidget *kicker = make_label("INFLITRATOR SOFTWARE", "hero-kicker");
     GtkWidget *heading = make_label(title, "hero-title");
     GtkWidget *copy = make_label(subtitle, "hero-subtitle");
     gtk_label_set_wrap(GTK_LABEL(copy), true);
+    gtk_label_set_max_width_chars(GTK_LABEL(copy), 72);
+    gtk_box_append(GTK_BOX(identity), kicker);
     gtk_box_append(GTK_BOX(identity), heading);
     gtk_box_append(GTK_BOX(identity), copy);
     gtk_box_append(GTK_BOX(hero), identity);
+
+    GtkWidget *ribbons = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
+    gtk_widget_add_css_class(ribbons, "hero-ribbons");
+    gtk_widget_set_halign(ribbons, GTK_ALIGN_END);
+    gtk_widget_set_valign(ribbons, GTK_ALIGN_FILL);
+    static constexpr const char *classes[] = {
+        "hero-ribbon-a", "hero-ribbon-b", "hero-ribbon-c"
+    };
+    for (const char *css_class : classes) {
+        GtkWidget *ribbon =
+            gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+        gtk_widget_add_css_class(ribbon, "hero-ribbon");
+        gtk_widget_add_css_class(ribbon, css_class);
+        gtk_widget_set_size_request(ribbon, 12, 52);
+        gtk_box_append(GTK_BOX(ribbons), ribbon);
+    }
+    gtk_box_append(GTK_BOX(hero), ribbons);
 
     return hero;
 }
@@ -636,27 +709,44 @@ void discover_details_clicked(GtkButton *button, gpointer user_data)
 GtkWidget *make_discover_card(
     WindowState *state, const PackageRecord &record)
 {
-    GtkWidget *card = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
+    GtkWidget *card = gtk_box_new(GTK_ORIENTATION_VERTICAL, 12);
     gtk_widget_add_css_class(card, "discover-card");
-    gtk_widget_set_size_request(card, 290, 210);
+    gtk_widget_set_size_request(card, 310, 246);
 
-    GtkWidget *header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
-    gtk_box_append(GTK_BOX(header), catalogue_icon(record, 52));
+    GtkWidget *header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 13);
 
-    GtkWidget *identity = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
+    GtkWidget *icon_well =
+        gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    gtk_widget_add_css_class(icon_well, "discover-icon-well");
+    gtk_widget_set_size_request(icon_well, 74, 74);
+    GtkWidget *app_icon = catalogue_icon(record, 58);
+    gtk_widget_set_halign(app_icon, GTK_ALIGN_CENTER);
+    gtk_widget_set_valign(app_icon, GTK_ALIGN_CENTER);
+    gtk_box_append(GTK_BOX(icon_well), app_icon);
+    gtk_box_append(GTK_BOX(header), icon_well);
+
+    GtkWidget *identity = gtk_box_new(GTK_ORIENTATION_VERTICAL, 3);
     gtk_widget_set_hexpand(identity, true);
     GtkWidget *name = make_label(record.name.c_str(), "discover-name");
+    gtk_label_set_ellipsize(GTK_LABEL(name), PANGO_ELLIPSIZE_END);
     std::string meta_text = record.category;
     if (!record.available_version.empty()) {
         meta_text += "  •  " + record.available_version;
     }
-    if (!record.source.empty()) {
-        meta_text += "  •  " + record.source;
-    }
     GtkWidget *meta = make_label(
         meta_text.c_str(), "discover-meta");
+    gtk_label_set_ellipsize(GTK_LABEL(meta), PANGO_ELLIPSIZE_END);
     gtk_box_append(GTK_BOX(identity), name);
     gtk_box_append(GTK_BOX(identity), meta);
+
+    if (!record.source.empty()) {
+        GtkWidget *source =
+            make_label(record.source.c_str(), "discover-source-chip");
+        gtk_label_set_ellipsize(
+            GTK_LABEL(source), PANGO_ELLIPSIZE_END);
+        gtk_box_append(GTK_BOX(identity), source);
+    }
+
     gtk_box_append(GTK_BOX(header), identity);
     gtk_box_append(GTK_BOX(card), header);
 
@@ -677,6 +767,11 @@ GtkWidget *make_discover_card(
                 : "Installed " + record.installed_version;
         state_label =
             make_label(installed.c_str(), "state-installed");
+    } else if (
+        record.state ==
+        infiltrator::software::InstallState::upgradable) {
+        state_label =
+            make_label("Update available", "state-available");
     } else {
         state_label = make_label("Available", "state-available");
     }
@@ -694,8 +789,31 @@ GtkWidget *make_discover_card(
         details, "clicked",
         G_CALLBACK(discover_details_clicked), state);
     gtk_box_append(GTK_BOX(footer), details);
-    gtk_box_append(GTK_BOX(card), footer);
 
+    if (!record.package_name.empty()) {
+        const bool installed =
+            record.state ==
+            infiltrator::software::InstallState::installed;
+        const bool upgradable =
+            record.state ==
+            infiltrator::software::InstallState::upgradable;
+        GtkWidget *action = gtk_button_new_with_label(
+            installed ? "Remove" : (upgradable ? "Update" : "Install"));
+        gtk_widget_add_css_class(
+            action,
+            installed ? "destructive-action" : "suggested-action");
+        g_object_set_data_full(
+            G_OBJECT(action),
+            "discover-install-record",
+            new PackageRecord(record),
+            package_record_destroy);
+        g_signal_connect(
+            action, "clicked",
+            G_CALLBACK(discover_install_clicked), state);
+        gtk_box_append(GTK_BOX(footer), action);
+    }
+
+    gtk_box_append(GTK_BOX(card), footer);
     return card;
 }
 
@@ -4197,6 +4315,16 @@ GtkWidget *make_updates_page(WindowState *state)
     GtkWidget *controls =
         gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
     gtk_widget_add_css_class(controls, "card");
+    gtk_widget_add_css_class(controls, "updates-action-bar");
+
+    GtkWidget *updates_status_icon =
+        make_icon("view-refresh-symbolic", 24);
+    gtk_widget_add_css_class(
+        updates_status_icon, "updates-status-icon");
+    gtk_widget_set_valign(
+        updates_status_icon, GTK_ALIGN_CENTER);
+    gtk_box_append(
+        GTK_BOX(controls), updates_status_icon);
 
     state->updates_status =
         make_label("Checking for updates…", "card-copy");
@@ -4213,7 +4341,7 @@ GtkWidget *make_updates_page(WindowState *state)
     gtk_box_append(GTK_BOX(controls), select_all);
 
     GtkWidget *clear_selection =
-        gtk_button_new_with_label("Clear");
+        gtk_button_new_with_label("Clear selection");
     gtk_widget_add_css_class(clear_selection, "discover-details");
     g_signal_connect(
         clear_selection, "clicked",
@@ -4221,7 +4349,7 @@ GtkWidget *make_updates_page(WindowState *state)
     gtk_box_append(GTK_BOX(controls), clear_selection);
 
     state->updates_refresh =
-        gtk_button_new_with_label("Refresh package lists");
+        gtk_button_new_with_label("Check again");
     gtk_widget_add_css_class(
         state->updates_refresh, "discover-details");
     g_signal_connect(
@@ -5276,12 +5404,32 @@ GtkWidget *make_history_transaction_card(
     GtkWidget *card =
         gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
     gtk_widget_add_css_class(card, "card");
+    gtk_widget_add_css_class(card, "history-transaction-card");
     gtk_widget_add_css_class(
         card,
         head.success ? "card-info" : "card-warning");
 
     GtkWidget *header =
         gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+
+    GtkWidget *history_icon_well =
+        gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    gtk_widget_add_css_class(
+        history_icon_well, "history-icon-well");
+    GtkWidget *history_icon =
+        make_icon(
+            head.success
+                ? "emblem-ok-symbolic"
+                : "dialog-warning-symbolic",
+            20);
+    gtk_widget_set_halign(
+        history_icon, GTK_ALIGN_CENTER);
+    gtk_widget_set_valign(
+        history_icon, GTK_ALIGN_CENTER);
+    gtk_box_append(
+        GTK_BOX(history_icon_well), history_icon);
+    gtk_box_append(
+        GTK_BOX(header), history_icon_well);
 
     const std::string title =
         "Transaction #" +
@@ -5868,9 +6016,15 @@ GtkWidget *make_repair_issue_card(
     GtkWidget *card =
         gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
     gtk_widget_add_css_class(card, "card");
+    gtk_widget_add_css_class(card, "repair-health-card");
     gtk_widget_add_css_class(
         card,
         healthy ? "card-info" : "card-warning");
+
+    GtkWidget *icon_well =
+        gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    gtk_widget_add_css_class(
+        icon_well, "repair-health-icon-well");
 
     GtkWidget *icon =
         make_icon(
@@ -5881,8 +6035,10 @@ GtkWidget *make_repair_issue_card(
     gtk_widget_add_css_class(
         icon,
         healthy ? "source-icon" : "package-icon");
-    gtk_widget_set_valign(icon, GTK_ALIGN_START);
-    gtk_box_append(GTK_BOX(card), icon);
+    gtk_widget_set_halign(icon, GTK_ALIGN_CENTER);
+    gtk_widget_set_valign(icon, GTK_ALIGN_CENTER);
+    gtk_box_append(GTK_BOX(icon_well), icon);
+    gtk_box_append(GTK_BOX(card), icon_well);
 
     GtkWidget *copy =
         make_label(
@@ -6331,6 +6487,17 @@ GtkWidget *make_repair_page(
     GtkWidget *controls =
         gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
     gtk_widget_add_css_class(controls, "card");
+    gtk_widget_add_css_class(controls, "repair-action-panel");
+
+    GtkWidget *repair_heading =
+        make_label("Recovery actions", "card-title");
+    GtkWidget *repair_copy =
+        make_label(
+            "Diagnose first, then use only the recovery action that matches the detected state.",
+            "card-copy");
+    gtk_label_set_wrap(GTK_LABEL(repair_copy), true);
+    gtk_box_append(GTK_BOX(controls), repair_heading);
+    gtk_box_append(GTK_BOX(controls), repair_copy);
 
     state->repair_status =
         make_label(
@@ -6398,6 +6565,7 @@ GtkWidget *make_repair_page(
     GtkWidget *list = gtk_list_box_new();
     state->repair_list = GTK_LIST_BOX(list);
     gtk_widget_add_css_class(list, "package-list");
+    gtk_widget_add_css_class(list, "repair-list");
     gtk_list_box_set_selection_mode(
         state->repair_list,
         GTK_SELECTION_NONE);
@@ -6417,14 +6585,36 @@ GtkWidget *make_repair_page(
 }
 
 GtkWidget *make_nav_row(
-    const char *icon_name, const char *text, const char *semantic_class)
+    const char *icon_name,
+    const char *text,
+    const char *subtitle,
+    const char *semantic_class)
 {
-    GtkWidget *row_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 11);
-    GtkWidget *icon = make_icon(icon_name, 18);
+    GtkWidget *row_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
+
+    GtkWidget *icon_well =
+        gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    gtk_widget_add_css_class(icon_well, "nav-icon-well");
+    gtk_widget_set_size_request(icon_well, 36, 36);
+    GtkWidget *icon = make_icon(icon_name, 19);
+    gtk_widget_set_halign(icon, GTK_ALIGN_CENTER);
+    gtk_widget_set_valign(icon, GTK_ALIGN_CENTER);
+    gtk_box_append(GTK_BOX(icon_well), icon);
+    gtk_box_append(GTK_BOX(row_box), icon_well);
+
+    GtkWidget *copy = gtk_box_new(GTK_ORIENTATION_VERTICAL, 1);
+    gtk_widget_set_hexpand(copy, true);
     GtkWidget *label = make_label(text, "nav-label");
-    gtk_widget_set_hexpand(label, true);
-    gtk_box_append(GTK_BOX(row_box), icon);
-    gtk_box_append(GTK_BOX(row_box), label);
+    GtkWidget *sub = make_label(subtitle, "nav-subtitle");
+    gtk_label_set_ellipsize(
+        GTK_LABEL(sub), PANGO_ELLIPSIZE_END);
+    gtk_box_append(GTK_BOX(copy), label);
+    gtk_box_append(GTK_BOX(copy), sub);
+    gtk_box_append(GTK_BOX(row_box), copy);
+
+    GtkWidget *chevron = make_label("›", "nav-chevron", 1.0F);
+    gtk_widget_set_valign(chevron, GTK_ALIGN_CENTER);
+    gtk_box_append(GTK_BOX(row_box), chevron);
 
     GtkWidget *row = gtk_list_box_row_new();
     gtk_widget_add_css_class(row, "nav-row");
@@ -6576,6 +6766,15 @@ GtkWidget *make_navigation(WindowState *state)
         "Discover", "Installed", "Updates", "System",
         "Repositories", "History", "Repair"
     };
+    static constexpr const char *subtitles[] = {
+        "Browse and explore",
+        "Your software",
+        "New versions",
+        "Core components",
+        "Software sources",
+        "Recent activity",
+        "Health and recovery"
+    };
     static constexpr const char *icons[] = {
         "system-search-symbolic",
         "view-list-symbolic",
@@ -6591,14 +6790,34 @@ GtkWidget *make_navigation(WindowState *state)
     };
 
     GtkWidget *outer = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-    gtk_widget_set_size_request(outer, 248, -1);
+    gtk_widget_set_size_request(outer, 270, -1);
     gtk_widget_add_css_class(outer, "sidebar");
 
-    GtkWidget *section = make_label("SOFTWARE", "sidebar-title");
-    gtk_widget_set_margin_start(section, 16);
-    gtk_widget_set_margin_end(section, 16);
-    gtk_widget_set_margin_top(section, 17);
-    gtk_widget_set_margin_bottom(section, 9);
+    GtkWidget *brand =
+        gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 11);
+    gtk_widget_add_css_class(brand, "sidebar-brand");
+    GtkWidget *brand_icon =
+        make_icon("net.ssmith.infiltrator.software", 30);
+    gtk_widget_add_css_class(
+        brand_icon, "sidebar-brand-icon");
+    gtk_box_append(GTK_BOX(brand), brand_icon);
+
+    GtkWidget *brand_copy =
+        gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    GtkWidget *brand_title =
+        make_label("Infiltrator Software", "sidebar-brand-title");
+    GtkWidget *brand_subtitle =
+        make_label("VISUAL SOFTWARE CENTRE", "sidebar-brand-subtitle");
+    gtk_box_append(GTK_BOX(brand_copy), brand_title);
+    gtk_box_append(GTK_BOX(brand_copy), brand_subtitle);
+    gtk_box_append(GTK_BOX(brand), brand_copy);
+    gtk_box_append(GTK_BOX(outer), brand);
+
+    GtkWidget *section = make_label("NAVIGATE", "sidebar-title");
+    gtk_widget_set_margin_start(section, 18);
+    gtk_widget_set_margin_end(section, 18);
+    gtk_widget_set_margin_top(section, 8);
+    gtk_widget_set_margin_bottom(section, 7);
     gtk_box_append(GTK_BOX(outer), section);
 
     GtkWidget *list = gtk_list_box_new();
@@ -6613,7 +6832,11 @@ GtkWidget *make_navigation(WindowState *state)
     for (int i = 0; i < 7; ++i) {
         gtk_list_box_append(
             GTK_LIST_BOX(list),
-            make_nav_row(icons[i], labels[i], semantic_classes[i]));
+            make_nav_row(
+                icons[i],
+                labels[i],
+                subtitles[i],
+                semantic_classes[i]));
     }
 
     g_signal_connect(
@@ -6899,8 +7122,8 @@ void activate(GtkApplication *application, gpointer)
     GtkWidget *window = gtk_application_window_new(application);
     gtk_window_set_title(GTK_WINDOW(window), "Infiltrator Software");
     gtk_window_set_icon_name(GTK_WINDOW(window), "net.ssmith.infiltrator.software");
-    gtk_window_set_default_size(GTK_WINDOW(window), 1220, 780);
-    gtk_widget_set_size_request(window, 940, 620);
+    gtk_window_set_default_size(GTK_WINDOW(window), 1320, 820);
+    gtk_widget_set_size_request(window, 1020, 660);
 
     auto *state = new WindowState{};
     state->window = GTK_WINDOW(window);
