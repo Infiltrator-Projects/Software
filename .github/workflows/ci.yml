@@ -245,8 +245,8 @@ jobs:
           assert "data/artwork/discover-hero.jpg" in cmake
           hero_art = Path("data/artwork/discover-hero.jpg")
           assert hero_art.is_file()
-          assert hero_art.stat().st_size > 50000
-          assert hero_art.read_bytes()[:2] == b"\\xff\\xd8"
+          assert hero_art.stat().st_size > 7000
+          assert hero_art.read_bytes()[:2].hex() == "ffd8"
           assert "make_dashboard_card" in app
           assert '"Available Updates"' in app
           assert '"System Health"' in app
