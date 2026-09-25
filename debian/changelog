@@ -15,6 +15,8 @@ infiltrator-software (0.3.34) unstable; urgency=high
     low-contrast Source and spotlight-button treatments visible in the live UI.
   * Extend CI contracts and UI-vision documentation for this fourth visual
     convergence pass.
+  * Update the visual-regression contract to require titlebar-owned branding
+    and explicitly reject the removed duplicate sidebar brand.
 
  -- Shannon Smith <infiltratr@yandex.com>  Fri, 25 Sep 2026 17:58:00 +1000
 
