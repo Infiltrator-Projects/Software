@@ -14,6 +14,8 @@ infiltrator-software (0.3.35) unstable; urgency=high
     Preferences card and wire it to a native appearance-preferences window.
   * Extend visual CI contracts and UI-vision documentation for the sidebar
     convergence pass.
+  * Declare the new native Settings callback before navigation construction,
+    fixing the release compiler failure caught by hosted verification.
 
  -- Shannon Smith <infiltratr@yandex.com>  Fri, 25 Sep 2026 18:18:00 +1000
 
