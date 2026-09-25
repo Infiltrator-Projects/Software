@@ -5603,7 +5603,7 @@ GtkWidget *make_history_page(WindowState *state)
         make_stat_card(
             "DETAIL",
             "Exact versions",
-            "stat-operation"),
+            "stat-info"),
         2, 0, 1, 1);
     gtk_box_append(GTK_BOX(page), stats);
 
@@ -5648,7 +5648,9 @@ GtkWidget *make_history_page(WindowState *state)
     gtk_scrolled_window_set_policy(
         GTK_SCROLLED_WINDOW(scroll),
         GTK_POLICY_NEVER,
-        GTK_POLICY_AUTOMATIC);
+        GTK_POLICY_ALWAYS);
+    gtk_scrolled_window_set_overlay_scrolling(
+        GTK_SCROLLED_WINDOW(scroll), false);
     gtk_scrolled_window_set_child(
         GTK_SCROLLED_WINDOW(scroll), list);
     gtk_box_append(GTK_BOX(page), scroll);
