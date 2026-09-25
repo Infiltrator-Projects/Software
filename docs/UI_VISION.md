@@ -100,3 +100,10 @@ CI reconstructs and validates the complete embedded JPEG, checks its start/end m
 
 The implementation rule is explicit: layout, interaction and dynamic information remain native GTK, while high-visibility decorative artwork may use authored raster surfaces when the approved design depends on illustration, texture or compositing that should not be recreated as symbolic widgets or Cairo geometry.
 
+
+
+## Hero and shell composition invariant
+
+The Discover hero uses raster artwork only as scenery. Product text is always live GTK text layered over the artwork so it scales, localises and remains accessible. Raster art must not contain visible product copy. It must also avoid recognisable retro-computer brand props or platform-specific mascots unless the product is explicitly discussing that platform. The approved visual language is atmospheric sky, mountains, light, colour ribbons and abstract computing imagery.
+
+The application title bar is product UI, not a generic desktop toolbar. It carries the Infiltrator ribbon mark and product identity at the left, a broad centred search field with shortcut cue, then product actions, a separator and compact native window controls at the far right. In dark mode these controls remain dark navy/blue with light glyphs; they must never regress to oversized pale system buttons.
