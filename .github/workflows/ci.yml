@@ -102,6 +102,10 @@ jobs:
           source_policy_path = Path("data/net.ssmith.infiltrator.software.policy")
           policy = update_policy_path.read_text()
 
+          ui_vision = Path("docs/UI_VISION.md").read_text()
+          assert Path("docs/design/software-ui-target.jpg").is_file()
+          assert "graphical" in ui_vision.lower()
+
           assert "refresh_updates(state, true)" in app
           assert "engine.refresh(result->error)" in app
           assert "backend.refresh_metadata(result->error)" not in app
@@ -195,6 +199,15 @@ jobs:
           assert "pending_dpkg_update_fragments(" in app
           assert '"repair-configure"' in helper
           assert '"Repair is explicit"' not in app
+
+          # The graphical redesign target is a checked-in product contract.
+          assert "hero-panel" in app
+          assert "sidebar-brand" in app
+          assert "discover-icon-well" in app
+          assert "history-transaction-card" in app
+          assert "repair-action-panel" in app
+          assert ".hero-ribbon-a" in theme
+          assert ".nav-icon-well" in theme
 
           # The footer must report the exact pinned Common header version,
           # never a stale hand-written version string.
