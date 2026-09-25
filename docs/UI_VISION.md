@@ -94,5 +94,9 @@ The initial attempt to make the Welcome surface more graphical used native Cairo
 
 The procedural Welcome illustration has been removed. Discover now uses a real raster hero surface derived from the approved visual reference and displayed through GtkPicture with cover scaling. The composed sky, mountains, planet, checker sphere, retro computer and Infiltrator colour ribbons are therefore authored pixels rather than programmatically reconstructed primitives.
 
-The implementation rule is now explicit: layout, interaction and dynamic information remain native GTK, while high-visibility decorative artwork may use committed raster assets when the approved design depends on illustration, texture or compositing that should not be recreated as symbolic widgets or Cairo geometry.
+The first raster implementation still depended on an installed filesystem path and could silently degrade to an empty hero panel even when the package build itself was green. That deployment failure mode is no longer acceptable. The hero raster is now embedded directly in the Software executable, decoded from compiled image bytes at runtime and turned into a GdkTexture before GtkPicture receives it. The visible artwork therefore travels with the executable rather than depending on a second file appearing at a particular path.
+
+CI reconstructs and validates the complete embedded JPEG, checks its start/end markers and minimum decoded size, and the graphical smoke test fails if GTK cannot decode it. Release packaging additionally verifies that the JPEG payload is present inside the installed executable.
+
+The implementation rule is explicit: layout, interaction and dynamic information remain native GTK, while high-visibility decorative artwork may use authored raster surfaces when the approved design depends on illustration, texture or compositing that should not be recreated as symbolic widgets or Cairo geometry.
 
