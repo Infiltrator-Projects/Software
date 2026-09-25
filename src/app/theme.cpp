@@ -332,20 +332,40 @@ void ThemeController::apply()
         << select_fg << "; opacity: 1; }"
         << ".titlebar-button { margin: 3px 2px; }"
 
-        << ".sidebar { background: " << panel
-        << "; border-right: 1px solid " << border << "; }"
-        << ".sidebar-title { font-size: 11px; font-weight: "
+        << ".sidebar { background-image: linear-gradient(180deg, "
+        << panel << ", " << titlebar << "); border-right: 1px solid "
+        << border << "; }"
+        << ".sidebar-brand { margin: 12px 10px 8px 10px; padding: 12px; "
+        << "background: " << card << "; border: 1px solid " << border
+        << "; border-radius: " << metrics->card_radius << "px; }"
+        << ".sidebar-brand-icon { color: " << operation << "; }"
+        << ".sidebar-brand-title { font-family: \"" << typography->brand_family
+        << "\"; font-size: 15px; font-weight: " << typography->ui_bold_weight
+        << "; color: " << heading << "; }"
+        << ".sidebar-brand-subtitle { font-size: 9px; font-weight: "
+        << typography->ui_bold_weight << "; color: " << kicker << "; }"
+        << ".sidebar-title { font-size: 10px; font-weight: "
         << typography->ui_bold_weight << "; color: " << kicker << "; }"
         << ".nav-list { background: transparent; }"
-        << ".nav-row { margin: 3px 8px; padding: 11px 12px; border: 1px solid transparent; "
-        << "border-radius: " << metrics->small_radius << "px; }"
-        << ".nav-row:hover { background: " << card_hover << "; }"
-        << ".nav-row:selected { background: " << select_bg
-        << "; border-color: " << border << "; border-left-width: 3px; "
-        << "border-left-color: " << operation << "; }"
-        << ".nav-label { font-size: 14px; font-weight: "
+        << ".nav-row { margin: 3px 5px; padding: 9px 10px; "
+        << "border: 1px solid transparent; border-radius: "
+        << metrics->control_radius << "px; }"
+        << ".nav-row:hover { background: " << card_hover
+        << "; border-color: " << border << "; }"
+        << ".nav-row:selected { background-image: linear-gradient(90deg, "
+        << select_bg << ", " << card << "); border-color: " << operation
+        << "; box-shadow: 0 4px 14px rgba(0,0,0,0.18); }"
+        << ".nav-icon-well { min-width: 36px; min-height: 36px; "
+        << "background: " << surface << "; border: 1px solid " << status_border
+        << "; border-radius: " << metrics->small_radius << "px; }"
+        << ".nav-row:selected .nav-icon-well { background: " << operation
+        << "; border-color: " << operation << "; }"
+        << ".nav-label { font-size: 13px; font-weight: "
         << typography->ui_bold_weight << "; color: " << text << "; }"
-        << ".nav-row:selected .nav-label { color: " << select_fg << "; }"
+        << ".nav-subtitle { font-size: 10px; color: " << summary << "; }"
+        << ".nav-chevron { font-size: 18px; color: " << detail_label << "; }"
+        << ".nav-row:selected .nav-label, .nav-row:selected .nav-subtitle, "
+        << ".nav-row:selected .nav-chevron { color: " << select_fg << "; }"
         << ".nav-row image { color: " << summary << "; }"
         << ".nav-discover image { color: " << info << "; }"
         << ".nav-installed image { color: " << success << "; }"
@@ -354,22 +374,33 @@ void ThemeController::apply()
         << ".nav-repositories image { color: " << info << "; opacity: 1; }"
         << ".nav-history image { color: " << info << "; }"
         << ".nav-repair image { color: " << fault << "; }"
-        << ".nav-row:selected image { color: " << select_fg << "; }"
+        << ".nav-row:selected image { color: " << accent_fg << "; }"
         << ".sidebar-footer { padding: 12px 16px; border-top: 1px solid "
         << border << "; }"
-        << ".sidebar-note { font-size: 11px; color: " << summary << "; }"
+        << ".sidebar-note { font-size: 10px; color: " << summary << "; }"
 
-        << ".content { padding: 30px 34px 24px 34px; background: "
+        << ".content { padding: 24px 28px 22px 28px; background: "
         << background << "; }"
         << ".page-hero { margin-bottom: 2px; }"
-        << ".page-icon { min-width: 44px; min-height: 44px; border-radius: "
-        << metrics->control_radius << "px; background: " << surface
+        << ".hero-panel { padding: 18px 20px; border-radius: "
+        << metrics->card_radius << "px; border: 1px solid " << border
+        << "; background-image: linear-gradient(110deg, " << card << ", "
+        << surface << "); box-shadow: 0 8px 24px rgba(0,0,0,0.16); }"
+        << ".page-icon { min-width: 60px; min-height: 60px; border-radius: "
+        << metrics->control_radius << "px; background: " << panel
         << "; border: 1px solid " << status_border << "; }"
         << ".page-icon image { color: " << info << "; }"
+        << ".hero-kicker { font-size: 9px; font-weight: "
+        << typography->ui_bold_weight << "; color: " << kicker << "; }"
         << ".hero-title { font-family: \"" << typography->brand_family
-        << "\"; font-size: 28px; font-weight: " << typography->brand_weight
+        << "\"; font-size: 30px; font-weight: " << typography->brand_weight
         << "; color: " << heading << "; }"
         << ".hero-subtitle { font-size: 12px; color: " << summary << "; }"
+        << ".hero-ribbons { margin-left: 12px; }"
+        << ".hero-ribbon { border-radius: 999px; min-width: 12px; }"
+        << ".hero-ribbon-a { background: " << info << "; }"
+        << ".hero-ribbon-b { background: " << operation << "; }"
+        << ".hero-ribbon-c { background: " << warning << "; }"
 
         << ".page-discover .page-icon, .page-discover .page-icon image, "
         << ".page-discover .hero-title { color: " << info << "; border-color: " << info << "; }"
@@ -386,22 +417,34 @@ void ThemeController::apply()
         << ".page-repair .page-icon, .page-repair .page-icon image, "
         << ".page-repair .hero-title { color: " << fault << "; border-color: " << fault << "; }"
 
-        << ".stat-card { padding: 15px 16px; border-radius: "
-        << metrics->control_radius << "px; background: " << card
-        << "; border: 1px solid " << border << "; }"
-        << ".stat-caption, .kicker { font-size: 10px; font-weight: "
+        << ".stat-card { padding: 13px 14px; border-radius: "
+        << metrics->control_radius << "px; background-image: linear-gradient(120deg, "
+        << card << ", " << surface << "); border: 1px solid " << border
+        << "; box-shadow: 0 5px 14px rgba(0,0,0,0.12); }"
+        << ".stat-icon-well { min-width: 42px; min-height: 42px; background: "
+        << panel << "; border: 1px solid " << status_border
+        << "; border-radius: " << metrics->small_radius << "px; }"
+        << ".stat-caption, .kicker { font-size: 9px; font-weight: "
         << typography->ui_bold_weight << "; color: " << kicker << "; }"
-        << ".stat-value { font-size: 17px; font-weight: "
+        << ".stat-value { font-size: 18px; font-weight: "
         << typography->ui_bold_weight << "; color: " << heading << "; }"
         << ".stat-info { border-color: " << info << "; }"
-        << ".stat-info .stat-value { color: " << info << "; }"
+        << ".stat-info .stat-value, .stat-info .stat-icon-well image { color: "
+        << info << "; }"
         << ".stat-operation { border-color: " << operation << "; }"
-        << ".stat-operation .stat-value { color: " << operation << "; }"
+        << ".stat-operation .stat-value, .stat-operation .stat-icon-well image { color: "
+        << operation << "; }"
         << ".stat-success { border-color: " << success_border << "; }"
-        << ".stat-success .stat-value { color: " << success << "; }"
+        << ".stat-success .stat-value, .stat-success .stat-icon-well image { color: "
+        << success << "; }"
+        << ".stat-warning { border-color: " << warning_border << "; }"
+        << ".stat-warning .stat-value, .stat-warning .stat-icon-well image { color: "
+        << warning << "; }"
 
-        << ".card { padding: 18px; border-radius: " << metrics->control_radius
-        << "px; background: " << card << "; border: 1px solid " << border << "; }"
+        << ".card { padding: 18px; border-radius: " << metrics->card_radius
+        << "px; background-image: linear-gradient(135deg, " << card << ", "
+        << surface << "); border: 1px solid " << border
+        << "; box-shadow: 0 6px 18px rgba(0,0,0,0.13); }"
         << ".card-info { border-color: " << info << "; }"
         << ".page-discover .card { border-color: " << info << "; }"
         << ".page-updates .card { border-color: " << warning_border << "; }"
@@ -429,22 +472,30 @@ void ThemeController::apply()
         << "listview row:selected label, listview row:selected image { color: "
         << select_fg << "; }"
 
-        << ".discover-controls { padding: 10px 12px; border: 1px solid "
+        << ".discover-controls { padding: 11px 13px; border: 1px solid "
         << status_border << "; border-radius: " << metrics->control_radius
-        << "px; background: " << surface << "; }"
-        << ".discover-controls entry, .discover-controls dropdown { min-height: 34px; }"
+        << "px; background-image: linear-gradient(90deg, " << surface
+        << ", " << card << "); }"
+        << ".discover-controls entry, .discover-controls dropdown { min-height: 36px; }"
         << ".discover-status { font-size: 11px; color: " << summary << "; }"
-        << ".discover-card { padding: 16px; background: " << card
-        << "; border: 1px solid " << border << "; border-radius: "
-        << metrics->card_radius << "px; }"
-        << ".discover-card:hover { background: " << card_hover
-        << "; border-color: " << info << "; }"
+        << ".discover-card { padding: 16px; background-image: linear-gradient(145deg, "
+        << card << ", " << panel << "); border: 1px solid " << border
+        << "; border-radius: " << metrics->card_radius
+        << "px; box-shadow: 0 7px 20px rgba(0,0,0,0.16); }"
+        << ".discover-card:hover { background-image: linear-gradient(145deg, "
+        << card_hover << ", " << surface << "); border-color: " << info << "; }"
+        << ".discover-icon-well { background: " << surface
+        << "; border: 1px solid " << status_border << "; border-radius: "
+        << metrics->control_radius << "px; }"
         << ".discover-app-icon { color: " << operation << "; }"
         << ".discover-name { font-family: \"" << typography->brand_family
-        << "\"; font-size: 18px; font-weight: " << typography->brand_weight
+        << "\"; font-size: 19px; font-weight: " << typography->brand_weight
         << "; color: " << heading << "; }"
-        << ".discover-meta { font-size: 11px; font-weight: "
+        << ".discover-meta { font-size: 10px; font-weight: "
         << typography->ui_bold_weight << "; color: " << kicker << "; }"
+        << ".discover-source-chip { font-size: 10px; color: " << info
+        << "; padding: 2px 7px; border-radius: 999px; border: 1px solid "
+        << info << "; }"
         << ".discover-description { font-size: 12px; color: " << note << "; }"
         << ".state-installed, .state-available { padding: 4px 9px; border-radius: 999px; "
         << "font-size: 11px; font-weight: " << typography->ui_bold_weight << "; }"
@@ -494,7 +545,25 @@ void ThemeController::apply()
         << "button.source-state-toggle.state-available:hover, "
         << "button.source-state-toggle.state-available:hover label { color: "
         << info << "; opacity: 1; }"
-        << ".discover-details { min-height: 30px; }"
+        << ".discover-details { min-height: 32px; }"
+        << ".updates-action-bar { border-color: " << warning_border
+        << "; background-image: linear-gradient(90deg, " << card << ", "
+        << surface << "); }"
+        << ".updates-status-icon { color: " << warning << "; }"
+        << ".history-transaction-card { border-left-width: 4px; }"
+        << ".history-icon-well { min-width: 38px; min-height: 38px; background: "
+        << panel << "; border: 1px solid " << info << "; border-radius: 999px; }"
+        << ".history-icon-well image { color: " << info << "; }"
+        << ".card-warning .history-icon-well { border-color: " << warning << "; }"
+        << ".card-warning .history-icon-well image { color: " << warning << "; }"
+        << ".repair-action-panel { border-color: " << fault
+        << "; background-image: linear-gradient(100deg, " << card << ", "
+        << surface << "); }"
+        << ".repair-health-card { padding: 14px 16px; }"
+        << ".repair-health-icon-well { min-width: 40px; min-height: 40px; "
+        << "background: " << panel << "; border: 1px solid " << status_border
+        << "; border-radius: 999px; }"
+        << ".repair-list { background: transparent; border: 0; }"
         << ".detail-page { background: " << background << "; }"
         << ".detail-hero { padding-bottom: 4px; }"
         << ".detail-label { min-width: 130px; font-size: 11px; color: "
@@ -516,8 +585,8 @@ void ThemeController::apply()
         << "button, button label, button image { color: " << button_fg << "; }"
         << "button:hover { background: " << operation_hover << "; }"
         << "button:hover, button:hover label, button:hover image { color: " << text << "; }"
-        << "button.suggested-action { background: " << operation
-        << "; border-color: " << operation << "; }"
+        << "button.suggested-action { background-image: linear-gradient(90deg, "
+        << operation << ", " << info << "); border-color: " << operation << "; }"
         << "button.suggested-action, button.suggested-action label, "
         << "button.suggested-action image { color: " << accent_fg << "; }"
         << "button.suggested-action:hover { background: " << accent_hover
