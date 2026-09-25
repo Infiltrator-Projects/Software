@@ -2,9 +2,15 @@
 
 # UI design contract
 
-Software is a graphical system-management application, not a GUI wrapper around terminal commands.
+Software is a graphical software centre, not a GUI wrapper around terminal commands.
 
-The interface must be modern, fast, calm and information-dense where the task requires it. It uses the Infiltrator/Common visual language rather than mimicking a generic package-manager window.
+The interface must be modern, fast, colourful, welcoming and visually rich while remaining precise when the task requires it. It uses the Infiltrator/Common visual language rather than mimicking a generic package-manager window.
+
+## Visual north star
+
+The current visual target is recorded in [Software UI Vision](UI_VISION.md) and [the target mock-up](design/software-ui-target.jpg).
+
+The mock-up is directional rather than a literal widget specification. Its hierarchy, visual confidence, card composition, strong iconography and GUI-first character are the intended destination. The working GTK implementation should move toward it iteratively without throwing away the tested package engine.
 
 ## Global principles
 
@@ -24,7 +30,7 @@ The persistent shell contains title/header controls, navigation, the selected co
 
 The navigation contract remains Discover, Installed, Updates, System, Repositories, History and Repair.
 
-Pages avoid repeated decorative summary cards when a compact header or grouped list communicates the same information more clearly.
+Pages use graphical summary cards when they communicate state faster than prose. Decorative elements must still carry hierarchy, identity or status rather than becoming empty ornament.
 
 ## Discover
 
@@ -44,9 +50,9 @@ Important fields include application/package name, installed version, source and
 
 ## Updates
 
-Updates is a dense system-control surface.
+Updates is a graphical update centre rather than an administrative package list.
 
-The top communicates available count, system-critical count, freshness/last-check state and one primary Check/Install action.
+The top communicates available count, system-critical count, freshness/last-check state and one visually dominant Check/Install action.
 
 Updates are grouped by meaningful class such as System, Applications and Libraries.
 
@@ -70,19 +76,19 @@ Add, enable, disable, remove and channel changes are graphical workflows with va
 
 ## History
 
-History is chronological and searchable.
+History is chronological, visual and searchable.
 
-Each transaction entry exposes summary, time, outcome and expandable before/after details.
+Each transaction reads as an activity/timeline card with clear outcome iconography, summary, time and expandable before/after details.
 
 Failed or recovered operations remain visible rather than disappearing.
 
 ## Repair
 
-A healthy machine shows a simple healthy state.
+Repair is a graphical health and recovery centre.
 
-Repair does not manufacture warning cards when nothing is wrong.
+A healthy machine shows a strong, reassuring healthy state rather than an empty administrative page. Repair does not manufacture warning cards when nothing is wrong.
 
-When a problem exists, it presents a diagnosis and safe graphical actions. Technical details are copyable.
+When a problem exists, it presents diagnosis first, then safe graphical recovery actions. Technical details remain available and copyable without dominating the primary view.
 
 ## Progress and details
 
