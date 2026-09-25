@@ -85,3 +85,8 @@ Discover now follows the approved target composition much more directly. The sin
 ### Window and scrolling correction
 
 The visual redesign must remain a usable desktop application at every intermediate stage. The main window now owns explicit minimise, maximise/restore and close controls rather than relying on compositor-generated title buttons, remains explicitly resizable, and Discover has a non-overlay page scrollbar so the growing dashboard and catalogue remain reachable at ordinary and maximised window sizes.
+
+### Seventh convergence layer
+
+The Welcome surface is now artwork rather than a flat technical header. It uses a native Cairo-drawn retro-futurist scene behind the live GTK content: a deep blue/violet sky, warm horizon glow, layered mountains, planet, stylised computer silhouette and the cyan/violet/orange Infiltrator ribbon motif. The copy remains real GTK text rather than being baked into an image, so scaling, accessibility and future localisation remain intact. This is an implementation of the visual language established by the approved target, not a static screenshot pasted into the application.
+
