@@ -244,6 +244,22 @@ jobs:
           assert ".dashboard-card" in theme
           assert ".global-search" in theme
 
+          # Sidebar convergence: target-like semantic icons, vivid selection,
+          # real update badge and an actual Preferences entry.
+          assert '"go-home-symbolic"' in app
+          assert '"view-grid-symbolic"' in app
+          assert '"view-refresh-symbolic"' in app
+          assert '"drive-multidisk-symbolic"' in app
+          assert '"applications-engineering-symbolic"' in app
+          assert "nav_updates_badge" in app
+          assert '"Settings"' in app
+          assert "settings_clicked" in app
+          assert '"NAVIGATE"' not in app
+          assert "nav-chevron" not in app
+          assert ".nav-badge" in theme
+          assert "button.sidebar-settings" in theme
+          assert "#2f67ff" in theme
+
           # The footer must report the exact pinned Common header version,
           # never a stale hand-written version string.
           assert "INFILTRATR_COMMON_VERSION" in app
