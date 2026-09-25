@@ -123,6 +123,18 @@ struct WindowState {
     unsigned int history_generation{0U};
     bool history_busy{false};
 
+    GtkListBox *repair_list{};
+    GtkWidget *repair_status{};
+    GtkWidget *repair_engine{};
+    GtkWidget *repair_sources{};
+    GtkWidget *repair_issues{};
+    GtkWidget *repair_recheck{};
+    GtkWidget *repair_rebuild{};
+    GtkWidget *repair_configure{};
+    unsigned int repair_generation{0U};
+    bool repair_busy{false};
+    bool repair_interrupted{false};
+
     bool window_presented{false};
     bool discover_loaded{false};
     bool installed_loaded{false};
@@ -130,6 +142,7 @@ struct WindowState {
     bool system_loaded{false};
     bool repositories_loaded{false};
     bool history_loaded{false};
+    bool repair_loaded{false};
 };
 
 void refresh_repositories(WindowState *state);
@@ -138,6 +151,7 @@ void refresh_discover(WindowState *state, bool force_refresh);
 void refresh_installed(WindowState *state);
 void refresh_system(WindowState *state, bool refresh_metadata = false);
 void refresh_history(WindowState *state);
+void refresh_repair(WindowState *state, bool refresh_metadata = false);
 void discover_install_clicked(GtkButton *button, gpointer user_data);
 
 GtkWidget *make_icon(const char *name, int size)
