@@ -12,6 +12,8 @@ infiltrator-software (0.3.39) unstable; urgency=high
     render the same artwork before installation.
   * Strengthen CI and release-package verification so the raster asset cannot
     silently disappear or regress back to procedural drawing.
+  * Replace the initially corrupted binary upload with the real optimized JPEG
+    hero and verify its JPEG signature and packaged presence.
   * Correct the UI vision to make the raster-first art-direction rule explicit.
 
  -- Shannon Smith <infiltratr@yandex.com>  Fri, 25 Sep 2026 20:02:00 +1000
