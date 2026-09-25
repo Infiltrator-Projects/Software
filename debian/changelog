@@ -17,6 +17,9 @@ infiltrator-software (0.3.32) unstable; urgency=high
     from silently disappearing.
   * Correct GTK/GObject and package-kind type conversions exposed by the
     release compiler before publishing the visual pass.
+  * Update the source-contract checks to verify policy provenance remains
+    available through the compact graphical update-row tooltip rather than
+    requiring the removed administrative policy text.
 
  -- Shannon Smith <infiltratr@yandex.com>  Fri, 25 Sep 2026 17:15:00 +1000
 
