@@ -86,7 +86,13 @@ Discover now follows the approved target composition much more directly. The sin
 
 The visual redesign must remain a usable desktop application at every intermediate stage. The main window now owns explicit minimise, maximise/restore and close controls rather than relying on compositor-generated title buttons, remains explicitly resizable, and Discover has a non-overlay page scrollbar so the growing dashboard and catalogue remain reachable at ordinary and maximised window sizes.
 
-### Seventh convergence layer
+### Seventh convergence layer — superseded
 
-The Welcome surface is now artwork rather than a flat technical header. It uses a native Cairo-drawn retro-futurist scene behind the live GTK content: a deep blue/violet sky, warm horizon glow, layered mountains, planet, stylised computer silhouette and the cyan/violet/orange Infiltrator ribbon motif. The copy remains real GTK text rather than being baked into an image, so scaling, accessibility and future localisation remain intact. This is an implementation of the visual language established by the approved target, not a static screenshot pasted into the application.
+The initial attempt to make the Welcome surface more graphical used native Cairo-drawn shapes. That preserved live GTK text, but it was still a procedural approximation and did not reproduce the authored raster character of the approved prototype. This approach is retained here only as design history and is no longer the implementation target.
+
+### Eighth convergence layer — raster artwork
+
+The procedural Welcome illustration has been removed. Discover now uses a real raster hero surface derived from the approved visual reference and displayed through GtkPicture with cover scaling. The composed sky, mountains, planet, checker sphere, retro computer and Infiltrator colour ribbons are therefore authored pixels rather than programmatically reconstructed primitives.
+
+The implementation rule is now explicit: layout, interaction and dynamic information remain native GTK, while high-visibility decorative artwork may use committed raster assets when the approved design depends on illustration, texture or compositing that should not be recreated as symbolic widgets or Cairo geometry.
 
