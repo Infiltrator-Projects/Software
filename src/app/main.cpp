@@ -2549,16 +2549,33 @@ GtkWidget *make_discover_welcome_hero()
         picture, "welcome-artwork");
     gtk_picture_set_content_fit(
         GTK_PICTURE(picture),
-        GTK_CONTENT_FIT_COVER);
+        GTK_CONTENT_FIT_CONTAIN);
     gtk_picture_set_can_shrink(
         GTK_PICTURE(picture), true);
     gtk_widget_set_hexpand(
         picture, true);
-    gtk_widget_set_size_request(
-        picture, -1, 166);
+
+    /*
+     * Preserve the artwork's authored 1100:140 composition.  A fixed-height
+     * hero caused narrow windows to crop away the left title or right computer.
+     * The aspect frame instead lets the hero become shallower on narrow
+     * windows and naturally reach the prototype's ~166 px height when the
+     * content area is around 1300 px wide.
+     */
+    GtkWidget *aspect =
+        gtk_aspect_frame_new(
+            0.5F,
+            0.5F,
+            1100.0F / 140.0F,
+            false);
+    gtk_aspect_frame_set_child(
+        GTK_ASPECT_FRAME(aspect),
+        picture);
+    gtk_widget_set_hexpand(
+        aspect, true);
 
     gtk_box_append(
-        GTK_BOX(hero), picture);
+        GTK_BOX(hero), aspect);
     return hero;
 }
 
