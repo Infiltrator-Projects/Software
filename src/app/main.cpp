@@ -6549,6 +6549,11 @@ void refresh_page_if_needed(WindowState *state, const int index)
             refresh_history(state);
         }
         break;
+    case 6:
+        if (!state->repair_loaded) {
+            refresh_repair(state, false);
+        }
+        break;
     default:
         break;
     }
@@ -6717,9 +6722,15 @@ void refresh_clicked(GtkButton *, gpointer user_data)
     } else if (std::strcmp(page, "installed") == 0) {
         refresh_installed(state);
     } else if (std::strcmp(page, "updates") == 0) {
-        refresh_updates(state);
+        refresh_updates(state, true);
+    } else if (std::strcmp(page, "system") == 0) {
+        refresh_system(state, true);
     } else if (std::strcmp(page, "repositories") == 0) {
         refresh_repositories(state);
+    } else if (std::strcmp(page, "history") == 0) {
+        refresh_history(state);
+    } else if (std::strcmp(page, "repair") == 0) {
+        refresh_repair(state, false);
     }
 }
 
@@ -7011,14 +7022,7 @@ void activate(GtkApplication *application, gpointer)
         "history");
     gtk_stack_add_named(
         state->stack,
-        make_foundation_page(
-            "dialog-warning-symbolic",
-            "Repair",
-            "Diagnose interrupted package and repository state.",
-            "Repair is explicit",
-            "Broken dependencies, interrupted transactions and inconsistent "
-            "repository state will be diagnosed here rather than hidden.",
-            "page-repair"),
+        make_repair_page(state),
         "repair");
 
     const int initial_page = open_updates ? 2 : 0;
