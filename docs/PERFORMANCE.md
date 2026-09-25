@@ -98,7 +98,7 @@ The Discover software catalogue is persistent and bootstrap-once. The first succ
 
 The first client cutover is implemented. Installed inventory is no longer read on the GTK main thread. Installed and ordinary Updates hydration query the D-Bus engine from worker tasks, and the XApp panel indicator subscribes to StateChanged/HealthChanged so an engine publication is propagated as an event rather than starting a second resolver. The tray retains a low-frequency resilience check, but when engine state exists that check is a shared-snapshot read rather than a package calculation.
 
-A compatibility fallback remains for machines on which no native package-state generation has yet been published. This is deliberately transitional. The next performance/architecture step is the native reconciliation publisher; after it owns source refresh, compatibility APT inventory scans can be removed and the no-duplicate-scan contract becomes unconditional.
+Native reconciliation now owns source refresh and generation publication. Ordinary Updates hydration first reconciles the authoritative local dpkg state against the current verified repository generation; it does not redownload repository metadata merely to discover that a completed package transaction changed the installed version.
 
 ## Discover reopen latency
 
@@ -110,7 +110,9 @@ Icon hydration merges only icon state back into the live catalogue so it cannot 
 
 The Updates page now follows the same cache-first principle as Discover without allowing stale metadata to masquerade as current state. Cached compatibility results are rendered first for responsiveness, then one unprivileged repository metadata refresh is scheduled in the background for the session. When that refresh completes, the visible candidate set is replaced with current repository state.
 
-This means opening Updates does not block on network/package-manager work, while a newly published release cannot remain hidden indefinitely behind an older per-user APT cache. Manual refresh remains available and suppresses the duplicate automatic pass for that session.
+This means opening Updates does not block on network/package-manager work, while a newly published release cannot remain hidden indefinitely behind older state. Repository refresh always fetches and verifies the small Release/InRelease integrity root; when that document is byte-identical to the cached copy, Software reuses each cached uncompressed Packages index only after rechecking its signed byte count and SHA-256. Unchanged repositories therefore avoid repeated multi-megabyte index downloads.
+
+After an install/update transaction, Software performs local installed-state reconciliation first and publishes a new native generation before reloading Installed and Discover. It does not immediately perform a second network refresh after the privileged executor has already refreshed metadata. Manual repository refresh remains available.
 
 ## 0.3.7 interactive latency pass
 
