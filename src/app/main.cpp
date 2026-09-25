@@ -194,6 +194,69 @@ GtkWidget *make_label(
     return label;
 }
 
+static constexpr const char kDiscoverHeroBase64[] =
+#include "discover_hero_part01.inc"
+#include "discover_hero_part02.inc"
+#include "discover_hero_part03.inc"
+#include "discover_hero_part04.inc"
+#include "discover_hero_part05.inc"
+#include "discover_hero_part06.inc"
+    ;
+
+static constexpr const char kTitlebarLogoBase64[] =
+#include "titlebar_logo.inc"
+    ;
+
+GtkWidget *make_embedded_picture(
+    const char *base64,
+    const char *css_class,
+    const GtkContentFit content_fit)
+{
+    if (base64 == nullptr || *base64 == '\0') {
+        return nullptr;
+    }
+
+    gsize image_size = 0;
+    guchar *image_data =
+        g_base64_decode(base64, &image_size);
+    if (image_data == nullptr || image_size == 0U) {
+        g_free(image_data);
+        return nullptr;
+    }
+
+    GBytes *image_bytes =
+        g_bytes_new_take(image_data, image_size);
+    GError *texture_error = nullptr;
+    GdkTexture *texture =
+        gdk_texture_new_from_bytes(
+            image_bytes, &texture_error);
+    g_bytes_unref(image_bytes);
+
+    if (texture == nullptr) {
+        g_warning(
+            "Embedded raster asset failed to decode: %s",
+            texture_error != nullptr
+                ? texture_error->message
+                : "unknown image decoder error");
+        g_clear_error(&texture_error);
+        return nullptr;
+    }
+
+    GtkWidget *picture =
+        gtk_picture_new_for_paintable(
+            GDK_PAINTABLE(texture));
+    g_object_unref(texture);
+    gtk_picture_set_content_fit(
+        GTK_PICTURE(picture), content_fit);
+    gtk_picture_set_can_shrink(
+        GTK_PICTURE(picture), true);
+    if (css_class != nullptr) {
+        gtk_widget_add_css_class(
+            picture, css_class);
+    }
+    return picture;
+}
+
 const char *stat_icon_name(const char *caption) noexcept
 {
     if (caption == nullptr) {
@@ -849,19 +912,54 @@ GtkWidget *make_featured_card(
     gtk_widget_add_css_class(
         card, "featured-card");
     gtk_widget_set_size_request(
-        card, 176, 218);
+        card, 150, 218);
 
     GtkWidget *art =
-        gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+        gtk_overlay_new();
     gtk_widget_add_css_class(
         art, "featured-card-art");
+    gtk_widget_set_size_request(
+        art, -1, 82);
+
+    GtkWidget *art_picture =
+        make_embedded_picture(
+            kDiscoverHeroBase64,
+            "featured-card-raster",
+            GTK_CONTENT_FIT_COVER);
+    if (art_picture != nullptr) {
+        gtk_widget_set_hexpand(
+            art_picture, true);
+        gtk_widget_set_vexpand(
+            art_picture, true);
+        gtk_overlay_set_child(
+            GTK_OVERLAY(art),
+            art_picture);
+    }
+
+    GtkWidget *shade =
+        gtk_box_new(
+            GTK_ORIENTATION_VERTICAL, 0);
+    gtk_widget_add_css_class(
+        shade, "featured-card-art-shade");
+    gtk_widget_set_hexpand(
+        shade, true);
+    gtk_widget_set_vexpand(
+        shade, true);
+    gtk_widget_set_can_target(
+        shade, false);
+    gtk_overlay_add_overlay(
+        GTK_OVERLAY(art), shade);
+
     GtkWidget *icon =
-        catalogue_icon(record, 64);
+        catalogue_icon(record, 58);
     gtk_widget_set_halign(
         icon, GTK_ALIGN_CENTER);
     gtk_widget_set_valign(
         icon, GTK_ALIGN_CENTER);
-    gtk_box_append(GTK_BOX(art), icon);
+    gtk_widget_set_can_target(
+        icon, false);
+    gtk_overlay_add_overlay(
+        GTK_OVERLAY(art), icon);
     gtk_box_append(GTK_BOX(card), art);
 
     GtkWidget *name =
@@ -902,25 +1000,6 @@ GtkWidget *make_featured_card(
     gtk_box_append(
         GTK_BOX(card), description);
 
-    GtkWidget *action_row =
-        gtk_box_new(
-            GTK_ORIENTATION_HORIZONTAL, 5);
-    GtkWidget *details =
-        gtk_button_new_with_label("Details");
-    gtk_widget_add_css_class(
-        details, "featured-secondary");
-    g_object_set_data_full(
-        G_OBJECT(details),
-        "discover-record",
-        new PackageRecord(record),
-        package_record_destroy);
-    g_signal_connect(
-        details, "clicked",
-        G_CALLBACK(discover_details_clicked),
-        state);
-    gtk_box_append(
-        GTK_BOX(action_row), details);
-
     if (!record.package_name.empty()) {
         const bool installed =
             record.state ==
@@ -955,12 +1034,132 @@ GtkWidget *make_featured_card(
             G_CALLBACK(discover_install_clicked),
             state);
         gtk_box_append(
-            GTK_BOX(action_row), action);
+            GTK_BOX(card), action);
     }
 
-    gtk_box_append(
-        GTK_BOX(card), action_row);
     return card;
+}
+
+std::vector<PackageRecord> featured_fallback_records()
+{
+    std::vector<PackageRecord> records;
+    records.reserve(4U);
+
+    auto add = [&records](
+        const char *id,
+        const char *name,
+        const char *package_name,
+        const char *category,
+        const char *description,
+        const char *icon_name) {
+        PackageRecord record;
+        record.id = id;
+        record.name = name;
+        record.package_name = package_name;
+        record.publisher = "Distribution";
+        record.category = category;
+        record.description = description;
+        record.summary = description;
+        record.icon_name = icon_name;
+        record.source = "System repository";
+        record.kind =
+            infiltrator::software::PackageKind::application;
+        record.state =
+            infiltrator::software::InstallState::not_installed;
+        records.emplace_back(std::move(record));
+    };
+
+    add(
+        "featured:firefox",
+        "Firefox",
+        "firefox",
+        "Internet",
+        "Fast, private and open web browsing.",
+        "firefox");
+    add(
+        "featured:libreoffice",
+        "LibreOffice",
+        "libreoffice",
+        "Office",
+        "A complete office productivity suite.",
+        "libreoffice-startcenter");
+    add(
+        "featured:gimp",
+        "GIMP",
+        "gimp",
+        "Graphics",
+        "Create and edit images with powerful tools.",
+        "gimp");
+    add(
+        "featured:vlc",
+        "VLC",
+        "vlc",
+        "Sound & Video",
+        "Play video and audio in almost any format.",
+        "vlc");
+
+    return records;
+}
+
+const PackageRecord *find_featured_record(
+    const WindowState *state,
+    const PackageRecord &fallback,
+    const std::vector<std::size_t> &visible_indices)
+{
+    if (state == nullptr) {
+        return nullptr;
+    }
+
+    const std::string wanted_package =
+        folded(fallback.package_name);
+    const std::string wanted_name =
+        folded(fallback.name);
+
+    for (const std::size_t index : visible_indices) {
+        if (index >= state->discover_records.size()) {
+            continue;
+        }
+        const PackageRecord &record =
+            state->discover_records[index];
+        if (folded(record.package_name) == wanted_package ||
+            folded(record.name) == wanted_name) {
+            return &record;
+        }
+    }
+    return nullptr;
+}
+
+void append_curated_featured(
+    WindowState *state,
+    const std::vector<std::size_t> *visible_indices = nullptr)
+{
+    if (state == nullptr ||
+        state->discover_featured_flow == nullptr) {
+        return;
+    }
+
+    const std::vector<PackageRecord> fallback =
+        featured_fallback_records();
+    static const std::vector<std::size_t> empty_indices;
+
+    const std::vector<std::size_t> &indices =
+        visible_indices != nullptr
+            ? *visible_indices
+            : empty_indices;
+
+    for (const PackageRecord &placeholder : fallback) {
+        const PackageRecord *record =
+            find_featured_record(
+                state, placeholder, indices);
+        gtk_flow_box_append(
+            GTK_FLOW_BOX(
+                state->discover_featured_flow),
+            make_featured_card(
+                state,
+                record != nullptr
+                    ? *record
+                    : placeholder));
+    }
 }
 
 void clear_box_children(GtkWidget *box)
@@ -1539,8 +1738,8 @@ void rebuild_discover(WindowState *state)
 
     std::vector<std::string> indices;
     indices.reserve(state->discover_records.size());
-    std::vector<std::size_t> featured_indices;
-    featured_indices.reserve(4U);
+    std::vector<std::size_t> visible_indices;
+    visible_indices.reserve(state->discover_records.size());
     std::optional<std::size_t> first_visible;
 
     const bool cached_search_text =
@@ -1573,9 +1772,7 @@ void rebuild_discover(WindowState *state)
         if (!first_visible.has_value()) {
             first_visible = index;
         }
-        if (featured_indices.size() < 4U) {
-            featured_indices.push_back(index);
-        }
+        visible_indices.push_back(index);
         indices.emplace_back(std::to_string(index));
     }
 
@@ -1599,15 +1796,32 @@ void rebuild_discover(WindowState *state)
                 child);
             child = next;
         }
-        for (const std::size_t index :
-             featured_indices) {
-            gtk_flow_box_append(
-                GTK_FLOW_BOX(
-                    state->discover_featured_flow),
-                make_featured_card(
-                    state,
-                    state->discover_records[
-                        index]));
+
+        if (query.empty() && category == "All") {
+            /*
+             * The landing page is deliberately curated instead of showing the
+             * first four alphabetic package records.  When the system
+             * catalogue contains these applications we use its exact state;
+             * otherwise the same cards remain useful install entry points
+             * while catalogue refresh completes.
+             */
+            append_curated_featured(
+                state, &visible_indices);
+        } else {
+            const std::size_t limit =
+                std::min<std::size_t>(
+                    visible_indices.size(), 4U);
+            for (std::size_t position = 0U;
+                 position < limit;
+                 ++position) {
+                gtk_flow_box_append(
+                    GTK_FLOW_BOX(
+                        state->discover_featured_flow),
+                    make_featured_card(
+                        state,
+                        state->discover_records[
+                            visible_indices[position]]));
+            }
         }
     }
 
@@ -2478,15 +2692,6 @@ GtkWidget *make_dashboard_card(
 
 GtkWidget *make_discover_welcome_hero()
 {
-    static constexpr const char kDiscoverHeroBase64[] =
-#include "discover_hero_part01.inc"
-#include "discover_hero_part02.inc"
-#include "discover_hero_part03.inc"
-#include "discover_hero_part04.inc"
-#include "discover_hero_part05.inc"
-#include "discover_hero_part06.inc"
-        ;
-
     GtkWidget *hero =
         gtk_overlay_new();
     gtk_widget_add_css_class(
@@ -2497,42 +2702,17 @@ GtkWidget *make_discover_welcome_hero()
         hero, -1, 166);
 
     /*
-     * Keep the raster as scenery only.  The source artwork contains legacy
-     * mock-up lettering and retro-computer props that are not product content;
-     * a deliberately strong art-direction veil suppresses those regions while
-     * retaining the mountain/sky colour and depth underneath.  All visible
-     * hero copy is live GTK text layered above the picture.
+     * The Discover background is a dedicated clean raster asset: artwork only,
+     * with no embedded product wording, checker sphere, retro computer or
+     * other mock-up props.  Every visible word is a live GTK label layered
+     * above the image so it remains scalable and accessible.
      */
-    gsize image_size = 0;
-    guchar *image_data =
-        g_base64_decode(
+    GtkWidget *picture =
+        make_embedded_picture(
             kDiscoverHeroBase64,
-            &image_size);
-
-    GBytes *image_bytes =
-        g_bytes_new_take(
-            image_data,
-            image_size);
-    GError *texture_error = nullptr;
-    GdkTexture *texture =
-        gdk_texture_new_from_bytes(
-            image_bytes,
-            &texture_error);
-    g_bytes_unref(image_bytes);
-
-    if (texture != nullptr) {
-        GtkWidget *picture =
-            gtk_picture_new_for_paintable(
-                GDK_PAINTABLE(texture));
-        g_object_unref(texture);
-
-        gtk_widget_add_css_class(
-            picture, "welcome-artwork");
-        gtk_picture_set_content_fit(
-            GTK_PICTURE(picture),
+            "welcome-artwork",
             GTK_CONTENT_FIT_COVER);
-        gtk_picture_set_can_shrink(
-            GTK_PICTURE(picture), true);
+    if (picture != nullptr) {
         gtk_widget_set_hexpand(
             picture, true);
         gtk_widget_set_vexpand(
@@ -2541,15 +2721,9 @@ GtkWidget *make_discover_welcome_hero()
             GTK_OVERLAY(hero),
             picture);
     } else {
-        g_critical(
-            "Embedded Discover hero raster failed to decode: %s",
-            texture_error != nullptr
-                ? texture_error->message
-                : "unknown image decoder error");
-        g_clear_error(&texture_error);
-
         GtkWidget *fallback =
-            gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+            gtk_box_new(
+                GTK_ORIENTATION_VERTICAL, 0);
         gtk_widget_add_css_class(
             fallback, "welcome-artwork-error");
         gtk_overlay_set_child(
@@ -2748,12 +2922,17 @@ GtkWidget *make_discover_page(WindowState *state)
         GTK_FLOW_BOX(
             state->discover_featured_flow),
         10U);
+    gtk_flow_box_set_homogeneous(
+        GTK_FLOW_BOX(
+            state->discover_featured_flow),
+        true);
     gtk_widget_set_valign(
         state->discover_featured_flow,
         GTK_ALIGN_START);
     gtk_box_append(
         GTK_BOX(featured_panel),
         state->discover_featured_flow);
+    append_curated_featured(state);
     gtk_box_append(
         GTK_BOX(left_column),
         featured_panel);
@@ -8996,29 +9175,28 @@ GtkWidget *make_header_bar(WindowState *state)
     gtk_widget_add_css_class(
         brand, "titlebar-brand");
 
-    GtkWidget *mark =
-        gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 3);
-    gtk_widget_add_css_class(
-        mark, "titlebar-mark");
-    gtk_widget_set_valign(
-        mark, GTK_ALIGN_CENTER);
-    static constexpr const char *mark_classes[] = {
-        "titlebar-mark-cyan",
-        "titlebar-mark-magenta",
-        "titlebar-mark-orange"
-    };
-    for (const char *css_class : mark_classes) {
-        GtkWidget *bar_mark =
-            gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-        gtk_widget_add_css_class(
-            bar_mark, "titlebar-mark-bar");
-        gtk_widget_add_css_class(
-            bar_mark, css_class);
+    GtkWidget *brand_logo =
+        make_embedded_picture(
+            kTitlebarLogoBase64,
+            "titlebar-logo",
+            GTK_CONTENT_FIT_CONTAIN);
+    if (brand_logo != nullptr) {
         gtk_widget_set_size_request(
-            bar_mark, 9, 31);
-        gtk_box_append(GTK_BOX(mark), bar_mark);
+            brand_logo, 66, 44);
+        gtk_widget_set_valign(
+            brand_logo, GTK_ALIGN_CENTER);
+        gtk_box_append(
+            GTK_BOX(brand), brand_logo);
+    } else {
+        GtkWidget *brand_icon =
+            make_icon(
+                "net.ssmith.infiltrator.software",
+                32);
+        gtk_widget_add_css_class(
+            brand_icon, "titlebar-logo-fallback");
+        gtk_box_append(
+            GTK_BOX(brand), brand_icon);
     }
-    gtk_box_append(GTK_BOX(brand), mark);
 
     GtkWidget *brand_copy =
         gtk_box_new(GTK_ORIENTATION_VERTICAL, 1);
