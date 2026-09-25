@@ -478,6 +478,50 @@ void ThemeController::apply()
         << ", " << card << "); }"
         << ".discover-controls entry, .discover-controls dropdown { min-height: 36px; }"
         << ".discover-status { font-size: 11px; color: " << summary << "; }"
+        << ".discover-showcase { margin-top: 1px; }"
+        << ".discover-spotlight { padding: 22px 24px; "
+        << "background-image: linear-gradient(125deg, " << card << ", "
+        << surface << "); border: 1px solid " << info << "; border-radius: "
+        << metrics->card_radius << "px; box-shadow: 0 10px 28px rgba(0,0,0,0.18); }"
+        << ".spotlight-kicker { font-size: 9px; font-weight: "
+        << typography->ui_bold_weight << "; color: " << operation << "; }"
+        << ".spotlight-title { font-family: \"" << typography->brand_family
+        << "\"; font-size: 27px; font-weight: " << typography->brand_weight
+        << "; color: " << heading << "; }"
+        << ".spotlight-copy { font-size: 12px; color: " << note << "; }"
+        << ".spotlight-chips { margin-top: 1px; margin-bottom: 2px; }"
+        << ".spotlight-chip, .spotlight-chip-source { padding: 3px 8px; "
+        << "border-radius: 999px; font-size: 9px; font-weight: "
+        << typography->ui_bold_weight << "; }"
+        << ".spotlight-chip { color: " << text << "; background: "
+        << panel << "; border: 1px solid " << border << "; }"
+        << ".spotlight-chip-source { color: " << info << "; background: "
+        << panel << "; border: 1px solid " << info << "; }"
+        << ".spotlight-art { padding: 14px; background-image: linear-gradient(145deg, "
+        << panel << ", " << card_hover << "); border: 1px solid " << border
+        << "; border-radius: " << metrics->card_radius << "px; }"
+        << ".spotlight-icon-well { background: " << surface
+        << "; border: 1px solid " << operation << "; border-radius: "
+        << metrics->card_radius << "px; box-shadow: 0 8px 22px rgba(0,0,0,0.18); }"
+        << ".spotlight-icon-well image { color: " << operation << "; }"
+        << "button.spotlight-primary-action, button.spotlight-secondary-action { "
+        << "min-height: 36px; padding-left: 15px; padding-right: 15px; }"
+        << "button.spotlight-secondary-action { background: " << panel
+        << "; border-color: " << info << "; }"
+        << ".discover-glance { padding: 15px; background: " << panel
+        << "; border: 1px solid " << border << "; border-radius: "
+        << metrics->card_radius << "px; }"
+        << ".discover-glance .stat-card { padding: 10px 11px; min-height: 46px; }"
+        << ".discover-glance .stat-icon-well { min-width: 36px; min-height: 36px; }"
+        << ".discover-glance .stat-value { font-size: 15px; }"
+        << ".glance-kicker { font-size: 9px; font-weight: "
+        << typography->ui_bold_weight << "; color: " << kicker << "; }"
+        << ".catalogue-section-heading { margin-top: 2px; padding: 2px 3px; }"
+        << ".catalogue-section-icon { color: " << info << "; }"
+        << ".catalogue-section-title { font-family: \"" << typography->brand_family
+        << "\"; font-size: 18px; font-weight: " << typography->ui_bold_weight
+        << "; color: " << heading << "; }"
+        << ".catalogue-section-note { font-size: 10px; color: " << summary << "; }"
         << ".discover-card { padding: 16px; background-image: linear-gradient(145deg, "
         << card << ", " << panel << "); border: 1px solid " << border
         << "; border-radius: " << metrics->card_radius
