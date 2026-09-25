@@ -1006,6 +1006,26 @@ std::string safe_cache_name(std::string value)
     return value.empty() ? "repository" : value;
 }
 
+bool read_cached(
+    const std::filesystem::path &path,
+    std::string &content)
+{
+    content.clear();
+    std::ifstream input(path, std::ios::binary);
+    if (!input) {
+        return false;
+    }
+
+    std::ostringstream stream;
+    stream << input.rdbuf();
+    if (!input.good() && !input.eof()) {
+        content.clear();
+        return false;
+    }
+    content = stream.str();
+    return true;
+}
+
 bool write_atomic(
     const std::filesystem::path &path,
     const std::string_view content,
@@ -1192,6 +1212,25 @@ DebianRepositorySnapshot DebianRepositoryRefresh::refresh(
     std::vector<std::string> cached_contents;
     cached_contents.reserve(base_indexes.size());
 
+    /*
+     * A signed Release document is the integrity root for every Packages
+     * index. When it is byte-for-byte unchanged, a previously cached
+     * uncompressed index can be reused after its signed size/SHA-256 is
+     * revalidated. This keeps ordinary refreshes to the small Release fetch
+     * instead of repeatedly downloading the same multi-megabyte indexes.
+     */
+    const std::filesystem::path root_cache =
+        cache_directory.empty()
+            ? std::filesystem::path{}
+            : std::filesystem::path(cache_directory) /
+                safe_cache_name(source.id.empty() ? source.uri : source.id);
+    std::string cached_release;
+    const bool cached_release_current =
+        !root_cache.empty() &&
+        read_cached(root_cache / "Release", cached_release) &&
+        cached_release == release_content;
+    bool cache_dirty = !cached_release_current;
+
     const int default_pin_priority =
         release.not_automatic
             ? (release.but_automatic_upgrades ? 100 : 1)
@@ -1218,33 +1257,57 @@ DebianRepositorySnapshot DebianRepositoryRefresh::refresh(
             return {};
         }
 
-        std::string compressed;
-        if (!download(
-                join_uri(root, entry->path),
-                compressed,
-                error)) {
-            error =
-                "Unable to fetch repository package index " +
-                entry->path + ": " + error;
-            return {};
-        }
-        if (!verify_payload(compressed, *entry, error)) {
-            return {};
+        std::string packages_text;
+        bool used_cache = false;
+        if (cached_release_current) {
+            const std::filesystem::path cache_path =
+                root_cache /
+                (safe_cache_name(entry->path) + ".uncompressed");
+            if (read_cached(cache_path, packages_text)) {
+                std::string cache_error;
+                if (verify_payload(
+                        packages_text,
+                        *uncompressed_entry,
+                        cache_error)) {
+                    used_cache = true;
+                } else {
+                    packages_text.clear();
+                    cache_dirty = true;
+                }
+            } else {
+                cache_dirty = true;
+            }
         }
 
-        std::string packages_text;
-        if (!decompress_index(
-                entry->path,
-                compressed,
-                static_cast<std::size_t>(
-                    uncompressed_entry->size_bytes),
-                packages_text,
-                error)) {
-            return {};
-        }
-        if (!verify_payload(
-                packages_text, *uncompressed_entry, error)) {
-            return {};
+        if (!used_cache) {
+            std::string compressed;
+            if (!download(
+                    join_uri(root, entry->path),
+                    compressed,
+                    error)) {
+                error =
+                    "Unable to fetch repository package index " +
+                    entry->path + ": " + error;
+                return {};
+            }
+            if (!verify_payload(compressed, *entry, error)) {
+                return {};
+            }
+
+            if (!decompress_index(
+                    entry->path,
+                    compressed,
+                    static_cast<std::size_t>(
+                        uncompressed_entry->size_bytes),
+                    packages_text,
+                    error)) {
+                return {};
+            }
+            if (!verify_payload(
+                    packages_text, *uncompressed_entry, error)) {
+                return {};
+            }
+            cache_dirty = true;
         }
 
         std::string parse_error;
@@ -1279,11 +1342,7 @@ DebianRepositorySnapshot DebianRepositoryRefresh::refresh(
         cached_contents.emplace_back(std::move(packages_text));
     }
 
-    if (!cache_directory.empty()) {
-        const std::filesystem::path root_cache =
-            std::filesystem::path(cache_directory) /
-            safe_cache_name(source.id.empty() ? source.uri : source.id);
-
+    if (!root_cache.empty() && cache_dirty) {
         if (!write_atomic(
                 root_cache / "Release",
                 release_content,
