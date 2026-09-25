@@ -2852,10 +2852,13 @@ GtkWidget *make_discover_page(WindowState *state)
     gtk_box_append(GTK_BOX(page), dashboard);
 
     GtkWidget *main_dashboard =
-        gtk_box_new(
-            GTK_ORIENTATION_HORIZONTAL, 12);
+        gtk_grid_new();
     gtk_widget_add_css_class(
         main_dashboard, "discover-main-dashboard");
+    gtk_grid_set_column_spacing(
+        GTK_GRID(main_dashboard), 12);
+    gtk_grid_set_column_homogeneous(
+        GTK_GRID(main_dashboard), true);
 
     GtkWidget *left_column =
         gtk_box_new(
@@ -3051,8 +3054,8 @@ GtkWidget *make_discover_page(WindowState *state)
     GtkWidget *right_column =
         gtk_box_new(
             GTK_ORIENTATION_VERTICAL, 12);
-    gtk_widget_set_size_request(
-        right_column, 330, -1);
+    gtk_widget_set_hexpand(
+        right_column, true);
 
     GtkWidget *repository_panel =
         gtk_box_new(
@@ -3096,12 +3099,21 @@ GtkWidget *make_discover_page(WindowState *state)
         GTK_BOX(right_column),
         activity_panel);
 
-    gtk_box_append(
-        GTK_BOX(main_dashboard),
-        left_column);
-    gtk_box_append(
-        GTK_BOX(main_dashboard),
-        right_column);
+    /*
+     * The reference composition is structural: Featured/Updates/Health own
+     * two thirds of this row and Repository/Activity own one third.  A
+     * homogeneous three-column grid preserves that ratio at every window and
+     * desktop scale instead of letting a fixed right-rail width consume half
+     * the page on scaled displays.
+     */
+    gtk_grid_attach(
+        GTK_GRID(main_dashboard),
+        left_column,
+        0, 0, 2, 1);
+    gtk_grid_attach(
+        GTK_GRID(main_dashboard),
+        right_column,
+        2, 0, 1, 1);
     gtk_box_append(
         GTK_BOX(page),
         main_dashboard);
@@ -8538,6 +8550,8 @@ GtkWidget *make_nav_row(
     GtkWidget *sub =
         make_label(subtitle, "nav-subtitle");
     gtk_label_set_ellipsize(
+        GTK_LABEL(label), PANGO_ELLIPSIZE_END);
+    gtk_label_set_ellipsize(
         GTK_LABEL(sub), PANGO_ELLIPSIZE_END);
 
     gtk_box_append(GTK_BOX(copy), label);
@@ -8748,7 +8762,7 @@ GtkWidget *make_navigation(WindowState *state)
         gtk_box_new(
             GTK_ORIENTATION_VERTICAL, 0);
     gtk_widget_set_size_request(
-        outer, 245, -1);
+        outer, 150, -1);
     gtk_widget_add_css_class(
         outer, "sidebar");
 
@@ -9520,7 +9534,9 @@ void activate(GtkApplication *application, gpointer)
     GtkWidget *root = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
     gtk_window_set_child(GTK_WINDOW(window), root);
 
-    GtkWidget *body = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    GtkWidget *body = gtk_grid_new();
+    gtk_grid_set_column_homogeneous(
+        GTK_GRID(body), true);
     gtk_widget_set_vexpand(body, true);
     gtk_box_append(GTK_BOX(root), body);
 
@@ -9538,8 +9554,14 @@ void activate(GtkApplication *application, gpointer)
     gtk_widget_set_hexpand(stack, true);
     gtk_widget_set_vexpand(stack, true);
 
-    gtk_box_append(GTK_BOX(body), make_navigation(state));
-    gtk_box_append(GTK_BOX(body), stack);
+    gtk_grid_attach(
+        GTK_GRID(body),
+        make_navigation(state),
+        0, 0, 1, 1);
+    gtk_grid_attach(
+        GTK_GRID(body),
+        stack,
+        1, 0, 5, 1);
 
     gtk_stack_add_named(
         state->stack,
