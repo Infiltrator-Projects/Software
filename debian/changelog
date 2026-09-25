@@ -1,3 +1,23 @@
+infiltrator-software (0.3.36) unstable; urgency=high
+
+  * Continue the visual convergence toward the approved Software target.
+  * Recompose the visible Discover dashboard around a real Featured
+    Applications row using live catalogue artwork and package actions.
+  * Add a compact Updates Available preview driven by the current update
+    inventory, with direct navigation to the full Updates page.
+  * Add target-like Repository Status and Recent Activity panels in a right
+    rail, populated from the real source inventory and transaction history.
+  * Add a colourful Keep your system healthy banner linked to Repair and fed
+    by the live package-health diagnostics.
+  * Load Updates, repository state, history and repair health asynchronously
+    when Discover is first opened so dashboard panels become useful without
+    blocking initial catalogue painting.
+  * Strengthen the Welcome treatment, panel typography, featured cards,
+    preview rows and target-like health-banner styling.
+  * Extend CI and UI-vision contracts for the new dashboard composition.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Fri, 25 Sep 2026 18:52:00 +1000
+
 infiltrator-software (0.3.35) unstable; urgency=high
 
   * Bring the sidebar substantially closer to the approved visual target.
