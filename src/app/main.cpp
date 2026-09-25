@@ -2476,261 +2476,61 @@ GtkWidget *make_dashboard_card(
     return button;
 }
 
-void draw_discover_welcome_art(
-    GtkDrawingArea *,
-    cairo_t *cr,
-    const int width,
-    const int height,
-    gpointer)
+std::string discover_hero_artwork_path()
 {
-    const double w = static_cast<double>(width);
-    const double h = static_cast<double>(height);
-
-    cairo_save(cr);
-
-    cairo_pattern_t *sky =
-        cairo_pattern_create_linear(0.0, 0.0, w, h);
-    cairo_pattern_add_color_stop_rgb(
-        sky, 0.0, 0.025, 0.055, 0.16);
-    cairo_pattern_add_color_stop_rgb(
-        sky, 0.50, 0.075, 0.10, 0.34);
-    cairo_pattern_add_color_stop_rgb(
-        sky, 0.78, 0.40, 0.075, 0.46);
-    cairo_pattern_add_color_stop_rgb(
-        sky, 1.0, 0.92, 0.20, 0.31);
-    cairo_set_source(cr, sky);
-    cairo_rectangle(cr, 0.0, 0.0, w, h);
-    cairo_fill(cr);
-    cairo_pattern_destroy(sky);
-
-    cairo_pattern_t *horizon =
-        cairo_pattern_create_radial(
-            w * 0.70, h * 0.72, 0.0,
-            w * 0.70, h * 0.72, w * 0.42);
-    cairo_pattern_add_color_stop_rgba(
-        horizon, 0.0, 1.0, 0.49, 0.18, 0.72);
-    cairo_pattern_add_color_stop_rgba(
-        horizon, 0.45, 0.76, 0.10, 0.62, 0.32);
-    cairo_pattern_add_color_stop_rgba(
-        horizon, 1.0, 0.08, 0.05, 0.24, 0.0);
-    cairo_set_source(cr, horizon);
-    cairo_rectangle(cr, 0.0, 0.0, w, h);
-    cairo_fill(cr);
-    cairo_pattern_destroy(horizon);
-
-    static constexpr double stars[][2] = {
-        {0.33, 0.18}, {0.39, 0.30}, {0.48, 0.14},
-        {0.55, 0.25}, {0.62, 0.11}, {0.69, 0.31},
-        {0.76, 0.17}, {0.84, 0.29}, {0.91, 0.12}
-    };
-    cairo_set_source_rgba(cr, 0.74, 0.88, 1.0, 0.58);
-    for (const auto &star : stars) {
-        cairo_arc(
-            cr, w * star[0], h * star[1],
-            1.25, 0.0, 2.0 * G_PI);
-        cairo_fill(cr);
+    const std::filesystem::path installed =
+        "/usr/share/infiltrator-software/artwork/discover-hero.jpg";
+    if (std::filesystem::exists(installed)) {
+        return installed.string();
     }
 
-    cairo_set_source_rgb(cr, 0.055, 0.07, 0.24);
-    cairo_move_to(cr, w * 0.33, h * 0.86);
-    cairo_line_to(cr, w * 0.46, h * 0.43);
-    cairo_line_to(cr, w * 0.55, h * 0.73);
-    cairo_line_to(cr, w * 0.62, h * 0.50);
-    cairo_line_to(cr, w * 0.72, h * 0.86);
-    cairo_close_path(cr);
-    cairo_fill(cr);
-
-    cairo_set_source_rgb(cr, 0.08, 0.10, 0.36);
-    cairo_move_to(cr, w * 0.42, h * 0.86);
-    cairo_line_to(cr, w * 0.53, h * 0.54);
-    cairo_line_to(cr, w * 0.61, h * 0.76);
-    cairo_line_to(cr, w * 0.70, h * 0.57);
-    cairo_line_to(cr, w * 0.82, h * 0.86);
-    cairo_close_path(cr);
-    cairo_fill(cr);
-
-    cairo_set_source_rgb(cr, 0.99, 0.34, 0.50);
-    cairo_arc(
-        cr, w * 0.80, h * 0.26,
-        h * 0.17, 0.0, 2.0 * G_PI);
-    cairo_fill(cr);
-    cairo_set_source_rgb(cr, 0.96, 0.91, 0.83);
-    cairo_arc(
-        cr, w * 0.80, h * 0.26,
-        h * 0.12, 0.0, 2.0 * G_PI);
-    cairo_fill(cr);
-    cairo_set_source_rgb(cr, 0.82, 0.10, 0.24);
-    cairo_move_to(cr, w * 0.80, h * 0.14);
-    cairo_line_to(cr, w * 0.80, h * 0.38);
-    cairo_move_to(cr, w * 0.68, h * 0.26);
-    cairo_line_to(cr, w * 0.92, h * 0.26);
-    cairo_set_line_width(cr, 2.0);
-    cairo_stroke(cr);
-
-    const double computer_x = w * 0.84;
-    const double computer_y = h * 0.43;
-    const double computer_w = w * 0.12;
-    const double computer_h = h * 0.36;
-    cairo_set_source_rgb(cr, 0.82, 0.73, 0.62);
-    cairo_rectangle(
-        cr, computer_x, computer_y,
-        computer_w, computer_h);
-    cairo_fill(cr);
-    cairo_set_source_rgb(cr, 0.15, 0.17, 0.28);
-    cairo_rectangle(
-        cr,
-        computer_x + computer_w * 0.14,
-        computer_y + computer_h * 0.14,
-        computer_w * 0.72,
-        computer_h * 0.35);
-    cairo_fill(cr);
-    cairo_set_source_rgb(cr, 0.23, 0.75, 0.95);
-    cairo_rectangle(
-        cr,
-        computer_x + computer_w * 0.18,
-        computer_y + computer_h * 0.18,
-        computer_w * 0.64,
-        computer_h * 0.27);
-    cairo_fill(cr);
-
-    cairo_set_source_rgb(cr, 0.72, 0.62, 0.52);
-    cairo_move_to(
-        cr,
-        computer_x - computer_w * 0.11,
-        computer_y + computer_h * 0.73);
-    cairo_line_to(
-        cr,
-        computer_x + computer_w * 0.96,
-        computer_y + computer_h * 0.73);
-    cairo_line_to(
-        cr,
-        computer_x + computer_w * 1.13,
-        computer_y + computer_h * 0.98);
-    cairo_line_to(
-        cr,
-        computer_x - computer_w * 0.20,
-        computer_y + computer_h * 0.98);
-    cairo_close_path(cr);
-    cairo_fill(cr);
-
-    static constexpr double ribbon_colours[][3] = {
-        {0.02, 0.70, 1.0},
-        {0.76, 0.12, 0.92},
-        {1.0, 0.36, 0.16}
-    };
-    for (int index = 0; index < 3; ++index) {
-        cairo_set_source_rgb(
-            cr,
-            ribbon_colours[index][0],
-            ribbon_colours[index][1],
-            ribbon_colours[index][2]);
-        cairo_set_line_width(cr, 13.0);
-        cairo_move_to(
-            cr,
-            w * (0.91 + index * 0.025),
-            0.0);
-        cairo_line_to(
-            cr,
-            w * (0.84 + index * 0.025),
-            h * 0.30);
-        cairo_stroke(cr);
+#ifdef INFILTRATOR_SOFTWARE_SOURCE_DATA_DIR
+    const std::filesystem::path source =
+        std::filesystem::path(
+            INFILTRATOR_SOFTWARE_SOURCE_DATA_DIR) /
+        "artwork" / "discover-hero.jpg";
+    if (std::filesystem::exists(source)) {
+        return source.string();
     }
+#endif
 
-    cairo_pattern_t *scrim =
-        cairo_pattern_create_linear(
-            0.0, 0.0, w * 0.66, 0.0);
-    cairo_pattern_add_color_stop_rgba(
-        scrim, 0.0, 0.018, 0.038, 0.12, 0.96);
-    cairo_pattern_add_color_stop_rgba(
-        scrim, 0.58, 0.018, 0.038, 0.12, 0.80);
-    cairo_pattern_add_color_stop_rgba(
-        scrim, 1.0, 0.018, 0.038, 0.12, 0.0);
-    cairo_set_source(cr, scrim);
-    cairo_rectangle(
-        cr, 0.0, 0.0, w * 0.70, h);
-    cairo_fill(cr);
-    cairo_pattern_destroy(scrim);
-
-    cairo_restore(cr);
+    return installed.string();
 }
 
 GtkWidget *make_discover_welcome_hero()
 {
-    GtkWidget *hero = gtk_overlay_new();
+    GtkWidget *hero =
+        gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
     gtk_widget_add_css_class(
         hero, "discover-welcome");
     gtk_widget_set_overflow(
         hero, GTK_OVERFLOW_HIDDEN);
 
-    GtkWidget *artwork =
-        gtk_drawing_area_new();
+    const std::string artwork_path =
+        discover_hero_artwork_path();
+    GtkWidget *picture =
+        gtk_picture_new_for_filename(
+            artwork_path.c_str());
     gtk_widget_add_css_class(
-        artwork, "welcome-artwork");
-    gtk_drawing_area_set_content_height(
-        GTK_DRAWING_AREA(artwork), 184);
-    gtk_widget_set_hexpand(artwork, true);
-    gtk_drawing_area_set_draw_func(
-        GTK_DRAWING_AREA(artwork),
-        draw_discover_welcome_art,
-        nullptr,
-        nullptr);
-    gtk_overlay_set_child(
-        GTK_OVERLAY(hero), artwork);
+        picture, "welcome-artwork");
+    gtk_picture_set_content_fit(
+        GTK_PICTURE(picture),
+        GTK_CONTENT_FIT_COVER);
+    gtk_picture_set_can_shrink(
+        GTK_PICTURE(picture), true);
+    gtk_widget_set_hexpand(
+        picture, true);
+    gtk_widget_set_size_request(
+        picture, -1, 166);
 
-    GtkWidget *content =
-        gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-    gtk_widget_add_css_class(
-        content, "welcome-content");
-    gtk_widget_set_halign(
-        content, GTK_ALIGN_FILL);
-    gtk_widget_set_valign(
-        content, GTK_ALIGN_FILL);
-    gtk_widget_set_margin_start(content, 28);
-    gtk_widget_set_margin_end(content, 28);
-    gtk_widget_set_margin_top(content, 22);
-    gtk_widget_set_margin_bottom(content, 22);
-
-    GtkWidget *copy =
-        gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
-    gtk_widget_set_valign(
-        copy, GTK_ALIGN_CENTER);
-    gtk_widget_set_halign(
-        copy, GTK_ALIGN_START);
-
-    GtkWidget *kicker =
-        make_label(
-            "INFLITRATOR SOFTWARE",
-            "welcome-kicker");
-
-    GtkWidget *title_row =
-        gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    /*
+     * The hero is deliberately raster artwork.  The approved visual target
+     * relies on a fully composed illustration rather than procedural GTK/Cairo
+     * shapes.  Keep the artwork as one authored surface and let GtkPicture
+     * scale/crop it to the available Discover width.
+     */
     gtk_box_append(
-        GTK_BOX(title_row),
-        make_label(
-            "Welcome to ",
-            "welcome-title"));
-    gtk_box_append(
-        GTK_BOX(title_row),
-        make_label(
-            "Infiltrator Software",
-            "welcome-title-accent"));
-
-    GtkWidget *subtitle =
-        make_label(
-            "Discover, install and keep your system up to date with the latest software.",
-            "welcome-subtitle");
-    gtk_label_set_wrap(
-        GTK_LABEL(subtitle), true);
-    gtk_label_set_max_width_chars(
-        GTK_LABEL(subtitle), 68);
-
-    gtk_box_append(GTK_BOX(copy), kicker);
-    gtk_box_append(GTK_BOX(copy), title_row);
-    gtk_box_append(GTK_BOX(copy), subtitle);
-    gtk_box_append(GTK_BOX(content), copy);
-    gtk_overlay_add_overlay(
-        GTK_OVERLAY(hero), content);
-
+        GTK_BOX(hero), picture);
     return hero;
 }
 
