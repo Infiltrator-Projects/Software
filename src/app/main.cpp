@@ -222,41 +222,6 @@ GtkWidget *make_page_intro(
     return hero;
 }
 
-GtkWidget *make_foundation_page(
-    const char *icon_name,
-    const char *title,
-    const char *subtitle,
-    const char *section_title,
-    const char *section_copy,
-    const char *semantic_class)
-{
-    GtkWidget *page = gtk_box_new(GTK_ORIENTATION_VERTICAL, 16);
-    gtk_widget_add_css_class(page, "content");
-    if (semantic_class != nullptr) {
-        gtk_widget_add_css_class(page, semantic_class);
-    }
-
-    gtk_box_append(
-        GTK_BOX(page),
-        make_page_intro(icon_name, title, subtitle));
-
-    GtkWidget *card = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
-    gtk_widget_add_css_class(card, "card");
-
-    GtkWidget *kicker = make_label("CURRENT MILESTONE", "kicker");
-    GtkWidget *heading = make_label(section_title, "card-title");
-    GtkWidget *copy = make_label(section_copy, "card-copy");
-    gtk_label_set_wrap(GTK_LABEL(copy), true);
-
-    gtk_box_append(GTK_BOX(card), kicker);
-    gtk_box_append(GTK_BOX(card), heading);
-    gtk_box_append(GTK_BOX(card), copy);
-    gtk_box_append(GTK_BOX(page), card);
-
-    return page;
-}
-
-
 struct DiscoverResult {
     CatalogueSnapshot snapshot;
     std::string warning;
@@ -6364,7 +6329,7 @@ GtkWidget *make_repair_page(
         make_stat_card(
             "SOURCES",
             "0",
-            "stat-operation",
+            "stat-info",
             &state->repair_sources),
         1, 0, 1, 1);
     gtk_grid_attach(
