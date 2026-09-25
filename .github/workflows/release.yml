@@ -107,7 +107,7 @@ jobs:
           grep -qx './usr/share/app-install/icons/infiltrator-software.svg' package-files.txt
           grep -qx './usr/share/metainfo/infiltrator-software.metainfo.xml' package-files.txt
           rm -rf package-root
-          dpkg-deb -x "$package" package-root
+          dpkg-deb -x "$DEB" package-root
           strings package-root/usr/bin/infiltrator-software | grep -Fq '/9j/4AAQSkZJRgABAQAAAQABAAD/'
           grep -qx './usr/share/fonts/truetype/infiltrator-software/mb_corpo_a_cond_regular.ttf' package-files.txt
           grep -qx './usr/share/fonts/truetype/infiltrator-software/mb_corpo_s_bold.ttf' package-files.txt
