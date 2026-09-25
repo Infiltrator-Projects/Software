@@ -1,3 +1,21 @@
+infiltrator-software (0.3.43) unstable; urgency=high
+
+  * Replace the inherited Discover hero with a dedicated clean raster containing
+    no baked-in product wording, checker sphere, Amiga computer or retro props.
+  * Keep the Discover hero title, kicker and subtitle as live GTK text layered
+    over the raster for correct scaling, theming and accessibility.
+  * Replace the three procedural title-bar colour bars with an authored raster
+    mark containing two angled parallel rainbow slashes.
+  * Populate Featured Applications immediately with Firefox, LibreOffice, GIMP
+    and VLC install surfaces, reconciling each card with exact catalogue and
+    installed state as background discovery completes.
+  * Give featured cards real raster-backed artwork and preserve the intended
+    two-thirds featured area versus one-third repository/activity right rail.
+  * Add CI contracts for the clean JPEG hero, raster PNG identity mark and
+    curated Featured Applications composition.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Fri, 25 Sep 2026 22:47:00 +1000
+
 infiltrator-software (0.3.42) unstable; urgency=high
 
   * Rebuild the Discover hero composition so the raster is scenery only and
