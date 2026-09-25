@@ -239,11 +239,8 @@ jobs:
           assert "g_base64_decode" in app
           assert "gdk_texture_new_from_bytes" in app
           assert "gtk_picture_new_for_paintable" in app
-          assert "GTK_CONTENT_FIT_CONTAIN" in app
-          assert "gtk_aspect_frame_new" in app
-          assert "1100.0F / 140.0F" in app
+          assert "GTK_CONTENT_FIT_COVER" in app
           assert "hero, -1, 166" in app
-          assert "aspect, true" in app
           assert "min-height: 166px" in theme
           assert "discover_hero_part01.inc" in app
           assert "discover_hero_part06.inc" in app
