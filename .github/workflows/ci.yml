@@ -85,6 +85,7 @@ jobs:
           phased = Path("src/engine/debian_phased_updates.cpp").read_text()
           preferences = Path("src/engine/debian_preferences.cpp").read_text()
           reconcile = Path("src/engine/debian_reconcile.cpp").read_text()
+          repository = Path("src/engine/debian_repository.cpp").read_text()
           state_store = Path("src/engine/package_state_store.cpp").read_text()
           history = Path("src/core/transaction_history.cpp").read_text()
           helper = Path("src/helper/update_helper.cpp").read_text()
@@ -119,6 +120,22 @@ jobs:
           assert "plan_removal(" in transaction
           assert "Refusing to remove Essential package" in transaction
           assert "Authentication is required to install, update or remove system software." in policy
+
+          # A stale graphical update row must not turn an already-completed
+          # exact version into a false transaction failure.
+          assert "approved_spec_already_satisfied" in helper
+          assert "INFILTRATOR_NO_CHANGES_REQUIRED" in helper
+          assert "pending_specs" in helper
+          assert "engine.refresh_installed(result->error)" in app
+          assert '"RefreshInstalledState"' in engine_client
+          assert '<method name="RefreshInstalledState">' in engine_interface
+
+          # Repeated repository checks reuse only content whose current signed
+          # Release metadata is byte-identical and whose cached Packages bytes
+          # still pass the signed SHA-256/size record.
+          assert "cached_release_current" in repository
+          assert "verify_payload(" in repository
+          assert "read_cached(" in repository
 
           # The update inventory must follow the host's Debian candidate policy,
           # not merely choose the numerically newest version from every source.
@@ -163,6 +180,18 @@ jobs:
           assert "updates_progress" in app
           assert "Approved update transaction is active" in app
           assert "Installation completed; verifying final package state" in app
+
+          assert "GTK_POLICY_ALWAYS" in app
+          assert '"DETAIL",\n            "Exact versions",\n            "stat-info"' in app
+
+          # Repair must be a working diagnostics/recovery page, not a milestone
+          # placeholder. Its privileged repair action is deliberately narrow.
+          assert "make_repair_page(state)" in app
+          assert "repair_worker(" in app
+          assert "run_dpkg_audit(" in app
+          assert "pending_dpkg_update_fragments(" in app
+          assert '"repair-configure"' in helper
+          assert '"Repair is explicit"' not in app
 
           # The footer must report the exact pinned Common header version,
           # never a stale hand-written version string.
