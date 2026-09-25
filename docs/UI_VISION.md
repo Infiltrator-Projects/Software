@@ -80,3 +80,8 @@ Behavioural package-management code is not to be rewritten merely to achieve the
 ### Sixth convergence layer
 
 Discover now follows the approved target composition much more directly. The single large spotlight/administrative glance emphasis has been replaced in the visible dashboard by a Featured Applications row, a real Updates preview, Repository Status and Recent Activity side panels, and a graphical system-health banner linking directly to Repair. The full searchable catalogue remains below the dashboard rather than competing with it for first-screen attention.
+
+
+### Window and scrolling correction
+
+The visual redesign must remain a usable desktop application at every intermediate stage. The main window now owns explicit minimise, maximise/restore and close controls rather than relying on compositor-generated title buttons, remains explicitly resizable, and Discover has a non-overlay page scrollbar so the growing dashboard and catalogue remain reachable at ordinary and maximised window sizes.
