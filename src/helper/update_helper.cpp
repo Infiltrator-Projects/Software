@@ -344,6 +344,32 @@ int run_apt_capture(
     return WEXITSTATUS(status);
 }
 
+int execute_dpkg_configure()
+{
+    const char *path =
+        access("/usr/bin/dpkg", X_OK) == 0
+            ? "/usr/bin/dpkg"
+            : (access("/bin/dpkg", X_OK) == 0
+                   ? "/bin/dpkg"
+                   : nullptr);
+    if (path == nullptr) {
+        std::fprintf(stderr, "dpkg is not available.\n");
+        return 127;
+    }
+
+    char *const argv[] = {
+        const_cast<char *>("dpkg"),
+        const_cast<char *>("--configure"),
+        const_cast<char *>("-a"),
+        nullptr
+    };
+    (void)setenv("DEBIAN_FRONTEND", "noninteractive", 1);
+    (void)setenv("LC_ALL", "C", 1);
+    execv(path, argv);
+    std::perror("Unable to execute dpkg --configure -a");
+    return 127;
+}
+
 int execute_apt(std::vector<std::string> arguments)
 {
     const char *path = apt_get_path();
@@ -370,6 +396,16 @@ int main(int argc, char **argv)
             stderr,
             "infiltrator-software-update-helper must run as root.\n");
         return 1;
+    }
+
+    if (argc == 2 &&
+        std::strcmp(argv[1], "repair-configure") == 0) {
+        /*
+         * Narrow repair action: finish configuration for packages already
+         * unpacked on this machine. It does not select, install, upgrade or
+         * remove repository packages.
+         */
+        return execute_dpkg_configure();
     }
 
     const bool legacy_upgrade =
@@ -517,6 +553,6 @@ int main(int argc, char **argv)
     std::fprintf(
         stderr,
         "Usage: infiltrator-software-update-helper "
-        "apply-plan [remove:]PACKAGE=VERSION...\n");
+        "apply-plan [remove:]PACKAGE=VERSION... | repair-configure\n");
     return 64;
 }
