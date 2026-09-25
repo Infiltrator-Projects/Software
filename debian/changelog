@@ -1,3 +1,21 @@
+infiltrator-software (0.3.42) unstable; urgency=high
+
+  * Rebuild the Discover hero composition so the raster is scenery only and
+    all visible product copy is live GTK text layered over it.
+  * Suppress the legacy mock-up lettering and recognisable Amiga-style ball
+    and computer props from the visible hero composition.
+  * Restore the target's live kicker, multi-colour Infiltrator Software
+    heading and explanatory subtitle as real scalable GTK labels.
+  * Rework the title bar to match the approved shell: Infiltrator ribbon mark
+    and product identity at left, broad centred search with Ctrl + K cue,
+    dark product action buttons, separator, then compact window controls.
+  * Reverse the title-bar packing order so product actions sit beside search
+    and minimise/maximise/close remain at the far right.
+  * Add CI source-contract checks for the live hero overlay and title-bar
+    composition so the shell cannot silently regress to the generic layout.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Fri, 25 Sep 2026 21:55:00 +1000
+
 infiltrator-software (0.3.41) unstable; urgency=high
 
   * Fix the 0.3.40 Discover hero collapsing to a thin line after the raster
