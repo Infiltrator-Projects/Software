@@ -19,6 +19,9 @@
     <method name="ReloadState">
       <arg name="status" type="a{sv}" direction="out"/>
     </method>
+    <method name="RefreshInstalledState">
+      <arg name="status" type="a{sv}" direction="out"/>
+    </method>
     <method name="RefreshState">
       <arg name="status" type="a{sv}" direction="out"/>
     </method>
