@@ -496,11 +496,11 @@ void ThemeController::apply()
         << "listview row:selected label, listview row:selected image { color: "
         << select_fg << "; }"
 
-        << ".discover-welcome { min-height: 166px; background: #07102d; "
+        << ".discover-welcome { background: #07102d; "
         << "border: 1px solid #4f63c9; border-radius: "
         << metrics->card_radius << "px; box-shadow: 0 12px 30px rgba(0,0,0,0.20); }"
-        << ".welcome-artwork { min-height: 166px; background: #07102d; }"
-        << ".welcome-artwork-error { min-height: 166px; color: " << danger
+        << ".welcome-artwork { background: #07102d; }"
+        << ".welcome-artwork-error { min-height: 110px; color: " << danger
         << "; background: #07102d; font-weight: " << typography->ui_bold_weight << "; }"
         << ".discover-dashboard { margin-top: 1px; margin-bottom: 1px; }"
         << "button.dashboard-card { min-height: 88px; padding: 12px 14px; "
