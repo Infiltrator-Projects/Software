@@ -75,3 +75,8 @@ The next convergence layer moves identity and search into the application chrome
 The fifth convergence layer concentrates on the sidebar itself: icon shapes and colours now follow the target more closely, the selected item becomes a vivid blue-violet surface, the administrative NAVIGATE label and chevrons are removed, Updates gains a real red count badge, and Settings becomes a proper bottom preferences card instead of technical backend/version text.
 
 Behavioural package-management code is not to be rewritten merely to achieve the visual redesign. The UI can evolve iteratively over the existing tested engine.
+
+
+### Sixth convergence layer
+
+Discover now follows the approved target composition much more directly. The single large spotlight/administrative glance emphasis has been replaced in the visible dashboard by a Featured Applications row, a real Updates preview, Repository Status and Recent Activity side panels, and a graphical system-health banner linking directly to Repair. The full searchable catalogue remains below the dashboard rather than competing with it for first-screen attention.
