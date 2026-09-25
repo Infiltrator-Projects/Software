@@ -81,6 +81,7 @@ jobs:
 
           app = Path("src/app/main.cpp").read_text()
           theme = Path("src/app/theme.cpp").read_text()
+          cmake = Path("CMakeLists.txt").read_text()
           backend = Path("src/backends/apt/apt_backend.cpp").read_text()
           transaction = Path("src/engine/debian_transaction.cpp").read_text()
           candidate = Path("src/engine/debian_candidate.cpp").read_text()
