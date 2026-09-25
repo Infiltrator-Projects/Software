@@ -69,6 +69,7 @@ struct WindowState {
     GtkWidget *discover_category{};
     GtkStringList *discover_categories{};
     GtkListBox *navigation_list{};
+    GtkWidget *nav_updates_badge{};
     GtkWidget *discover_status{};
     GtkWidget *discover_count{};
     GtkWidget *discover_source{};
@@ -4420,6 +4421,27 @@ void updates_complete(
             GTK_LABEL(state->discover_updates_summary),
             summary.c_str());
     }
+
+    if (state->nav_updates_badge != nullptr) {
+        const std::size_t count =
+            state->update_records.size();
+        if (count == 0U) {
+            gtk_widget_set_visible(
+                state->nav_updates_badge,
+                false);
+        } else {
+            const std::string badge =
+                count > 99U
+                    ? "99+"
+                    : std::to_string(count);
+            gtk_label_set_text(
+                GTK_LABEL(state->nav_updates_badge),
+                badge.c_str());
+            gtk_widget_set_visible(
+                state->nav_updates_badge,
+                true);
+        }
+    }
     state->selected_update_ids.clear();
     for (const PackageRecord &package : state->update_records) {
         const std::string identity = update_identity(package);
@@ -7588,40 +7610,69 @@ GtkWidget *make_nav_row(
     const char *icon_name,
     const char *text,
     const char *subtitle,
-    const char *semantic_class)
+    const char *semantic_class,
+    GtkWidget **badge_out = nullptr)
 {
-    GtkWidget *row_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
+    GtkWidget *row_box =
+        gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
+    gtk_widget_set_size_request(row_box, -1, 58);
 
     GtkWidget *icon_well =
         gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-    gtk_widget_add_css_class(icon_well, "nav-icon-well");
-    gtk_widget_set_size_request(icon_well, 36, 36);
-    GtkWidget *icon = make_icon(icon_name, 19);
-    gtk_widget_set_halign(icon, GTK_ALIGN_CENTER);
-    gtk_widget_set_valign(icon, GTK_ALIGN_CENTER);
-    gtk_box_append(GTK_BOX(icon_well), icon);
-    gtk_box_append(GTK_BOX(row_box), icon_well);
+    gtk_widget_add_css_class(
+        icon_well, "nav-icon-well");
+    gtk_widget_set_size_request(
+        icon_well, 42, 42);
 
-    GtkWidget *copy = gtk_box_new(GTK_ORIENTATION_VERTICAL, 1);
+    GtkWidget *icon =
+        make_icon(icon_name, 27);
+    gtk_widget_set_halign(
+        icon, GTK_ALIGN_CENTER);
+    gtk_widget_set_valign(
+        icon, GTK_ALIGN_CENTER);
+    gtk_box_append(
+        GTK_BOX(icon_well), icon);
+    gtk_box_append(
+        GTK_BOX(row_box), icon_well);
+
+    GtkWidget *copy =
+        gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
     gtk_widget_set_hexpand(copy, true);
-    GtkWidget *label = make_label(text, "nav-label");
-    GtkWidget *sub = make_label(subtitle, "nav-subtitle");
+    gtk_widget_set_valign(
+        copy, GTK_ALIGN_CENTER);
+
+    GtkWidget *label =
+        make_label(text, "nav-label");
+    GtkWidget *sub =
+        make_label(subtitle, "nav-subtitle");
     gtk_label_set_ellipsize(
         GTK_LABEL(sub), PANGO_ELLIPSIZE_END);
+
     gtk_box_append(GTK_BOX(copy), label);
     gtk_box_append(GTK_BOX(copy), sub);
     gtk_box_append(GTK_BOX(row_box), copy);
 
-    GtkWidget *chevron = make_label("›", "nav-chevron", 1.0F);
-    gtk_widget_set_valign(chevron, GTK_ALIGN_CENTER);
-    gtk_box_append(GTK_BOX(row_box), chevron);
-
-    GtkWidget *row = gtk_list_box_row_new();
-    gtk_widget_add_css_class(row, "nav-row");
-    if (semantic_class != nullptr) {
-        gtk_widget_add_css_class(row, semantic_class);
+    if (badge_out != nullptr) {
+        GtkWidget *badge =
+            make_label("", "nav-badge", 0.5F);
+        gtk_widget_set_valign(
+            badge, GTK_ALIGN_CENTER);
+        gtk_widget_set_visible(badge, false);
+        gtk_box_append(
+            GTK_BOX(row_box), badge);
+        *badge_out = badge;
     }
-    gtk_list_box_row_set_child(GTK_LIST_BOX_ROW(row), row_box);
+
+    GtkWidget *row =
+        gtk_list_box_row_new();
+    gtk_widget_add_css_class(
+        row, "nav-row");
+    if (semantic_class != nullptr) {
+        gtk_widget_add_css_class(
+            row, semantic_class);
+    }
+    gtk_list_box_row_set_child(
+        GTK_LIST_BOX_ROW(row), row_box);
     return row;
 }
 
@@ -7768,70 +7819,155 @@ GtkWidget *make_navigation(WindowState *state)
     };
     static constexpr const char *subtitles[] = {
         "Browse and explore",
-        "Your software",
-        "New versions",
-        "Core components",
-        "Software sources",
-        "Recent activity",
-        "Health and recovery"
+        "Manage your software",
+        "Available updates",
+        "System information",
+        "Manage sources",
+        "View recent activity",
+        "Diagnose and fix issues"
     };
     static constexpr const char *icons[] = {
-        "system-search-symbolic",
-        "view-list-symbolic",
-        "software-update-available-symbolic",
+        "go-home-symbolic",
+        "view-grid-symbolic",
+        "view-refresh-symbolic",
         "computer-symbolic",
-        "network-workgroup-symbolic",
+        "drive-multidisk-symbolic",
         "document-open-recent-symbolic",
-        "dialog-warning-symbolic"
+        "applications-engineering-symbolic"
     };
     static constexpr const char *semantic_classes[] = {
         "nav-discover", "nav-installed", "nav-updates", "nav-system",
         "nav-repositories", "nav-history", "nav-repair"
     };
 
-    GtkWidget *outer = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-    gtk_widget_set_size_request(outer, 270, -1);
-    gtk_widget_add_css_class(outer, "sidebar");
+    GtkWidget *outer =
+        gtk_box_new(
+            GTK_ORIENTATION_VERTICAL, 0);
+    gtk_widget_set_size_request(
+        outer, 245, -1);
+    gtk_widget_add_css_class(
+        outer, "sidebar");
 
-    GtkWidget *section = make_label("NAVIGATE", "sidebar-title");
-    gtk_widget_set_margin_start(section, 18);
-    gtk_widget_set_margin_end(section, 18);
-    gtk_widget_set_margin_top(section, 8);
-    gtk_widget_set_margin_bottom(section, 7);
-    gtk_box_append(GTK_BOX(outer), section);
-
-    GtkWidget *list = gtk_list_box_new();
-    state->navigation_list = GTK_LIST_BOX(list);
-    gtk_widget_add_css_class(list, "nav-list");
-    gtk_list_box_set_selection_mode(GTK_LIST_BOX(list), GTK_SELECTION_SINGLE);
-    gtk_widget_set_margin_start(list, 8);
-    gtk_widget_set_margin_end(list, 8);
+    GtkWidget *list =
+        gtk_list_box_new();
+    state->navigation_list =
+        GTK_LIST_BOX(list);
+    gtk_widget_add_css_class(
+        list, "nav-list");
+    gtk_list_box_set_selection_mode(
+        GTK_LIST_BOX(list),
+        GTK_SELECTION_SINGLE);
+    gtk_widget_set_margin_start(list, 10);
+    gtk_widget_set_margin_end(list, 10);
+    gtk_widget_set_margin_top(list, 10);
     gtk_widget_set_vexpand(list, true);
     gtk_box_append(GTK_BOX(outer), list);
 
-    for (int i = 0; i < 7; ++i) {
+    for (int index = 0;
+         index < 7;
+         ++index) {
+        GtkWidget **badge =
+            index == 2
+                ? &state->nav_updates_badge
+                : nullptr;
         gtk_list_box_append(
             GTK_LIST_BOX(list),
             make_nav_row(
-                icons[i],
-                labels[i],
-                subtitles[i],
-                semantic_classes[i]));
+                icons[index],
+                labels[index],
+                subtitles[index],
+                semantic_classes[index],
+                badge));
     }
 
     g_signal_connect(
-        list, "row-selected", G_CALLBACK(navigation_changed), state);
+        list,
+        "row-selected",
+        G_CALLBACK(navigation_changed),
+        state);
 
-    GtkWidget *footer = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
-    gtk_widget_add_css_class(footer, "sidebar-footer");
-    GtkWidget *backend = make_label("APT/.deb backend", "sidebar-note");
-    const std::string common_version =
-        std::string("Common ") + INFILTRATR_COMMON_VERSION;
-    GtkWidget *common =
-        make_label(common_version.c_str(), "sidebar-note");
-    gtk_box_append(GTK_BOX(footer), backend);
-    gtk_box_append(GTK_BOX(footer), common);
-    gtk_box_append(GTK_BOX(outer), footer);
+    GtkWidget *settings =
+        gtk_button_new();
+    gtk_widget_add_css_class(
+        settings, "sidebar-settings");
+    gtk_widget_set_margin_start(
+        settings, 10);
+    gtk_widget_set_margin_end(
+        settings, 10);
+    gtk_widget_set_margin_bottom(
+        settings, 14);
+
+    GtkWidget *settings_row =
+        gtk_box_new(
+            GTK_ORIENTATION_HORIZONTAL, 12);
+
+    GtkWidget *settings_icon_well =
+        gtk_box_new(
+            GTK_ORIENTATION_VERTICAL, 0);
+    gtk_widget_add_css_class(
+        settings_icon_well,
+        "settings-icon-well");
+    gtk_widget_set_size_request(
+        settings_icon_well, 42, 42);
+    GtkWidget *settings_icon =
+        make_icon(
+            "emblem-system-symbolic", 25);
+    gtk_widget_set_halign(
+        settings_icon, GTK_ALIGN_CENTER);
+    gtk_widget_set_valign(
+        settings_icon, GTK_ALIGN_CENTER);
+    gtk_box_append(
+        GTK_BOX(settings_icon_well),
+        settings_icon);
+    gtk_box_append(
+        GTK_BOX(settings_row),
+        settings_icon_well);
+
+    GtkWidget *settings_copy =
+        gtk_box_new(
+            GTK_ORIENTATION_VERTICAL, 2);
+    gtk_widget_set_hexpand(
+        settings_copy, true);
+    GtkWidget *settings_title =
+        make_label(
+            "Settings",
+            "settings-title");
+    GtkWidget *settings_subtitle =
+        make_label(
+            "Preferences",
+            "settings-subtitle");
+    gtk_box_append(
+        GTK_BOX(settings_copy),
+        settings_title);
+    gtk_box_append(
+        GTK_BOX(settings_copy),
+        settings_subtitle);
+    gtk_box_append(
+        GTK_BOX(settings_row),
+        settings_copy);
+
+    GtkWidget *settings_chevron =
+        make_label(
+            "›",
+            "settings-chevron",
+            0.5F);
+    gtk_widget_set_valign(
+        settings_chevron,
+        GTK_ALIGN_CENTER);
+    gtk_box_append(
+        GTK_BOX(settings_row),
+        settings_chevron);
+
+    gtk_button_set_child(
+        GTK_BUTTON(settings),
+        settings_row);
+    g_signal_connect(
+        settings,
+        "clicked",
+        G_CALLBACK(settings_clicked),
+        state);
+    gtk_box_append(
+        GTK_BOX(outer), settings);
 
     return outer;
 }
@@ -7898,6 +8034,64 @@ void theme_clicked(GtkButton *, gpointer user_data)
 
     state->theme.cycle_mode();
     update_theme_button(state);
+}
+
+void settings_clicked(GtkButton *, gpointer user_data)
+{
+    auto *state =
+        static_cast<WindowState *>(user_data);
+    if (state == nullptr ||
+        state->window == nullptr) {
+        return;
+    }
+
+    GtkWidget *window = gtk_window_new();
+    gtk_window_set_title(
+        GTK_WINDOW(window),
+        "Software Preferences");
+    gtk_window_set_transient_for(
+        GTK_WINDOW(window),
+        state->window);
+    gtk_window_set_modal(
+        GTK_WINDOW(window), true);
+    gtk_window_set_destroy_with_parent(
+        GTK_WINDOW(window), true);
+    gtk_window_set_default_size(
+        GTK_WINDOW(window), 380, 250);
+
+    GtkWidget *content =
+        gtk_box_new(
+            GTK_ORIENTATION_VERTICAL, 12);
+    gtk_widget_add_css_class(
+        content, "preferences-page");
+    gtk_widget_set_margin_top(content, 18);
+    gtk_widget_set_margin_bottom(content, 18);
+    gtk_widget_set_margin_start(content, 18);
+    gtk_widget_set_margin_end(content, 18);
+
+    GtkWidget *title =
+        make_label(
+            "Software Preferences",
+            "preferences-title");
+    GtkWidget *copy =
+        make_label(
+            "Choose how Infiltrator Software follows your desktop appearance.",
+            "preferences-copy");
+    gtk_label_set_wrap(
+        GTK_LABEL(copy), true);
+
+    gtk_box_append(
+        GTK_BOX(content), title);
+    gtk_box_append(
+        GTK_BOX(content), copy);
+    gtk_box_append(
+        GTK_BOX(content),
+        state->theme.create_selector());
+
+    gtk_window_set_child(
+        GTK_WINDOW(window), content);
+    gtk_window_present(
+        GTK_WINDOW(window));
 }
 
 void refresh_clicked(GtkButton *, gpointer user_data)
