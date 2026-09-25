@@ -1,3 +1,21 @@
+infiltrator-software (0.3.39) unstable; urgency=high
+
+  * Replace the procedural GTK/Cairo Discover hero with committed raster
+    artwork taken from the approved Software visual target.
+  * Render the authored hero through GtkPicture with cover scaling instead of
+    reconstructing the mountains, planet, checker sphere, computer and colour
+    ribbons from code.
+  * Remove the now-obsolete procedural hero drawing and split-title CSS.
+  * Install the raster artwork as a first-class package asset under
+    /usr/share/infiltrator-software/artwork.
+  * Keep a source-tree fallback path so development and launch-smoke builds
+    render the same artwork before installation.
+  * Strengthen CI and release-package verification so the raster asset cannot
+    silently disappear or regress back to procedural drawing.
+  * Correct the UI vision to make the raster-first art-direction rule explicit.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Fri, 25 Sep 2026 20:02:00 +1000
+
 infiltrator-software (0.3.38) unstable; urgency=high
 
   * Continue visual convergence toward the approved Software reference.
