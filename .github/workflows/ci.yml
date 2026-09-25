@@ -336,6 +336,11 @@ jobs:
           assert ".preview-row" in theme
           assert "button.health-banner" in theme
           assert ".discover-main-dashboard" in theme
+          assert "gtk_grid_set_column_homogeneous" in app
+          assert "left_column,\n        0, 0, 2, 1" in app
+          assert "right_column,\n        2, 0, 1, 1" in app
+          assert "make_navigation(state),\n        0, 0, 1, 1" in app
+          assert "stack,\n        1, 0, 5, 1" in app
 
           # Window usability: explicit native controls and a real page
           # scrollbar must remain functional as the dashboard grows.
