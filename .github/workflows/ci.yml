@@ -164,8 +164,8 @@ jobs:
           assert "release_origin TEXT NOT NULL" in state_store
           assert '"policy-provider"' in engine_service
           assert '"selection-reason"' in engine_service
-          assert '"Policy: " + policy_name' in app
-          assert '"Recommended update"' in app
+          assert '"Selection policy: " + policy_name' in app
+          assert '"Recommended"' in app
           assert 'return "view-refresh-symbolic";' in app
           assert 'image.package-icon { color:' in theme
 
