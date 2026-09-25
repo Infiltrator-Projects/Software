@@ -276,12 +276,25 @@ jobs:
           assert '"welcome-artwork-veil"' in app
           assert '"global-search-shell"' in app
           assert '"search-shortcut"' in app
-          assert '"titlebar-mark-cyan"' in app
+          assert '"titlebar_logo.inc"' in app
+          assert "kTitlebarLogoBase64" in app
+          assert '"titlebar-logo"' in app
           assert ".welcome-artwork-veil" in theme
           assert ".welcome-title" in theme
           assert ".global-search-shell" in theme
-          assert ".titlebar-mark-cyan" in theme
+          assert ".titlebar-logo" in theme
           assert "background: #10214d" in theme
+
+          # The title identity is an authored raster mark: exactly the new
+          # two-slash artwork, never the old three procedural GtkBox bars.
+          logo_part = Path("src/app/titlebar_logo.inc")
+          assert logo_part.is_file()
+          encoded_logo = logo_part.read_text().strip().strip('"')
+          decoded_logo = base64.b64decode(encoded_logo, validate=True)
+          assert decoded_logo[:8].hex() == "89504e470d0a1a0a"
+          assert len(decoded_logo) > 5000
+          assert "titlebar-mark-bar" not in app
+          assert ".titlebar-mark-bar" not in theme
 
           # Sidebar convergence: target-like semantic icons, vivid selection,
           # real update badge and an actual Preferences entry.
@@ -311,6 +324,15 @@ jobs:
           assert '"Recent Activity"' in app
           assert '"Keep your system healthy"' in app
           assert ".featured-card" in theme
+          assert "featured_fallback_records" in app
+          assert "append_curated_featured" in app
+          assert '"firefox"' in app
+          assert '"libreoffice"' in app
+          assert '"gimp"' in app
+          assert '"vlc"' in app
+          assert '"featured-card-raster"' in app
+          assert ".featured-card-raster" in theme
+          assert ".featured-card-art-shade" in theme
           assert ".preview-row" in theme
           assert "button.health-banner" in theme
           assert ".discover-main-dashboard" in theme
