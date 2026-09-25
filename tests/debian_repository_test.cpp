@@ -105,6 +105,23 @@ int main()
     assert(std::filesystem::exists(
         cache / "fixture_stable_main/Release"));
 
+    /*
+     * With an unchanged signed Release document, a refresh must be able to
+     * reuse the verified uncompressed Packages cache instead of requiring the
+     * repository index payload to be downloaded again.
+     */
+    std::filesystem::remove(
+        repository / "dists/stable/main/binary-amd64/Packages");
+    error.clear();
+    const DebianRepositorySnapshot cached_snapshot =
+        DebianRepositoryRefresh::refresh(
+            source, "amd64", cache.string(), error);
+    assert(error.empty());
+    assert(cached_snapshot.packages.size() == 2U);
+    write_file(
+        repository / "dists/stable/main/binary-amd64/Packages",
+        packages);
+
     const std::string bad_release =
         "Suite: stable\n"
         "Architectures: amd64\n"
