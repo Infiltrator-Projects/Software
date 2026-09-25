@@ -268,6 +268,14 @@ foreach(target IN ITEMS
 endforeach()
 
 if(BUILD_TESTING)
+    # Release builds define NDEBUG by default, but the regression executables
+    # intentionally use assert() as their failure mechanism. Keep those
+    # assertions active so Release CTest cannot silently compile away checks.
+    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
+        add_compile_options(-UNDEBUG)
+    elseif(MSVC)
+        add_compile_options(/UNDEBUG)
+    endif()
     add_executable(software-model-test tests/model_test.cpp)
     target_link_libraries(software-model-test PRIVATE software-core)
     add_test(NAME software-model-test COMMAND software-model-test)
