@@ -209,6 +209,17 @@ jobs:
           assert ".hero-ribbon-a" in theme
           assert ".nav-icon-well" in theme
 
+          # Second visual pass: Discover shortcuts, grouped Updates and the
+          # Repair health overview are product-level GUI contracts.
+          assert "category-shortcuts" in app
+          assert "make_discover_category_shortcut" in app
+          assert "update-group-header" in app
+          assert "make_update_group_header" in app
+          assert "repair-overview" in app
+          assert "Software health is good" in app
+          assert ".version-chip-new" in theme
+          assert ".repair-overview-good" in theme
+
           # The footer must report the exact pinned Common header version,
           # never a stale hand-written version string.
           assert "INFILTRATR_COMMON_VERSION" in app
