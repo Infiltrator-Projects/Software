@@ -8290,6 +8290,13 @@ GtkWidget *make_status_bar()
     gtk_widget_set_hexpand(ready, true);
     gtk_box_append(GTK_BOX(bar), ready);
 
+    const std::string common =
+        std::string("Common ") + INFILTRATR_COMMON_VERSION;
+    GtkWidget *common_label =
+        make_label(common.c_str(), "statusbar-text", 1.0F);
+    gtk_widget_set_margin_end(common_label, 14);
+    gtk_box_append(GTK_BOX(bar), common_label);
+
     const std::string version =
         std::string("Version ") + INFILTRATOR_SOFTWARE_VERSION;
     GtkWidget *version_label =
