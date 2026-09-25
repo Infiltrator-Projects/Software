@@ -560,8 +560,6 @@ void ThemeController::apply()
         << "px; border: 1px solid " << status_border << "; }"
         << ".featured-card-raster { opacity: 0.82; }"
         << ".featured-card-art-shade { background: rgba(4,11,29,0.18); }"
-        << ".featured-card-art image.discover-app-icon { "
-        << "filter: drop-shadow(0 4px 7px rgba(0,0,0,0.45)); }"
         << ".featured-card-name { font-size: 13px; font-weight: "
         << typography->ui_bold_weight << "; color: " << heading << "; }"
         << ".featured-card-meta { font-size: 10px; color: " << info << "; }"
