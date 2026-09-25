@@ -215,9 +215,34 @@ add_executable(infiltrator-software-tray
 target_link_libraries(infiltrator-software-tray PRIVATE
     software-client PkgConfig::GTK3 PkgConfig::XAPP)
 
+find_program(GLIB_COMPILE_RESOURCES
+    NAMES glib-compile-resources
+    REQUIRED)
+
+set(SOFTWARE_RESOURCE_XML
+    "${CMAKE_CURRENT_SOURCE_DIR}/data/infiltrator-software.gresource.xml")
+set(SOFTWARE_RESOURCE_C
+    "${CMAKE_CURRENT_BINARY_DIR}/infiltrator-software-resources.c")
+
+add_custom_command(
+    OUTPUT "${SOFTWARE_RESOURCE_C}"
+    COMMAND "${GLIB_COMPILE_RESOURCES}"
+            "${SOFTWARE_RESOURCE_XML}"
+            --target="${SOFTWARE_RESOURCE_C}"
+            --generate-source
+            --sourcedir="${CMAKE_CURRENT_SOURCE_DIR}/data"
+    DEPENDS
+        "${SOFTWARE_RESOURCE_XML}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/data/artwork/discover-hero.jpg"
+    VERBATIM)
+set_source_files_properties(
+    "${SOFTWARE_RESOURCE_C}"
+    PROPERTIES GENERATED TRUE)
+
 add_executable(infiltrator-software
     src/app/main.cpp
-    src/app/theme.cpp)
+    src/app/theme.cpp
+    "${SOFTWARE_RESOURCE_C}")
 target_link_libraries(infiltrator-software PRIVATE
     software-core software-history software-client software-apt
     software-catalogue software-sources
@@ -225,8 +250,7 @@ target_link_libraries(infiltrator-software PRIVATE
 
 target_compile_definitions(infiltrator-software PRIVATE
     INFILTRATOR_SOFTWARE_VERSION="${PROJECT_VERSION}"
-    INFILTRATOR_SOFTWARE_BUILD_PROFILE="${SOFTWARE_BUILD_PROFILE}"
-    INFILTRATOR_SOFTWARE_SOURCE_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
+    INFILTRATOR_SOFTWARE_BUILD_PROFILE="${SOFTWARE_BUILD_PROFILE}")
 
 install(TARGETS infiltrator-software infiltrator-software-tray
     RUNTIME DESTINATION bin)
