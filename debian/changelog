@@ -1,3 +1,23 @@
+infiltrator-software (0.3.32) unstable; urgency=high
+
+  * Continue the GUI-first redesign toward the checked-in visual target.
+  * Add graphical Discover category shortcuts so common areas can be reached
+    directly without relying only on a conventional drop-down.
+  * Rebuild update rows around artwork wells, compact version chips and source
+    identity, reducing package-manager prose in the primary visual surface.
+  * Group Updates into System, Applications, Libraries & runtimes and Other
+    software sections with icon-led headers and counts.
+  * Add a large live Repair health overview that changes between checking,
+    healthy and attention-required states and keeps the detailed diagnostics
+    below it.
+  * Strengthen the visual hierarchy and styling for the new Discover shortcuts,
+    grouped Updates and Repair health centre while retaining native GTK
+    behaviour and the existing tested package engine.
+  * Extend CI regression contracts to keep these second-pass visual primitives
+    from silently disappearing.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Fri, 25 Sep 2026 17:15:00 +1000
+
 infiltrator-software (0.3.31) unstable; urgency=high
 
   * Check in the approved Software visual north-star mock-up and UI vision as
