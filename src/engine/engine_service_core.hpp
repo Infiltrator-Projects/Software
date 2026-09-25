@@ -33,6 +33,7 @@ public:
         DebianCandidatePolicy policy = {});
 
     bool reload(std::string &error);
+    bool refresh_installed(std::string &error);
     bool refresh(std::string &error);
 
     [[nodiscard]] EngineServiceStatus status() const;
