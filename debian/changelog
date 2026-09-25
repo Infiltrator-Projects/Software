@@ -1,3 +1,19 @@
+infiltrator-software (0.3.38) unstable; urgency=high
+
+  * Continue visual convergence toward the approved Software reference.
+  * Replace the flat Discover welcome header with native procedural artwork
+    rendered directly in GTK/Cairo rather than baking the interface into an
+    image asset.
+  * Add the target's blue-violet sky, warm horizon, layered mountains, planet,
+    retro-computer silhouette and cyan/violet/orange Infiltrator ribbon motif.
+  * Keep Welcome copy as live GTK text for scaling and accessibility while
+    separating the product name with a stronger violet accent.
+  * Preserve the existing functional dashboard, explicit window controls and
+    nested scrolling behaviour introduced in 0.3.37.
+  * Document this seventh visual-convergence layer in the UI vision.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Fri, 25 Sep 2026 19:44:00 +1000
+
 infiltrator-software (0.3.37) unstable; urgency=high
 
   * Fix the main-window sizing regression exposed by the growing Discover
