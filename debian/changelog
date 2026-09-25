@@ -13,7 +13,8 @@ infiltrator-software (0.3.30) unstable; urgency=high
   * Give History a permanently visible vertical scrollbar and correct the
     low-contrast Exact versions detail treatment.
   * Keep assert-based regression checks active in Release builds and extend CI
-    contracts for the Updates, Repair, repository-cache and History fixes.
+    contracts for the Updates, Repair, repository-cache and History fixes;
+    remove duplicate dependency diagnostics exposed by the restored assertions.
   * Update performance, recovery and roadmap documentation to match the
     implemented behaviour.
   * Isolate hosted release verification from the development self-hosted
