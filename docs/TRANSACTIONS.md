@@ -69,6 +69,8 @@ History records transaction identity, start/end time, requested operation, resol
 
 ## Recovery
 
-Checkpoint creation, interrupted-transaction diagnosis and guided rollback are the 0.6 recovery milestone; the current Repair page is the graphical surface reserved for that work.
+Repair is operational for state-preserving recovery. It can reconcile authoritative installed state against the current verified repository generation, rebuild verified repository state on request, diagnose dpkg audit/update-fragment problems, and authenticate the narrow `dpkg --configure -a` action for packages that are already unpacked but unfinished.
 
-When implemented, qualifying InfiltratorFS transactions may request a pre-change filesystem checkpoint. Rollback will be owned by a recovery service rather than package-format code, with checkpoint identity linked to History.
+Repair does not run an unconstrained `apt --fix-broken install`. Any future dependency-changing repair must first resolve and display an immutable package mutation plan under the same authorization rules as normal transactions.
+
+Checkpoint creation and guided rollback remain the full 0.6 recovery milestone. Qualifying InfiltratorFS transactions may then request a pre-change filesystem checkpoint, with checkpoint identity linked to History and recovery.
