@@ -2476,27 +2476,6 @@ GtkWidget *make_dashboard_card(
     return button;
 }
 
-std::string discover_hero_artwork_path()
-{
-    const std::filesystem::path installed =
-        "/usr/share/infiltrator-software/artwork/discover-hero.jpg";
-    if (std::filesystem::exists(installed)) {
-        return installed.string();
-    }
-
-#ifdef INFILTRATOR_SOFTWARE_SOURCE_DATA_DIR
-    const std::filesystem::path source =
-        std::filesystem::path(
-            INFILTRATOR_SOFTWARE_SOURCE_DATA_DIR) /
-        "artwork" / "discover-hero.jpg";
-    if (std::filesystem::exists(source)) {
-        return source.string();
-    }
-#endif
-
-    return installed.string();
-}
-
 GtkWidget *make_discover_welcome_hero()
 {
     GtkWidget *hero =
@@ -2506,11 +2485,16 @@ GtkWidget *make_discover_welcome_hero()
     gtk_widget_set_overflow(
         hero, GTK_OVERFLOW_HIDDEN);
 
-    const std::string artwork_path =
-        discover_hero_artwork_path();
+    /*
+     * The hero is compiled into the application as a GResource.  Do not load
+     * this high-visibility artwork from an external filesystem path: a missing
+     * or misplaced package asset previously degraded silently into an empty
+     * panel.  The resource is part of the executable build and therefore has
+     * the same lifetime and deployment identity as the UI that consumes it.
+     */
     GtkWidget *picture =
-        gtk_picture_new_for_filename(
-            artwork_path.c_str());
+        gtk_picture_new_for_resource(
+            "/net/ssmith/infiltrator/software/artwork/discover-hero.jpg");
     gtk_widget_add_css_class(
         picture, "welcome-artwork");
     gtk_picture_set_content_fit(
@@ -2523,12 +2507,23 @@ GtkWidget *make_discover_welcome_hero()
     gtk_widget_set_size_request(
         picture, -1, 166);
 
-    /*
-     * The hero is deliberately raster artwork.  The approved visual target
-     * relies on a fully composed illustration rather than procedural GTK/Cairo
-     * shapes.  Keep the artwork as one authored surface and let GtkPicture
-     * scale/crop it to the available Discover width.
-     */
+    if (gtk_picture_get_paintable(GTK_PICTURE(picture)) == nullptr) {
+        g_critical(
+            "Embedded Discover hero resource failed to load");
+        GtkWidget *error =
+            gtk_label_new(
+                "Discover artwork failed to load");
+        gtk_widget_add_css_class(
+            error, "welcome-artwork-error");
+        gtk_widget_set_vexpand(
+            error, true);
+        gtk_widget_set_valign(
+            error, GTK_ALIGN_CENTER);
+        gtk_box_append(
+            GTK_BOX(hero), error);
+        return hero;
+    }
+
     gtk_box_append(
         GTK_BOX(hero), picture);
     return hero;
