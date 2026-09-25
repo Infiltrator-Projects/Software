@@ -2,6 +2,7 @@
 #include "engine/engine_service_core.hpp"
 
 #include "engine/debian_reconcile.hpp"
+#include "engine/debian_installed_state.hpp"
 #include "engine/debian_transaction.hpp"
 
 #include <algorithm>
@@ -15,6 +16,33 @@
 
 namespace infiltrator::software {
 namespace {
+
+bool same_installed_state(
+    const std::vector<PackageRecord> &left,
+    const std::vector<PackageRecord> &right)
+{
+    if (left.size() != right.size()) {
+        return false;
+    }
+
+    for (std::size_t index = 0U; index < left.size(); ++index) {
+        const PackageRecord &a = left[index];
+        const PackageRecord &b = right[index];
+        if (a.package_name != b.package_name ||
+            a.architecture != b.architecture ||
+            a.installed_version != b.installed_version ||
+            a.installed_size_bytes != b.installed_size_bytes ||
+            a.depends != b.depends ||
+            a.pre_depends != b.pre_depends ||
+            a.provides != b.provides ||
+            a.priority != b.priority ||
+            a.multi_arch != b.multi_arch ||
+            a.essential != b.essential) {
+            return false;
+        }
+    }
+    return true;
+}
 
 std::vector<PackageRecord> build_updates(
     const PackageStateSnapshot &snapshot,
@@ -116,6 +144,46 @@ bool EngineServiceCore::reload(std::string &error)
     detail_ = "Ready";
     error.clear();
     return true;
+}
+
+bool EngineServiceCore::refresh_installed(std::string &error)
+{
+    /*
+     * Package payload execution changes dpkg state but does not require a
+     * second network metadata refresh. Reconcile the authoritative installed
+     * database against the already verified repository generation so Updates
+     * can drop completed work immediately.
+     */
+    if (!snapshot_.has_value()) {
+        return refresh(error);
+    }
+
+    std::string installed_error;
+    std::vector<PackageRecord> installed =
+        DebianInstalledState::read(installed_error);
+    if (!installed_error.empty()) {
+        error = installed_error;
+        return false;
+    }
+
+    if (same_installed_state(snapshot_->installed, installed)) {
+        healthy_ = true;
+        detail_ = "Ready";
+        error.clear();
+        return true;
+    }
+
+    std::uint64_t published_generation = 0U;
+    if (!store_.publish(
+            installed,
+            snapshot_->available,
+            snapshot_->source_fingerprint,
+            published_generation,
+            error)) {
+        return false;
+    }
+
+    return reload(error);
 }
 
 bool EngineServiceCore::refresh(std::string &error)
