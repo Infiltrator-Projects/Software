@@ -309,7 +309,7 @@ void ThemeController::apply()
         << "headerbar.infiltrator-titlebar { min-height: 44px; background: "
         << titlebar << "; color: " << title
         << "; border-bottom: 1px solid " << border << "; padding: 0 6px; }"
-        << ".titlebar-title { font-family: \"" << typography->brand_family
+        << ".titlebar-title { font-family: \"" << typography->ui_family
         << "\"; font-size: 18px; font-weight: " << typography->ui_bold_weight
         << "; color: " << title << "; }"
         << ".titlebar-subtitle { color: " << summary
@@ -485,14 +485,14 @@ void ThemeController::apply()
         << "listview row:selected label, listview row:selected image { color: "
         << select_fg << "; }"
 
-        << ".discover-welcome { padding: 22px 25px; min-height: 108px; "
-        << "background-image: linear-gradient(115deg, " << card << ", "
-        << surface << "); border: 1px solid " << info << "; border-radius: "
+        << ".discover-welcome { padding: 24px 28px; min-height: 130px; "
+        << "background-image: linear-gradient(115deg, #121b48, #26134d, #102f5d); "
+        << "border: 1px solid #4f63c9; border-radius: "
         << metrics->card_radius << "px; box-shadow: 0 10px 28px rgba(0,0,0,0.16); }"
         << ".welcome-kicker { font-size: 9px; font-weight: "
         << typography->ui_bold_weight << "; color: " << operation << "; }"
-        << ".welcome-title { font-family: \"" << typography->brand_family
-        << "\"; font-size: 31px; font-weight: " << typography->brand_weight
+        << ".welcome-title { font-family: \"" << typography->ui_family
+        << "\"; font-size: 33px; font-weight: " << typography->ui_bold_weight
         << "; color: " << heading << "; }"
         << ".welcome-subtitle { font-size: 12px; color: " << note << "; }"
         << ".welcome-visual { margin-left: 12px; }"
@@ -531,6 +531,63 @@ void ThemeController::apply()
         << ".dashboard-repositories .dashboard-icon-well { background: " << info
         << "; border-color: " << info << "; }"
         << ".dashboard-repositories .dashboard-icon-well image { color: " << accent_fg << "; }"
+        << ".discover-main-dashboard { margin-top: 1px; }"
+        << ".discover-panel { padding: 13px 14px; background-image: linear-gradient(135deg, "
+        << card << ", " << surface << "); border: 1px solid " << border
+        << "; border-radius: " << metrics->card_radius
+        << "px; box-shadow: 0 5px 16px rgba(0,0,0,0.13); }"
+        << ".featured-panel { border-color: " << info << "; }"
+        << ".panel-title { font-family: \"" << typography->ui_family
+        << "\"; font-size: 16px; font-weight: " << typography->ui_bold_weight
+        << "; color: " << heading << "; }"
+        << ".panel-subtitle { font-size: 10px; color: " << summary << "; }"
+        << ".featured-header-icon { color: " << warning << "; }"
+        << "flowbox .featured-card { margin: 0; }"
+        << ".featured-card { padding: 10px; background: " << panel
+        << "; border: 1px solid " << border << "; border-radius: "
+        << metrics->control_radius << "px; }"
+        << ".featured-card:hover { background: " << card_hover
+        << "; border-color: " << info << "; }"
+        << ".featured-card-art { min-height: 76px; padding: 7px; "
+        << "background-image: linear-gradient(145deg, " << surface << ", "
+        << card_hover << "); border-radius: " << metrics->small_radius
+        << "px; border: 1px solid " << status_border << "; }"
+        << ".featured-card-name { font-size: 13px; font-weight: "
+        << typography->ui_bold_weight << "; color: " << heading << "; }"
+        << ".featured-card-meta { font-size: 10px; color: " << info << "; }"
+        << ".featured-card-copy { font-size: 10px; color: " << note << "; }"
+        << "button.featured-primary, button.featured-secondary { min-height: 30px; "
+        << "padding-left: 9px; padding-right: 9px; }"
+        << "button.featured-secondary { background: " << surface
+        << "; border-color: " << border << "; }"
+        << ".updates-preview-panel { border-color: " << warning_border << "; }"
+        << ".preview-row { padding: 7px 8px; background: " << panel
+        << "; border: 1px solid " << border << "; border-radius: "
+        << metrics->small_radius << "px; }"
+        << ".preview-icon-well { min-width: 34px; min-height: 34px; "
+        << "border-radius: 999px; background: " << surface
+        << "; border: 1px solid " << status_border << "; }"
+        << ".preview-info image { color: " << info << "; }"
+        << ".preview-good image { color: " << success << "; }"
+        << ".preview-warning image { color: " << warning << "; }"
+        << ".preview-row-title { font-size: 11px; font-weight: "
+        << typography->ui_bold_weight << "; color: " << text << "; }"
+        << ".preview-row-note { font-size: 9px; color: " << summary << "; }"
+        << "button.health-banner { min-height: 70px; padding: 12px 15px; "
+        << "background-image: linear-gradient(100deg, #c55a39, #7e2ecb, #1e5aa8); "
+        << "border: 1px solid #d15a9a; border-radius: " << metrics->card_radius
+        << "px; box-shadow: 0 6px 18px rgba(30,0,55,0.28); }"
+        << "button.health-banner:hover { background-image: linear-gradient(100deg, "
+        << "#d56b48, #9140d8, #2a6bbb); }"
+        << ".health-banner-icon { min-width: 44px; min-height: 44px; "
+        << "background: #2bd276; border-radius: " << metrics->small_radius
+        << "px; border: 1px solid rgba(255,255,255,0.22); }"
+        << ".health-banner-icon image { color: #ffffff; }"
+        << ".health-banner-title { font-size: 14px; font-weight: "
+        << typography->ui_bold_weight << "; color: #ffffff; }"
+        << ".health-banner-copy { font-size: 10px; color: rgba(255,255,255,0.84); }"
+        << ".health-banner-action { font-size: 11px; font-weight: "
+        << typography->ui_bold_weight << "; color: #ffffff; }"
 
         << ".discover-controls { padding: 11px 13px; border: 1px solid "
         << status_border << "; border-radius: " << metrics->control_radius
