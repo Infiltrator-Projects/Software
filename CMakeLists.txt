@@ -225,7 +225,8 @@ target_link_libraries(infiltrator-software PRIVATE
 
 target_compile_definitions(infiltrator-software PRIVATE
     INFILTRATOR_SOFTWARE_VERSION="${PROJECT_VERSION}"
-    INFILTRATOR_SOFTWARE_BUILD_PROFILE="${SOFTWARE_BUILD_PROFILE}")
+    INFILTRATOR_SOFTWARE_BUILD_PROFILE="${SOFTWARE_BUILD_PROFILE}"
+    INFILTRATOR_SOFTWARE_SOURCE_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
 
 install(TARGETS infiltrator-software infiltrator-software-tray
     RUNTIME DESTINATION bin)
@@ -253,6 +254,9 @@ install(FILES
     DESTINATION share/icons/hicolor/scalable/status)
 install(FILES ${SOFTWARE_FONT_FILES}
     DESTINATION share/fonts/truetype/infiltrator-software)
+install(FILES
+    data/artwork/discover-hero.jpg
+    DESTINATION share/infiltrator-software/artwork)
 install(FILES LICENSE DESTINATION share/doc/infiltrator-software)
 
 foreach(target IN ITEMS
