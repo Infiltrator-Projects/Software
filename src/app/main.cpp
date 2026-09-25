@@ -169,6 +169,7 @@ void refresh_system(WindowState *state, bool refresh_metadata = false);
 void refresh_history(WindowState *state);
 void refresh_repair(WindowState *state, bool refresh_metadata = false);
 std::string history_timestamp(std::int64_t unix_time);
+const char *update_icon_name(const PackageRecord &package) noexcept;
 void select_page(WindowState *state, int index);
 void settings_clicked(GtkButton *button, gpointer user_data);
 void discover_install_clicked(GtkButton *button, gpointer user_data);
