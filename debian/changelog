@@ -11,6 +11,7 @@ infiltrator-software (0.3.38) unstable; urgency=high
   * Preserve the existing functional dashboard, explicit window controls and
     nested scrolling behaviour introduced in 0.3.37.
   * Document this seventh visual-convergence layer in the UI vision.
+  * Update the visual CI contract for the live split-title artwork structure.
 
  -- Shannon Smith <infiltratr@yandex.com>  Fri, 25 Sep 2026 19:44:00 +1000
 
