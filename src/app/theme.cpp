@@ -497,6 +497,15 @@ void ThemeController::apply()
         << "; padding: 2px 7px; border-radius: 999px; border: 1px solid "
         << info << "; }"
         << ".discover-description { font-size: 12px; color: " << note << "; }"
+        << ".category-shortcuts { padding: 2px 0 4px 0; }"
+        << "button.category-shortcut { min-height: 36px; padding: 0 12px; "
+        << "background: " << card << "; border: 1px solid " << border
+        << "; border-radius: 999px; }"
+        << "button.category-shortcut:hover { background: " << card_hover
+        << "; border-color: " << info << "; }"
+        << "button.category-shortcut image { color: " << info << "; }"
+        << ".category-shortcut-label { font-size: 11px; font-weight: "
+        << typography->ui_bold_weight << "; color: " << text << "; }"
         << ".state-installed, .state-available { padding: 4px 9px; border-radius: 999px; "
         << "font-size: 11px; font-weight: " << typography->ui_bold_weight << "; }"
         << ".state-installed { color: " << success << "; border: 1px solid "
@@ -550,6 +559,48 @@ void ThemeController::apply()
         << "; background-image: linear-gradient(90deg, " << card << ", "
         << surface << "); }"
         << ".updates-status-icon { color: " << warning << "; }"
+        << ".updates-section-icon { color: " << warning << "; }"
+        << ".update-group-row { background: transparent; }"
+        << ".update-group-header { margin: 9px 6px 5px 6px; padding: 10px 12px; "
+        << "background-image: linear-gradient(90deg, " << panel << ", "
+        << surface << "); border: 1px solid " << border << "; border-radius: "
+        << metrics->small_radius << "px; }"
+        << ".update-group-icon-well { min-width: 38px; min-height: 38px; "
+        << "background: " << card << "; border: 1px solid " << warning_border
+        << "; border-radius: " << metrics->small_radius << "px; }"
+        << ".update-group-icon-well image { color: " << warning << "; }"
+        << ".update-group-title { font-family: \"" << typography->brand_family
+        << "\"; font-size: 15px; font-weight: " << typography->ui_bold_weight
+        << "; color: " << heading << "; }"
+        << ".update-group-subtitle { font-size: 10px; color: " << summary << "; }"
+        << ".update-group-count { min-width: 28px; padding: 4px 9px; "
+        << "border-radius: 999px; background: " << warning
+        << "; color: " << accent_fg << "; font-weight: "
+        << typography->ui_bold_weight << "; }"
+        << ".update-item { margin: 4px 5px; padding: 11px 12px; background: "
+        << card << "; border: 1px solid " << border << "; border-radius: "
+        << metrics->small_radius << "px; }"
+        << ".update-item:hover { background: " << card_hover
+        << "; border-color: " << warning_border << "; }"
+        << ".update-icon-well { background: " << surface
+        << "; border: 1px solid " << status_border << "; border-radius: "
+        << metrics->small_radius << "px; }"
+        << ".update-name { font-family: \"" << typography->brand_family
+        << "\"; font-size: 14px; font-weight: " << typography->ui_bold_weight
+        << "; color: " << heading << "; }"
+        << ".update-kind-chip { padding: 2px 7px; border-radius: 999px; "
+        << "border: 1px solid " << status_border << "; color: " << kicker
+        << "; font-size: 9px; font-weight: " << typography->ui_bold_weight << "; }"
+        << ".version-chip, .version-chip-new { padding: 2px 7px; border-radius: 999px; "
+        << "font-size: 10px; font-weight: " << typography->ui_bold_weight << "; }"
+        << ".version-chip { color: " << summary << "; background: " << panel
+        << "; border: 1px solid " << border << "; }"
+        << ".version-chip-new { color: " << accent_fg << "; background: "
+        << operation << "; border: 1px solid " << operation << "; }"
+        << ".version-arrow { color: " << warning << "; font-size: 14px; }"
+        << ".update-source-icon { color: " << info << "; }"
+        << ".update-source { font-size: 10px; color: " << info << "; }"
+        << ".update-selector { margin-right: 1px; }"
         << ".history-transaction-card { border-left-width: 4px; }"
         << ".history-icon-well { min-width: 38px; min-height: 38px; background: "
         << panel << "; border: 1px solid " << info << "; border-radius: 999px; }"
@@ -564,6 +615,28 @@ void ThemeController::apply()
         << "background: " << panel << "; border: 1px solid " << status_border
         << "; border-radius: 999px; }"
         << ".repair-list { background: transparent; border: 0; }"
+        << ".repair-overview { padding: 18px 20px; border: 1px solid "
+        << status_border << "; border-radius: " << metrics->card_radius
+        << "px; box-shadow: 0 8px 22px rgba(0,0,0,0.14); }"
+        << ".repair-overview-checking { background-image: linear-gradient(100deg, "
+        << card << ", " << surface << "); border-color: " << info << "; }"
+        << ".repair-overview-good { background-image: linear-gradient(100deg, "
+        << card << ", " << surface << "); border-color: " << success_border << "; }"
+        << ".repair-overview-attention { background-image: linear-gradient(100deg, "
+        << card << ", " << surface << "); border-color: " << fault << "; }"
+        << ".repair-overview-icon-well { min-width: 60px; min-height: 60px; "
+        << "background: " << panel << "; border: 1px solid " << status_border
+        << "; border-radius: 999px; }"
+        << ".repair-overview-checking .repair-overview-icon-well image { color: "
+        << info << "; }"
+        << ".repair-overview-good .repair-overview-icon-well image { color: "
+        << success << "; }"
+        << ".repair-overview-attention .repair-overview-icon-well image { color: "
+        << fault << "; }"
+        << ".repair-overview-title { font-family: \"" << typography->brand_family
+        << "\"; font-size: 21px; font-weight: " << typography->ui_bold_weight
+        << "; color: " << heading << "; }"
+        << ".repair-overview-copy { font-size: 11px; color: " << note << "; }"
         << ".detail-page { background: " << background << "; }"
         << ".detail-hero { padding-bottom: 4px; }"
         << ".detail-label { min-width: 130px; font-size: 11px; color: "
