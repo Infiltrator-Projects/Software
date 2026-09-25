@@ -51,9 +51,13 @@ Required outcomes include Discover install/remove, per-package and selected upda
 
 Implemented 0.5 slices: Discover now supports install, update and removal through the same reviewed native transaction flow. Removal carries installed relationship metadata through the shared generation, performs reverse-dependency safety checks, rejects Essential-package removal and revalidates the exact approved mutation set at the privileged boundary. Updates now supports per-package selection, arbitrary selected subsets, Select all/Clear controls and all-updates operation through the same complete native preflight plan. Privileged update execution now remains visibly active with an indeterminate progress indicator and elapsed-time status through metadata refresh, exact-plan revalidation, package application and final state verification. History is operational and persists approved transaction outcomes plus exact before/after package versions and provenance in a per-user SQLite database.
 
-## 0.6 — Repair and recovery integration
+## Repair — initial operational surface
 
-Complete diagnostics for broken dependency state, interrupted transactions and repository problems.
+Implemented ahead of the full recovery milestone: live native-engine/source diagnostics, dpkg audit and interrupted-update-fragment detection, local installed-state reconciliation, explicit verified repository-state rebuild, stale runtime-fault clearing after a clean diagnosis, and a constrained authenticated action that runs only `dpkg --configure -a` to finish already-unpacked interrupted package configuration.
+
+## 0.6 — Full repair and recovery integration
+
+Add planned broken-dependency repair where any package mutation is resolved and reviewed before authorization rather than using an unconstrained fix command.
 
 Integrate an explicit checkpoint service contract. When InfiltratorFS is available, qualifying system transactions can create a pre-change checkpoint and link it to History and recovery.
 
