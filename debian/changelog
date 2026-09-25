@@ -1,3 +1,23 @@
+infiltrator-software (0.3.40) unstable; urgency=high
+
+  * Fix the blank Discover hero seen in the installed 0.3.39 build.
+  * Stop relying on a runtime filesystem path for high-visibility hero artwork.
+  * Embed the approved raster hero directly in the Software executable as
+    compiled base64 image data and decode it into a GdkTexture at runtime.
+  * Keep the real authored sky, mountains, planet, checker sphere, retro
+    computer and Infiltrator ribbons instead of any procedural reconstruction.
+  * Fail visibly and log a critical error if the embedded JPEG cannot decode
+    rather than silently rendering an empty blue panel.
+  * Validate the complete embedded JPEG in CI, including base64 integrity,
+    JPEG start/end markers and minimum decoded size.
+  * Make the graphical launch smoke test fail if the embedded raster cannot
+    decode, and verify the release binary actually contains the JPEG payload.
+  * Remove the obsolete external hero asset and GResource experiment so the
+    executable is the single runtime source of truth for the Discover artwork.
+  * Update the UI vision to document the embedded-raster invariant.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Fri, 25 Sep 2026 21:02:00 +1000
+
 infiltrator-software (0.3.39) unstable; urgency=high
 
   * Replace the procedural GTK/Cairo Discover hero with committed raster
