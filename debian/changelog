@@ -1,3 +1,21 @@
+infiltrator-software (0.3.45) unstable; urgency=high
+
+  * Make the Software title bar structurally identical to System Settings:
+    product identity at the leading edge and one trailing Search / Minimize /
+    Maximize / Close group with the same compact proportions and chrome.
+  * Keep Software's authored two-slash raster mark while changing the visible
+    title-bar identity to "Software" with "Infiltrator OS" directly beneath it.
+  * Remove the Software-only Info, theme and refresh controls, the centred
+    search shell and the Ctrl+K pill from the title bar.
+  * Keep theme selection in Preferences and move About Software there so title
+    bar convergence does not remove existing application functionality.
+  * Match System Settings' 58-pixel dark teal header, 320-pixel search field,
+    compact 30-pixel window controls, padding, borders and hover treatment.
+  * Add CI contracts that reject future drift from the System Settings title
+    bar structure while preserving the two-slash raster identity asset.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Sat, 26 Sep 2026 21:36:00 +1000
+
 infiltrator-software (0.3.44) unstable; urgency=high
 
   * Fix the native Debian dependency resolver so installed virtual-package

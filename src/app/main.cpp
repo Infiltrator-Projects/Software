@@ -174,6 +174,7 @@ std::string history_timestamp(std::int64_t unix_time);
 const char *update_icon_name(const PackageRecord &package);
 void select_page(WindowState *state, int index);
 void settings_clicked(GtkButton *button, gpointer user_data);
+void about_clicked(GtkButton *button, gpointer user_data);
 void discover_install_clicked(GtkButton *button, gpointer user_data);
 
 GtkWidget *make_icon(const char *name, int size)
@@ -9012,6 +9013,21 @@ void settings_clicked(GtkButton *, gpointer user_data)
         GTK_BOX(content),
         state->theme.create_selector());
 
+    GtkWidget *about =
+        gtk_button_new_with_label(
+            "About Software");
+    gtk_widget_add_css_class(
+        about, "preferences-about");
+    gtk_widget_set_halign(
+        about, GTK_ALIGN_START);
+    g_signal_connect(
+        about,
+        "clicked",
+        G_CALLBACK(about_clicked),
+        state);
+    gtk_box_append(
+        GTK_BOX(content), about);
+
     gtk_window_set_child(
         GTK_WINDOW(window), content);
     gtk_window_present(
@@ -9186,14 +9202,27 @@ GtkWidget *make_header_bar(WindowState *state)
         GTK_HEADER_BAR(bar), false);
 
     /*
-     * The reference shell treats the title bar as part of the product, not as
-     * a generic desktop toolbar: brand at left, a broad centred search field,
-     * product actions next, then compact window controls at the far right.
+     * Keep this shell structurally identical to System Settings: application
+     * identity at the leading edge, then one trailing group containing search
+     * followed by the conventional Minimize / Maximize / Close controls.
+     * Software deliberately differs only in its authored two-slash raster mark
+     * and its product identity copy.
      */
+    GtkWidget *empty_title =
+        gtk_label_new("");
+    gtk_header_bar_set_title_widget(
+        GTK_HEADER_BAR(bar),
+        empty_title);
+
     GtkWidget *brand =
-        gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
+        gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
     gtk_widget_add_css_class(
         brand, "titlebar-brand");
+
+    GtkWidget *brand_icon_wrap =
+        gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    gtk_widget_add_css_class(
+        brand_icon_wrap, "titlebar-brand-icon");
 
     GtkWidget *brand_logo =
         make_embedded_picture(
@@ -9202,31 +9231,36 @@ GtkWidget *make_header_bar(WindowState *state)
             GTK_CONTENT_FIT_CONTAIN);
     if (brand_logo != nullptr) {
         gtk_widget_set_size_request(
-            brand_logo, 66, 44);
+            brand_logo, 48, 32);
         gtk_widget_set_valign(
             brand_logo, GTK_ALIGN_CENTER);
         gtk_box_append(
-            GTK_BOX(brand), brand_logo);
+            GTK_BOX(brand_icon_wrap),
+            brand_logo);
     } else {
         GtkWidget *brand_icon =
             make_icon(
                 "net.ssmith.infiltrator.software",
-                32);
+                28);
         gtk_widget_add_css_class(
             brand_icon, "titlebar-logo-fallback");
         gtk_box_append(
-            GTK_BOX(brand), brand_icon);
+            GTK_BOX(brand_icon_wrap),
+            brand_icon);
     }
+    gtk_box_append(
+        GTK_BOX(brand),
+        brand_icon_wrap);
 
     GtkWidget *brand_copy =
-        gtk_box_new(GTK_ORIENTATION_VERTICAL, 1);
+        gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
     GtkWidget *title =
         make_label(
-            "Infiltrator Software",
+            "Software",
             "titlebar-title");
     GtkWidget *subtitle =
         make_label(
-            "Software management & updates",
+            "Infiltrator OS",
             "titlebar-subtitle");
     gtk_box_append(GTK_BOX(brand_copy), title);
     gtk_box_append(GTK_BOX(brand_copy), subtitle);
@@ -9234,12 +9268,10 @@ GtkWidget *make_header_bar(WindowState *state)
     gtk_header_bar_pack_start(
         GTK_HEADER_BAR(bar), brand);
 
-    GtkWidget *search_shell =
-        gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+    GtkWidget *header_end =
+        gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
     gtk_widget_add_css_class(
-        search_shell, "global-search-shell");
-    gtk_widget_set_size_request(
-        search_shell, 610, -1);
+        header_end, "titlebar-header-end");
 
     state->global_search =
         gtk_search_entry_new();
@@ -9249,49 +9281,28 @@ GtkWidget *make_header_bar(WindowState *state)
     gtk_search_entry_set_placeholder_text(
         GTK_SEARCH_ENTRY(state->global_search),
         "Search for software, applications, and packages…");
-    gtk_widget_set_hexpand(
-        state->global_search, true);
+    gtk_widget_set_size_request(
+        state->global_search, 320, -1);
     g_signal_connect(
         state->global_search,
         "search-changed",
         G_CALLBACK(global_search_changed),
         state);
-    gtk_box_append(
-        GTK_BOX(search_shell),
-        state->global_search);
 
-    GtkWidget *shortcut =
-        make_label("Ctrl + K", "search-shortcut", 0.5F);
-    gtk_widget_set_valign(
-        shortcut, GTK_ALIGN_CENTER);
-    gtk_box_append(
-        GTK_BOX(search_shell), shortcut);
-
-    gtk_header_bar_set_title_widget(
-        GTK_HEADER_BAR(bar),
-        search_shell);
-
-    /*
-     * GtkHeaderBar lays packed-end children from the outside in.  Add the
-     * native window controls first so they stay at the far right, with product
-     * actions immediately to their left as in the approved reference.
-     */
-    GtkWidget *close =
+    GtkWidget *minimize =
         gtk_button_new_from_icon_name(
-            "window-close-symbolic");
+            "window-minimize-symbolic");
     gtk_widget_add_css_class(
-        close, "window-control");
-    gtk_widget_add_css_class(
-        close, "window-close-control");
+        minimize, "window-control");
     gtk_widget_set_tooltip_text(
-        close, "Close");
+        minimize, "Minimize");
+    gtk_widget_set_focusable(
+        minimize, false);
     g_signal_connect(
-        close,
+        minimize,
         "clicked",
-        G_CALLBACK(close_clicked),
+        G_CALLBACK(minimize_clicked),
         state);
-    gtk_header_bar_pack_end(
-        GTK_HEADER_BAR(bar), close);
 
     state->maximize_button =
         gtk_button_new_from_icon_name(
@@ -9301,85 +9312,52 @@ GtkWidget *make_header_bar(WindowState *state)
         "window-control");
     gtk_widget_set_tooltip_text(
         state->maximize_button,
-        "Maximize window");
+        "Maximize / Restore");
+    gtk_widget_set_focusable(
+        state->maximize_button, false);
     g_signal_connect(
         state->maximize_button,
         "clicked",
         G_CALLBACK(maximize_clicked),
         state);
-    gtk_header_bar_pack_end(
-        GTK_HEADER_BAR(bar),
+
+    GtkWidget *close =
+        gtk_button_new_from_icon_name(
+            "window-close-symbolic");
+    gtk_widget_add_css_class(
+        close, "window-control");
+    gtk_widget_add_css_class(
+        close, "window-close-control");
+    gtk_widget_set_tooltip_text(
+        close, "Close");
+    gtk_widget_set_focusable(
+        close, false);
+    g_signal_connect(
+        close,
+        "clicked",
+        G_CALLBACK(close_clicked),
+        state);
+
+    /*
+     * One explicit trailing box makes the visual order deterministic, exactly
+     * as in System Settings: Search | Minimize | Maximize | Close.
+     */
+    gtk_box_append(
+        GTK_BOX(header_end),
+        state->global_search);
+    gtk_box_append(
+        GTK_BOX(header_end),
+        minimize);
+    gtk_box_append(
+        GTK_BOX(header_end),
         state->maximize_button);
-
-    GtkWidget *minimize =
-        gtk_button_new_from_icon_name(
-            "window-minimize-symbolic");
-    gtk_widget_add_css_class(
-        minimize, "window-control");
-    gtk_widget_set_tooltip_text(
-        minimize, "Minimize");
-    g_signal_connect(
-        minimize,
-        "clicked",
-        G_CALLBACK(minimize_clicked),
-        state);
-    gtk_header_bar_pack_end(
-        GTK_HEADER_BAR(bar), minimize);
-
-    GtkWidget *separator =
-        gtk_separator_new(
-            GTK_ORIENTATION_VERTICAL);
-    gtk_widget_add_css_class(
-        separator, "titlebar-window-separator");
-    gtk_header_bar_pack_end(
-        GTK_HEADER_BAR(bar), separator);
-
-    GtkWidget *refresh =
-        gtk_button_new_from_icon_name(
-            "view-refresh-symbolic");
-    gtk_widget_set_tooltip_text(
-        refresh,
-        "Refresh the current page");
-    gtk_widget_add_css_class(
-        refresh, "titlebar-button");
-    g_signal_connect(
-        refresh, "clicked",
-        G_CALLBACK(refresh_clicked), state);
-    gtk_header_bar_pack_end(
-        GTK_HEADER_BAR(bar), refresh);
-
-    state->theme_button =
-        gtk_button_new_from_icon_name(
-            "video-display-symbolic");
-    gtk_widget_add_css_class(
-        state->theme_button,
-        "titlebar-button");
-    gtk_widget_set_tooltip_text(
-        state->theme_button,
-        "Cycle System, Day and Night themes");
-    g_signal_connect(
-        state->theme_button,
-        "clicked",
-        G_CALLBACK(theme_clicked),
-        state);
+    gtk_box_append(
+        GTK_BOX(header_end),
+        close);
     gtk_header_bar_pack_end(
         GTK_HEADER_BAR(bar),
-        state->theme_button);
+        header_end);
 
-    GtkWidget *about =
-        gtk_button_new_from_icon_name(
-            "help-about-symbolic");
-    gtk_widget_set_tooltip_text(
-        about, "About Infiltrator Software");
-    gtk_widget_add_css_class(
-        about, "titlebar-button");
-    g_signal_connect(
-        about, "clicked",
-        G_CALLBACK(about_clicked), state);
-    gtk_header_bar_pack_end(
-        GTK_HEADER_BAR(bar), about);
-
-    update_theme_button(state);
     update_maximize_button(state);
     return bar;
 }
@@ -9506,7 +9484,7 @@ void activate(GtkApplication *application, gpointer)
     }
 
     GtkWidget *window = gtk_application_window_new(application);
-    gtk_window_set_title(GTK_WINDOW(window), "Infiltrator Software");
+    gtk_window_set_title(GTK_WINDOW(window), "Software");
     gtk_window_set_icon_name(GTK_WINDOW(window), "net.ssmith.infiltrator.software");
     gtk_window_set_default_size(GTK_WINDOW(window), 1440, 860);
     gtk_window_set_resizable(GTK_WINDOW(window), true);

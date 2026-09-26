@@ -268,6 +268,7 @@ void ThemeController::apply()
     const std::string panel = colour(palette->panel_rgb);
     const std::string card = colour(palette->card_rgb);
     const std::string surface = colour(palette->surface_rgb);
+    const std::string input = colour(palette->input_rgb);
     const std::string border = colour(palette->border_rgb);
     const std::string text = colour(palette->text_rgb);
     const std::string title = colour(palette->title_rgb);
@@ -306,38 +307,37 @@ void ThemeController::apply()
         << "window, .background { background: " << background
         << "; color: " << text << "; }"
 
-        << "headerbar.infiltrator-titlebar { min-height: 68px; "
-        << "background-image: linear-gradient(180deg, #0d1a43, #071331); "
-        << "color: #f6f8ff; border-bottom: 1px solid #274075; padding: 0 12px; }"
-        << ".titlebar-brand { margin-left: 8px; margin-right: 16px; min-width: 255px; }"
-        << ".titlebar-logo { min-width: 66px; min-height: 44px; margin-right: 2px; }"
-        << ".titlebar-logo-fallback { color: #57a8ff; }"
+        << "headerbar.infiltrator-titlebar { min-height: 58px; "
+        << "background-image: linear-gradient(to right, #06131f, #08263a); "
+        << "color: " << text << "; border-bottom: 1px solid " << border
+        << "; padding: 6px 10px; }"
+        << ".titlebar-brand { padding: 2px 4px; }"
+        << ".titlebar-brand-icon { background: " << card
+        << "; border: 1px solid " << border
+        << "; border-radius: 12px; padding: 7px; }"
+        << ".titlebar-logo { min-width: 48px; min-height: 32px; }"
+        << ".titlebar-logo-fallback { color: " << neutral << "; }"
         << ".titlebar-title { font-family: \"" << typography->ui_family
-        << "\"; font-size: 18px; font-weight: " << typography->ui_bold_weight
-        << "; color: #f7f9ff; }"
-        << ".titlebar-subtitle { color: #b8c8e8; font-size: 11px; font-weight: "
+        << "\"; font-size: 20px; font-weight: " << typography->ui_bold_weight
+        << "; color: " << title << "; }"
+        << ".titlebar-subtitle { color: " << summary << "; font-size: 11px; font-weight: "
         << typography->ui_regular_weight << "; }"
-        << ".global-search-shell { min-height: 42px; padding: 0 8px 0 4px; "
-        << "background: #0a1430; border: 1px solid #314675; border-radius: 11px; }"
-        << ".global-search { min-height: 38px; padding: 0 10px; background: transparent; "
-        << "color: #eef4ff; border: none; box-shadow: none; }"
-        << ".global-search:focus { outline: none; box-shadow: none; }"
-        << ".search-shortcut { min-width: 58px; min-height: 26px; padding: 0 8px; "
-        << "border-radius: 7px; background: #17264f; border: 1px solid #2a4074; "
-        << "color: #d9e4ff; font-size: 10px; font-weight: " << typography->ui_bold_weight << "; }"
-        << "headerbar.infiltrator-titlebar button.titlebar-button { min-width: 42px; min-height: 42px; "
-        << "margin: 0 4px; padding: 0; background: #10214d; border: 1px solid #284177; "
-        << "border-radius: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.18); }"
-        << "headerbar.infiltrator-titlebar button.titlebar-button image { color: #f4f7ff; opacity: 1; }"
-        << "headerbar.infiltrator-titlebar button.titlebar-button:hover { background: #183064; border-color: #4262a3; }"
-        << ".titlebar-window-separator { margin: 11px 10px; background: #2b3e69; }"
-        << "headerbar.infiltrator-titlebar button.window-control { min-width: 30px; min-height: 38px; "
-        << "margin: 0 1px; padding: 0 5px; background: transparent; border: 1px solid transparent; "
+        << ".global-search { min-width: 290px; min-height: 34px; "
+        << "background: " << input << "; color: " << text
+        << "; border: 1px solid " << status_border
+        << "; border-radius: 14px; padding: 8px 12px; box-shadow: none; }"
+        << ".global-search:focus { border-color: " << neutral << "; box-shadow: none; }"
+        << ".titlebar-header-end { margin-left: 10px; }"
+        << "headerbar.infiltrator-titlebar button.window-control { min-width: 30px; min-height: 30px; "
+        << "padding: 4px; background: transparent; border: 1px solid transparent; "
         << "border-radius: 8px; box-shadow: none; }"
-        << "headerbar.infiltrator-titlebar button.window-control image { color: #f3f6ff; opacity: 1; }"
-        << "headerbar.infiltrator-titlebar button.window-control:hover { background: #142752; border-color: #2b467d; }"
-        << "headerbar.infiltrator-titlebar button.window-close-control:hover { background: #b83b57; border-color: #e15a75; }"
-        << "headerbar.infiltrator-titlebar button.window-close-control:hover image { color: #ffffff; }"
+        << "headerbar.infiltrator-titlebar button.window-control image { color: " << text << "; opacity: 1; }"
+        << "headerbar.infiltrator-titlebar button.window-control:hover { background: "
+        << card_hover << "; border-color: " << border << "; }"
+        << "headerbar.infiltrator-titlebar button.window-close-control:hover { background: "
+        << fault << "; color: " << accent_fg << "; }"
+        << "headerbar.infiltrator-titlebar button.window-close-control:hover image { color: "
+        << accent_fg << "; }"
 
         << ".sidebar { background-image: linear-gradient(180deg, "
         << panel << ", " << titlebar << "); border-right: 1px solid "

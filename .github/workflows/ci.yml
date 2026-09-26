@@ -274,16 +274,30 @@ jobs:
           assert "gtk_overlay_new" in app
           assert "gtk_label_set_markup" in app
           assert '"welcome-artwork-veil"' in app
-          assert '"global-search-shell"' in app
-          assert '"search-shortcut"' in app
           assert '"titlebar_logo.inc"' in app
           assert "kTitlebarLogoBase64" in app
           assert '"titlebar-logo"' in app
           assert ".welcome-artwork-veil" in theme
           assert ".welcome-title" in theme
-          assert ".global-search-shell" in theme
           assert ".titlebar-logo" in theme
-          assert "background: #10214d" in theme
+
+          # Software title-bar parity: follow the System Settings shell exactly
+          # except for Software's authored raster identity mark and product copy.
+          assert '"Software",\n            "titlebar-title"' in app
+          assert '"Infiltrator OS",\n            "titlebar-subtitle"' in app
+          assert '"Infiltrator Software",\n            "titlebar-title"' not in app
+          assert '"titlebar-header-end"' in app
+          assert ".titlebar-header-end" in theme
+          assert "state->global_search, 320, -1" in app
+          assert "Search | Minimize | Maximize | Close" in app
+          assert "gtk_header_bar_pack_end" in app
+          assert "global-search-shell" not in app
+          assert "search-shortcut" not in app
+          assert "titlebar-button" not in app
+          assert "titlebar-window-separator" not in app
+          assert "linear-gradient(to right, #06131f, #08263a)" in theme
+          assert "min-height: 58px" in theme
+          assert "button.window-control { min-width: 30px; min-height: 30px" in theme
 
           # The title identity is an authored raster mark: exactly the new
           # two-slash artwork, never the old three procedural GtkBox bars.
