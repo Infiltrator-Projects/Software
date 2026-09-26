@@ -199,5 +199,58 @@ int main()
             {}, "amd64", {});
     assert(!replaced_installed.complete());
 
+    /*
+     * Installed packages can satisfy dependencies through Provides rather than
+     * their concrete package name.  This is how Ubuntu satisfies dependencies
+     * such as accountsservice -> default-dbus-system-bus | dbus-system-bus.
+     * Final-state validation must honour the provider recorded by dpkg.
+     */
+    PackageRecord dbus_provider =
+        installed("dbus-daemon", "1.14.10");
+    dbus_provider.provides =
+        "default-dbus-system-bus, dbus-system-bus";
+    PackageRecord accountsservice =
+        installed("accountsservice", "23.13.9");
+    accountsservice.depends =
+        "default-dbus-system-bus | dbus-system-bus";
+
+    const DebianResolution installed_virtual_provider =
+        DebianDependencyResolver::resolve(
+            {package("unrelated-update", "2.0")},
+            {accountsservice, dbus_provider},
+            {}, "amd64", {});
+    assert(installed_virtual_provider.complete());
+
+    PackageRecord versioned_provider =
+        installed("virtual-provider", "2.4");
+    versioned_provider.provides =
+        "virtual-api (= 2.4)";
+    PackageRecord versioned_consumer =
+        installed("virtual-consumer", "1.0");
+    versioned_consumer.depends =
+        "virtual-api (>= 2.0)";
+
+    const DebianResolution installed_versioned_provider =
+        DebianDependencyResolver::resolve(
+            {package("another-update", "3.0")},
+            {versioned_consumer, versioned_provider},
+            {}, "amd64", {});
+    assert(installed_versioned_provider.complete());
+
+    PackageRecord unversioned_provider =
+        installed("old-virtual-provider", "9.0");
+    unversioned_provider.provides = "versioned-api";
+    PackageRecord strict_consumer =
+        installed("strict-consumer", "1.0");
+    strict_consumer.depends =
+        "versioned-api (>= 2.0)";
+
+    const DebianResolution unversioned_cannot_fake_version =
+        DebianDependencyResolver::resolve(
+            {package("third-update", "1.0")},
+            {strict_consumer, unversioned_provider},
+            {}, "amd64", {});
+    assert(!unversioned_cannot_fake_version.complete());
+
     return 0;
 }
