@@ -1,3 +1,19 @@
+infiltrator-software (0.3.44) unstable; urgency=high
+
+  * Fix the native Debian dependency resolver so installed virtual-package
+    providers from dpkg's Provides metadata satisfy dependencies during both
+    dependency expansion and final transaction validation.
+  * Reproduce and cover the Ubuntu default-dbus-system-bus/dbus-system-bus
+    case that incorrectly blocked otherwise safe updates such as
+    accountsservice and avahi-related transactions.
+  * Honour versioned installed Provides entries while correctly refusing an
+    unversioned Provide for a version-constrained dependency.
+  * Align installed-package architecture qualification with repository
+    candidate Multi-Arch handling.
+  * Include the exact Common 1.19.35 pin already present on main.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Sat, 26 Sep 2026 21:48:00 +1000
+
 infiltrator-software (0.3.43) unstable; urgency=high
 
   * Replace the inherited Discover hero with a dedicated clean raster containing
