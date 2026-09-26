@@ -239,30 +239,44 @@ std::string base_package(const std::string_view package)
             : package.substr(0U, colon));
 }
 
+bool installed_architecture_matches(
+    const PackageRecord &installed,
+    const DebianDependencyAlternative &dependency,
+    const std::string_view target_architecture)
+{
+    if (installed.architecture == "all") {
+        return true;
+    }
+
+    if (dependency.architecture_qualifier == "any") {
+        return installed.multi_arch == "allowed" ||
+               installed.multi_arch == "foreign";
+    }
+
+    if (!dependency.architecture_qualifier.empty() &&
+        dependency.architecture_qualifier != "native") {
+        return installed.architecture ==
+               dependency.architecture_qualifier;
+    }
+
+    if (target_architecture.empty() || installed.architecture.empty()) {
+        return true;
+    }
+
+    return installed.architecture == target_architecture ||
+           installed.multi_arch == "foreign";
+}
+
 bool installed_matches(
     const PackageRecord &installed,
     const DebianDependencyAlternative &dependency,
     const std::string_view target_architecture)
 {
-    if (base_package(installed.package_name) != dependency.package) {
-        return false;
-    }
-
-    if (!dependency.architecture_qualifier.empty() &&
-        dependency.architecture_qualifier != "any" &&
-        dependency.architecture_qualifier != "native" &&
-        installed.architecture != dependency.architecture_qualifier) {
-        return false;
-    }
-
-    if (dependency.architecture_qualifier == "native" &&
-        !target_architecture.empty() &&
-        installed.architecture != target_architecture) {
-        return false;
-    }
-
-    return version_matches(
-        installed.installed_version, dependency);
+    return base_package(installed.package_name) == dependency.package &&
+           installed_architecture_matches(
+               installed, dependency, target_architecture) &&
+           version_matches(
+               installed.installed_version, dependency);
 }
 
 bool candidate_architecture_matches(
@@ -333,6 +347,48 @@ bool candidate_provides(
 
     for (const std::string_view item :
          split_top_level(candidate.provides, ',')) {
+        const auto provided = provided_identity(item);
+        if (!provided.has_value() ||
+            provided->package != dependency.package) {
+            continue;
+        }
+
+        if (dependency.relation == DebianVersionRelation::any) {
+            return true;
+        }
+
+        if (provided->relation != DebianVersionRelation::equal ||
+            provided->version.empty()) {
+            continue;
+        }
+        if (version_matches(provided->version, dependency)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool installed_provides(
+    const PackageRecord &installed,
+    const DebianDependencyAlternative &dependency,
+    const std::string_view target_architecture)
+{
+    if (installed.provides.empty() ||
+        !installed_architecture_matches(
+            installed, dependency, target_architecture)) {
+        return false;
+    }
+
+    /*
+     * Debian dependencies may name a virtual package instead of the concrete
+     * package that is installed.  /var/lib/dpkg/status records those virtual
+     * identities in Provides.  Treat them exactly like repository candidates
+     * so final-state validation does not reject a perfectly healthy system
+     * merely because the provider has a different package name.
+     */
+    for (const std::string_view item :
+         split_top_level(installed.provides, ',')) {
         const auto provided = provided_identity(item);
         if (!provided.has_value() ||
             provided->package != dependency.package) {
@@ -493,8 +549,10 @@ bool installed_satisfies(
         installed.end(),
         [&](const PackageRecord &package) {
             return !selected_replaces_installed(selected, package) &&
-                   installed_matches(
-                       package, dependency, target_architecture);
+                   (installed_matches(
+                        package, dependency, target_architecture) ||
+                    installed_provides(
+                        package, dependency, target_architecture));
         });
 }
 
