@@ -11,6 +11,10 @@
     <method name="ListUpdates">
       <arg name="packages" type="aa{sv}" direction="out"/>
     </method>
+    <method name="ListKernels">
+      <arg name="kernel_type" type="s" direction="in"/>
+      <arg name="kernels" type="aa{sv}" direction="out"/>
+    </method>
     <method name="PlanTransaction">
       <arg name="action" type="s" direction="in"/>
       <arg name="package_ids" type="as" direction="in"/>
