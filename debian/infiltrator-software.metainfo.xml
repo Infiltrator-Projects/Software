@@ -34,6 +34,11 @@
   <url type="homepage">https://github.com/Infiltrator-Projects/Software</url>
 
   <releases>
+    <release version="0.3.53" date="2026-09-27">
+      <description>
+        <p>Fixes search text being replaced one character at a time by removing recursive search synchronization and repeated navigation focus churn, while broadening Discover metadata matching.</p>
+      </description>
+    </release>
     <release version="0.3.52" date="2026-09-27">
       <description>
         <p>Fixes Conflicts+Replaces planning as an explicit reviewed removal and provides a bootstrap-safe upgrade path from Software 0.3.49 before removing Mint Update Manager.</p>
