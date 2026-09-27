@@ -246,7 +246,7 @@ add_executable(infiltrator-software
 target_link_libraries(infiltrator-software PRIVATE
     software-core software-history software-client software-apt
     software-catalogue software-sources
-    InfiltratrCommon::Common PkgConfig::GTK4)
+    InfiltratrCommon::Common PkgConfig::GTK4 PkgConfig::CURL)
 
 target_compile_definitions(infiltrator-software PRIVATE
     INFILTRATOR_SOFTWARE_VERSION="${PROJECT_VERSION}"
