@@ -221,13 +221,19 @@ bool write_atomic(
         return false;
     }
 
-    const int dirfd = open(directory.c_str(), O_RDONLY | O_DIRECTORY);
-    if (dirfd >= 0) {
-        (void)fsync(dirfd);
-        (void)close(dirfd);
+    const int dirfd =
+        open(
+            directory.c_str(),
+            O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+    if (dirfd < 0) {
+        return false;
     }
-
-    return true;
+    const bool directory_synced =
+        fsync(dirfd) == 0;
+    const bool directory_closed =
+        close(dirfd) == 0;
+    return directory_synced &&
+           directory_closed;
 }
 
 bool parse_index(
