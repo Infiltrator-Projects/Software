@@ -459,8 +459,7 @@ const DebianPackageVersion *best_available(
     const DebianDependencyAlternative &dependency,
     const std::vector<DebianPackageVersion> &available,
     const std::string_view target_architecture,
-    const DebianCandidatePolicy &policy,
-    const bool include_recommends)
+    const DebianCandidatePolicy &policy)
 {
     const DebianPackageVersion *best = nullptr;
     int best_priority = 0;
