@@ -234,6 +234,11 @@ add_executable(infiltrator-software-cli
 target_link_libraries(infiltrator-software-cli PRIVATE
     software-core software-client PkgConfig::GLIB)
 
+add_executable(infiltrator-software-auto-updater
+    src/automation/main.cpp)
+target_link_libraries(infiltrator-software-auto-updater PRIVATE
+    software-core software-engine PkgConfig::GLIB)
+
 add_executable(infiltrator-software
     src/app/main.cpp
     src/app/theme.cpp)
@@ -257,6 +262,7 @@ install(TARGETS
     infiltrator-software-helper
     infiltrator-software-update-helper
     infiltrator-software-engine
+    infiltrator-software-auto-updater
     RUNTIME DESTINATION libexec)
 install(FILES
     data/net.ssmith.infiltrator.software.Engine.service
@@ -268,6 +274,10 @@ install(FILES
     data/net.ssmith.infiltrator.software.policy
     data/net.ssmith.infiltrator.software.updates.policy
     DESTINATION share/polkit-1/actions)
+install(FILES
+    data/infiltrator-software-auto-update.service
+    data/infiltrator-software-auto-update.timer
+    DESTINATION lib/systemd/system)
 install(FILES
     data/status/infiltrator-software-up-to-date-symbolic.svg
     data/status/infiltrator-software-updates-available-symbolic.svg
@@ -284,7 +294,8 @@ foreach(target IN ITEMS
         software-apt-plan-guard
         infiltrator-software-helper infiltrator-software-update-helper
         infiltrator-software-engine infiltrator-software-tray
-        infiltrator-software-session-updater infiltrator-software-cli infiltrator-software)
+        infiltrator-software-session-updater infiltrator-software-cli
+        infiltrator-software-auto-updater infiltrator-software)
     if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
         target_compile_options(${target} PRIVATE
             -Wall -Wextra -Wpedantic -Wshadow -Wconversion -Wsign-conversion)
