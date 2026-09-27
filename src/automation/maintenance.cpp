@@ -6,7 +6,6 @@
 
 #include <algorithm>
 #include <filesystem>
-#include <set>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -90,32 +89,94 @@ bool run_command(
         error);
 }
 
-std::set<std::string> simulated_removals(
-    const std::string &output)
+struct SimulatedRemoval {
+    std::string identity;
+    std::string package;
+    std::string version;
+};
+
+bool parse_simulated_removals(
+    const std::string &output,
+    std::vector<SimulatedRemoval> &removals,
+    std::string &error)
 {
-    std::set<std::string> result;
+    removals.clear();
+    error.clear();
+
     std::istringstream input(output);
     std::string line;
     while (std::getline(input, line)) {
         if (line.rfind("Remv ", 0U) != 0U) {
             continue;
         }
-        std::istringstream fields(line.substr(5U));
-        std::string package;
-        fields >> package;
-        if (!package.empty()) {
-            const std::size_t colon = package.find(':');
-            if (colon != std::string::npos) {
-                package.erase(colon);
-            }
-            result.insert(std::move(package));
+
+        const std::size_t identity_start = 5U;
+        const std::size_t identity_end =
+            line.find(' ', identity_start);
+        const std::size_t version_open =
+            line.find('[', identity_end);
+        const std::size_t version_close =
+            version_open == std::string::npos
+                ? std::string::npos
+                : line.find(']', version_open + 1U);
+        if (identity_end == std::string::npos ||
+            identity_end <= identity_start ||
+            version_open == std::string::npos ||
+            version_close == std::string::npos ||
+            version_close <= version_open + 1U) {
+            error =
+                "Unable to parse simulated maintenance removal: " +
+                line;
+            removals.clear();
+            return false;
         }
+
+        SimulatedRemoval removal;
+        removal.identity =
+            line.substr(
+                identity_start,
+                identity_end - identity_start);
+        removal.version =
+            line.substr(
+                version_open + 1U,
+                version_close - version_open - 1U);
+        const std::size_t colon =
+            removal.identity.find(':');
+        removal.package =
+            removal.identity.substr(0U, colon);
+
+        if (removal.identity.empty() ||
+            removal.package.empty() ||
+            removal.version.empty()) {
+            error =
+                "Simulated maintenance returned an incomplete removal: " +
+                line;
+            removals.clear();
+            return false;
+        }
+
+        const auto duplicate =
+            std::find_if(
+                removals.begin(),
+                removals.end(),
+                [&](const SimulatedRemoval &existing) {
+                    return existing.identity ==
+                        removal.identity;
+                });
+        if (duplicate != removals.end()) {
+            error =
+                "Simulated maintenance returned duplicate package removal " +
+                removal.identity + ".";
+            removals.clear();
+            return false;
+        }
+        removals.emplace_back(std::move(removal));
     }
-    return result;
+    return true;
 }
 
 bool proposed_kernel_removal_is_safe(
-    const std::set<std::string> &removals,
+    const std::vector<SimulatedRemoval> &removals,
     const std::vector<KernelRecord> &kernels,
     std::string &error)
 {
@@ -123,8 +184,12 @@ bool proposed_kernel_removal_is_safe(
         bool touches_kernel = false;
         for (const std::string &package :
              kernel.remove_package_ids) {
-            if (removals.find(package) !=
-                removals.end()) {
+            if (std::any_of(
+                    removals.begin(),
+                    removals.end(),
+                    [&](const SimulatedRemoval &removal) {
+                        return removal.package == package;
+                    })) {
                 touches_kernel = true;
                 break;
             }
@@ -217,8 +282,16 @@ int main()
         return 1;
     }
 
-    const std::set<std::string> removals =
-        simulated_removals(simulation);
+    std::vector<SimulatedRemoval> removals;
+    if (!parse_simulated_removals(
+            simulation,
+            removals,
+            error)) {
+        g_printerr(
+            "Automatic maintenance refused an unparseable removal plan: %s\n",
+            error.c_str());
+        return 1;
+    }
     if (removals.empty()) {
         g_message(
             "Automatic maintenance found no obsolete packages.");
@@ -253,18 +326,28 @@ int main()
     }
     g_free(inhibit);
 
+    std::vector<std::string> command{
+        "systemd-inhibit",
+        "--what=shutdown:sleep",
+        "--who=Infiltrator Software",
+        "--why=Removing obsolete kernels and dependencies",
+        "--mode=block",
+        "/usr/libexec/infiltrator-software-update-helper",
+        "apply-plan",
+        "--purge-removals"};
+    for (const SimulatedRemoval &removal : removals) {
+        command.emplace_back(
+            "remove:" + removal.identity + "=" +
+            removal.version);
+    }
+
+    /*
+     * Do not execute a second unconstrained autoremove. The privileged helper
+     * refreshes metadata, re-simulates this exact version-pinned purge plan and
+     * aborts if APT proposes any additional, missing or changed mutation.
+     */
     if (!run_command(
-            {
-                "systemd-inhibit",
-                "--what=shutdown:sleep",
-                "--who=Infiltrator Software",
-                "--why=Removing obsolete kernels and dependencies",
-                "--mode=block",
-                "apt-get",
-                "autoremove",
-                "--purge",
-                "-y"
-            },
+            std::move(command),
             error)) {
         g_printerr(
             "Automatic maintenance failed: %s\n",
