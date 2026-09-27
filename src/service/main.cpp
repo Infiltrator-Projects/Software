@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "engine/engine_service_core.hpp"
+#include "core/update_policy.hpp"
 
 #include <gio/gio.h>
 
@@ -822,6 +823,19 @@ void handle_method_call(
             request.package_ids.emplace_back(identity);
         }
         g_variant_unref(package_ids_variant);
+
+        infiltrator::software::SoftwarePreferences preferences;
+        std::string preferences_error;
+        if (infiltrator::software::load_software_preferences(
+                preferences,
+                preferences_error)) {
+            request.install_recommends =
+                preferences.install_recommends;
+        } else if (!preferences_error.empty()) {
+            g_warning(
+                "Unable to load transaction preferences: %s",
+                preferences_error.c_str());
+        }
 
         std::string error;
         const auto plan =
