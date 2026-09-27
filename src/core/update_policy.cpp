@@ -201,6 +201,9 @@ bool load_software_preferences(
         } else if (key == "auto-update-cinnamon-spices") {
             preferences.auto_update_cinnamon_spices =
                 parse_bool(value, preferences.auto_update_cinnamon_spices);
+        } else if (key == "auto-remove-obsolete") {
+            preferences.auto_remove_obsolete =
+                parse_bool(value, preferences.auto_remove_obsolete);
         } else if (key == "hide-window-after-update") {
             preferences.hide_window_after_update =
                 parse_bool(value, preferences.hide_window_after_update);
@@ -268,6 +271,7 @@ bool save_software_preferences(
         << "auto-update-packages=" << bool_text(preferences.auto_update_packages) << '\n'
         << "auto-update-flatpaks=" << bool_text(preferences.auto_update_flatpaks) << '\n'
         << "auto-update-cinnamon-spices=" << bool_text(preferences.auto_update_cinnamon_spices) << '\n'
+        << "auto-remove-obsolete=" << bool_text(preferences.auto_remove_obsolete) << '\n'
         << "hide-window-after-update=" << bool_text(preferences.hide_window_after_update) << '\n'
         << "hide-tray=" << bool_text(preferences.hide_tray) << '\n'
         << "install-recommends=" << bool_text(preferences.install_recommends) << '\n'
