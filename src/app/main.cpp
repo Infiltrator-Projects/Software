@@ -8,6 +8,7 @@
 #include "core/model.hpp"
 #include "core/transaction_history.hpp"
 #include "core/update_freshness.hpp"
+#include "core/update_policy.hpp"
 #include "sources/source_inventory.hpp"
 
 #include <gtk/gtk.h>
@@ -49,6 +50,12 @@ using infiltrator::software::TransactionAction;
 using infiltrator::software::TransactionHistoryItem;
 using infiltrator::software::TransactionHistoryStore;
 using infiltrator::software::TransactionPlan;
+using infiltrator::software::SoftwarePreferences;
+using infiltrator::software::load_software_preferences;
+using infiltrator::software::save_software_preferences;
+using infiltrator::software::update_is_ignored;
+using infiltrator::software::reboot_required;
+using infiltrator::software::reboot_required_packages;
 using infiltrator::software::source_kind_name;
 using infiltrator::software::update_metadata_refresh_due;
 
@@ -102,7 +109,10 @@ struct WindowState {
     GtkWidget *updates_count{};
     GtkWidget *updates_critical{};
     GtkWidget *updates_install{};
+    GtkWidget *updates_security{};
     GtkWidget *updates_refresh{};
+    GtkWidget *updates_reboot_banner{};
+    GtkWidget *updates_reboot_detail{};
     GtkWidget *updates_backend{};
     GtkWidget *updates_transaction_panel{};
     GtkWidget *updates_transaction_phase{};
@@ -125,6 +135,7 @@ struct WindowState {
     bool updates_from_engine{false};
     bool updates_auto_refresh_pending{true};
     gint64 updates_last_metadata_refresh_us{0};
+    SoftwarePreferences preferences{};
     guint updates_refresh_timer_id{0U};
 
     GtkListBox *system_list{};
@@ -4267,7 +4278,7 @@ std::string one_line(std::string value)
 
 int update_phase_index(const std::string_view phase) noexcept
 {
-    if (phase == "authorize") return 0;
+    if (phase == "authorize" || phase == "wait-lock") return 0;
     if (phase == "refresh") return 1;
     if (phase == "validate") return 2;
     if (phase == "download") return 3;
@@ -4281,6 +4292,7 @@ int update_phase_index(const std::string_view phase) noexcept
 const char *update_phase_title(const std::string_view phase) noexcept
 {
     if (phase == "authorize") return "Waiting for authorization";
+    if (phase == "wait-lock") return "Waiting for package manager";
     if (phase == "refresh") return "Refreshing package metadata";
     if (phase == "validate") return "Re-validating approved changes";
     if (phase == "download") return "Downloading updates";
