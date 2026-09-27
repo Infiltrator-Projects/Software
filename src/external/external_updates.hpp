@@ -30,6 +30,7 @@ struct ExternalUpdate {
     std::string ref;
     bool user_installation{false};
     std::uint64_t download_bytes{0U};
+    std::int64_t remote_revision{0};
 };
 
 using ExternalProgressCallback =
@@ -58,6 +59,11 @@ bool apply_flatpak_updates_selected(
     ExternalProgressCallback progress = {});
 
 bool apply_cinnamon_updates(
+    std::string &error,
+    ExternalProgressCallback progress = {});
+
+bool apply_cinnamon_updates_selected(
+    const std::vector<ExternalUpdate> &selected,
     std::string &error,
     ExternalProgressCallback progress = {});
 
