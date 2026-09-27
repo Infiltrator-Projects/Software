@@ -246,6 +246,11 @@ add_executable(infiltrator-software-auto-updater
 target_link_libraries(infiltrator-software-auto-updater PRIVATE
     software-core software-engine PkgConfig::GLIB)
 
+add_executable(infiltrator-software-maintenance
+    src/automation/maintenance.cpp)
+target_link_libraries(infiltrator-software-maintenance PRIVATE
+    software-core software-engine PkgConfig::GLIB)
+
 add_executable(infiltrator-software-release-upgrade
     src/release/main.cpp)
 target_link_libraries(infiltrator-software-release-upgrade PRIVATE
@@ -285,6 +290,7 @@ install(TARGETS
     infiltrator-software-update-helper
     infiltrator-software-engine
     infiltrator-software-auto-updater
+    infiltrator-software-maintenance
     RUNTIME DESTINATION libexec)
 install(FILES
     data/net.ssmith.infiltrator.software.Engine.service
@@ -299,6 +305,8 @@ install(FILES
 install(FILES
     data/infiltrator-software-auto-update.service
     data/infiltrator-software-auto-update.timer
+    data/infiltrator-software-maintenance.service
+    data/infiltrator-software-maintenance.timer
     DESTINATION lib/systemd/system)
 install(FILES
     data/status/infiltrator-software-up-to-date-symbolic.svg
@@ -317,7 +325,8 @@ foreach(target IN ITEMS
         infiltrator-software-helper infiltrator-software-update-helper
         infiltrator-software-engine infiltrator-software-tray
         infiltrator-software-session-updater infiltrator-software-cli
-        infiltrator-software-auto-updater infiltrator-software-release-upgrade
+        infiltrator-software-auto-updater infiltrator-software-maintenance
+        infiltrator-software-release-upgrade
         infiltrator-software)
     if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
         target_compile_options(${target} PRIVATE
