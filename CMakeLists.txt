@@ -222,7 +222,7 @@ target_compile_definitions(infiltrator-software-engine PRIVATE
 add_executable(infiltrator-software-tray
     src/tray/main.cpp)
 target_link_libraries(infiltrator-software-tray PRIVATE
-    software-client PkgConfig::GTK3 PkgConfig::XAPP)
+    software-client software-history PkgConfig::GTK3 PkgConfig::XAPP)
 
 add_executable(infiltrator-software-session-updater
     src/session/main.cpp)
