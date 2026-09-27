@@ -67,6 +67,12 @@ std::vector<PackageRecord> build_updates(
         PackageRecord record = selection.installed;
         record.available_version = candidate.version;
         record.source = candidate.source;
+        record.source_package =
+            candidate.source_package.empty()
+                ? candidate.package
+                : candidate.source_package;
+        record.description = candidate.description;
+        record.security_update = candidate.security_update;
         record.repository_origin = candidate.release_origin;
         record.repository_site = candidate.site;
         record.policy_provider = candidate.policy_provider;
