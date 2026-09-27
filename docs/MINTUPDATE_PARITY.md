@@ -89,9 +89,11 @@ validation against any replacement Provides relationship.
 
 The 0.3.52 Debian package itself deliberately uses `Provides: mintupdate` and
 `Replaces: mintupdate` without `Conflicts: mintupdate` so Software 0.3.49 can
-bootstrap to the fixed resolver instead of rejecting its own update. Once
-0.3.52 is running, `mintupdate` can be removed through Software's Installed
-page and Mint meta-package dependencies remain satisfied by the provider.
+bootstrap to the fixed resolver instead of rejecting its own update. Software 0.3.52 is therefore the bootstrap step. After a host is running the
+fixed planner, a subsequent replacement release can restore
+`Conflicts: mintupdate`; the corrected resolver will then include removal of
+the installed Mint Update Manager explicitly in the reviewed transaction while
+`Provides: mintupdate` keeps Mint meta-package dependencies satisfied.
 
 This acceptance does not claim that a generic CI runner can prove a destructive
 Linux Mint point-release upgrade on every installed host. That operation still
