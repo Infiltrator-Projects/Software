@@ -338,6 +338,53 @@ void update_progress_from_apt_line(
     }
 }
 
+bool apt_dpkg_locked()
+{
+    static constexpr const char *paths[] = {
+        "/var/lib/dpkg/lock-frontend",
+        "/var/lib/dpkg/lock",
+        "/var/lib/apt/lists/lock",
+        "/var/cache/apt/archives/lock"
+    };
+
+    for (const char *path : paths) {
+        const int fd = open(path, O_RDONLY | O_CLOEXEC);
+        if (fd < 0) {
+            continue;
+        }
+
+        struct flock lock {};
+        lock.l_type = F_WRLCK;
+        lock.l_whence = SEEK_SET;
+        const int status = fcntl(fd, F_GETLK, &lock);
+        close(fd);
+
+        if (status == 0 && lock.l_type != F_UNLCK) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool wait_for_package_manager(
+    const std::string &progress_path,
+    const std::string_view token)
+{
+    for (unsigned second = 0U; second < 300U; ++second) {
+        if (!apt_dpkg_locked()) {
+            return true;
+        }
+
+        write_progress(
+            progress_path,
+            token,
+            "wait-lock",
+            "Another package-management transaction is active. Waiting for it to finish.");
+        sleep(1U);
+    }
+    return !apt_dpkg_locked();
+}
+
 int run_apt_with_progress(
     std::vector<std::string> arguments,
     const std::string &progress_path,
@@ -759,6 +806,15 @@ int main(int argc, char **argv)
          * explicitly. Recommends/Suggests are disabled so APT cannot silently
          * broaden the native plan.
          */
+        if (!wait_for_package_manager(
+                progress_path,
+                progress_token)) {
+            std::fprintf(
+                stderr,
+                "Another package-management transaction remained active for five minutes.\n");
+            return 68;
+        }
+
         write_progress(
             progress_path,
             progress_token,
