@@ -323,5 +323,60 @@ int main()
     assert(pinned_item != nullptr);
     assert(pinned_item->to_version == "1.0");
 
+    DebianPackageVersion software_replacement =
+        available(
+            "infiltrator-software",
+            "0.3.53",
+            50U,
+            500U);
+    software_replacement.provides = "mintupdate";
+    software_replacement.conflicts = "mintupdate";
+    software_replacement.replaces = "mintupdate";
+
+    PackageRecord mint_meta =
+        installed("mint-meta-cinnamon", "2026.1", 10U);
+    mint_meta.depends = "mintupdate";
+
+    TransactionRequest replacement_request;
+    replacement_request.action = TransactionAction::upgrade;
+    replacement_request.package_ids = {"infiltrator-software"};
+
+    error.clear();
+    const auto replacement_plan =
+        DebianTransactionPlanner::plan(
+            replacement_request,
+            {
+                installed(
+                    "infiltrator-software",
+                    "0.3.49",
+                    400U),
+                installed("mintupdate", "7.1.4", 200U),
+                mint_meta
+            },
+            {software_replacement},
+            "amd64",
+            15U,
+            "snapshot-15",
+            policy,
+            error);
+    assert(replacement_plan.has_value());
+    assert(error.empty());
+    const TransactionItem *software_item =
+        find_item(
+            *replacement_plan,
+            "infiltrator-software");
+    const TransactionItem *mintupdate_item =
+        find_item(*replacement_plan, "mintupdate");
+    assert(software_item != nullptr);
+    assert(
+        software_item->action ==
+        TransactionAction::upgrade);
+    assert(mintupdate_item != nullptr);
+    assert(
+        mintupdate_item->action ==
+        TransactionAction::remove);
+    assert(mintupdate_item->from_version == "7.1.4");
+    assert(!mintupdate_item->requested);
+
     return 0;
 }
