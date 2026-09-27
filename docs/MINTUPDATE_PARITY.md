@@ -11,7 +11,7 @@ integration, preferences, automation, tray behaviour, release-upgrade helper
 and command-line interface.
 
 This table records the audited replacement contract. Required source paths are
-implemented in Software 0.3.51 and exercised by build, unit, smoke and package
+implemented in Software 0.3.52 and exercised by build, unit, smoke and package
 verification. Installed-host qualification remains important for destructive
 distribution upgrades, but it is no longer a missing feature in the replacement
 implementation.
@@ -76,16 +76,22 @@ implementation.
 
 ## Replacement acceptance
 
-The source replacement gate is complete for Software 0.3.51. Required
+The source replacement gate is complete for Software 0.3.52. Required
 Mint Update Manager capabilities in the audited 7.1.5 baseline have an
 implemented Software path, including exact Cinnamon/Nemo selection and
 execution, external-update progress, tray visibility, history, unattended
 updates and the reviewed release-upgrade workflow.
 
-The Debian package deliberately declares `Provides: mintupdate`,
-`Conflicts: mintupdate` and `Replaces: mintupdate`. Installing the released
-package therefore removes the original Mint Update Manager while continuing to
-satisfy an unversioned `mintupdate` dependency from Mint meta-packages.
+Software 0.3.52 corrects the replacement-planning bug exposed by an installed
+0.3.49 client: a candidate that both Conflicts with and Replaces an installed
+package is now resolved as an explicit reviewed removal, including dependency
+validation against any replacement Provides relationship.
+
+The 0.3.52 Debian package itself deliberately uses `Provides: mintupdate` and
+`Replaces: mintupdate` without `Conflicts: mintupdate` so Software 0.3.49 can
+bootstrap to the fixed resolver instead of rejecting its own update. Once
+0.3.52 is running, `mintupdate` can be removed through Software's Installed
+page and Mint meta-package dependencies remain satisfied by the provider.
 
 This acceptance does not claim that a generic CI runner can prove a destructive
 Linux Mint point-release upgrade on every installed host. That operation still
