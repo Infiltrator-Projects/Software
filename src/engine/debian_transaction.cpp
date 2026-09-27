@@ -703,6 +703,52 @@ std::optional<TransactionPlan> DebianTransactionPlanner::plan(
     plan.state_generation = state_generation;
     plan.source_fingerprint = std::string(source_fingerprint);
 
+    for (const std::string &identity :
+         resolution.remove_installed) {
+        const PackageRecord *package =
+            find_installed_request(
+                identity, installed, target_architecture);
+        if (package == nullptr) {
+            error =
+                "Resolved replacement removal is no longer installed: " +
+                identity + ".";
+            return std::nullopt;
+        }
+        if (held(package->id, policy)) {
+            error =
+                "Resolved replacement would remove held package " +
+                package->id + ".";
+            return std::nullopt;
+        }
+        if (package->essential) {
+            error =
+                "Resolved replacement would remove Essential package " +
+                package->id + ".";
+            return std::nullopt;
+        }
+
+        TransactionItem item;
+        item.package_id = package->id;
+        item.action = TransactionAction::remove;
+        item.architecture = package->architecture;
+        item.from_version = package->installed_version;
+        item.disk_delta_bytes =
+            signed_size_delta(
+                0U, package->installed_size_bytes);
+        item.requested = false;
+        item.system_critical =
+            installed_system_critical(*package);
+
+        plan.disk_delta_bytes =
+            add_delta(
+                plan.disk_delta_bytes,
+                item.disk_delta_bytes);
+        plan.touches_system =
+            plan.touches_system ||
+            item.system_critical;
+        plan.items.emplace_back(std::move(item));
+    }
+
     for (const DebianPackageVersion &candidate :
          resolution.selected) {
         const PackageRecord *current =
