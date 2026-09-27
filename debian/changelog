@@ -15,6 +15,8 @@ infiltrator-software (0.3.46) unstable; urgency=high
     Flatpak, Cinnamon-spice, automation, preferences, tray, release-upgrade and
     CLI surfaces; add docs/MINTUPDATE_PARITY.md as the mandatory replacement
     gate before Mint Update Manager can be removed.
+  * Correct the progress helper's internal argv declaration/stream forwarding
+    so the new compatibility-stage telemetry builds cleanly on release CI.
 
  -- Shannon Smith <infiltratr@yandex.com>  Sun, 27 Sep 2026 11:25:00 +1000
 
