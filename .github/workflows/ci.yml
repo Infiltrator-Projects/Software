@@ -10,15 +10,14 @@ permissions:
   contents: read
 
 concurrency:
-  # Development verification prefers the local runner, while release commits
-  # deliberately use GitHub-hosted Ubuntu. Keep those queues independent so
-  # an offline/busy self-hosted runner can never strand a release verification.
+  # Use the hosted runner until the local runner's checkout can find Git.
+  # The local runner currently fails before any source or tests are read.
   group: verify-${{ github.repository }}-${{ github.ref_name }}-${{ startsWith(github.event.head_commit.message, 'Release ') && 'release' || 'development' }}
   cancel-in-progress: true
 
 jobs:
   linux:
-    runs-on: ${{ startsWith(github.event.head_commit.message, 'Release ') && 'ubuntu-24.04' || 'linux-native' }}
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - name: Check out source and Common
