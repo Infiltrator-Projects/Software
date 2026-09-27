@@ -4040,6 +4040,430 @@ void system_review_updates_clicked(
     }
 }
 
+struct ReleaseUpgradePlanResult {
+    std::string target_name;
+    std::string target_codename;
+    TransactionPlan plan;
+    std::vector<std::string> specs;
+    std::string error;
+};
+
+struct ReleaseUpgradeApply {
+    GtkWindow *window{};
+    WindowState *state{};
+    std::vector<std::string> specs;
+};
+
+void release_upgrade_plan_worker(
+    GTask *task,
+    gpointer,
+    gpointer,
+    GCancellable *)
+{
+    auto *result =
+        new ReleaseUpgradePlanResult{};
+
+    gchar *stdout_text = nullptr;
+    gchar *stderr_text = nullptr;
+    gint wait_status = 0;
+    GError *gerror = nullptr;
+    gchar *argv[] = {
+        const_cast<gchar *>(
+            "/usr/bin/infiltrator-software-release-upgrade"),
+        const_cast<gchar *>("plan"),
+        nullptr
+    };
+    const gboolean spawned =
+        g_spawn_sync(
+            nullptr,
+            argv,
+            nullptr,
+            G_SPAWN_DEFAULT,
+            nullptr,
+            nullptr,
+            &stdout_text,
+            &stderr_text,
+            &wait_status,
+            &gerror);
+
+    bool success = spawned != FALSE;
+    if (success) {
+        success =
+            g_spawn_check_wait_status(
+                wait_status,
+                &gerror) != FALSE;
+    }
+
+    if (!success) {
+        if (stderr_text != nullptr &&
+            *stderr_text != '\0') {
+            result->error =
+                one_line(stderr_text);
+        } else if (
+            gerror != nullptr &&
+            gerror->message != nullptr) {
+            result->error =
+                gerror->message;
+        } else {
+            result->error =
+                "Unable to calculate the release-upgrade plan.";
+        }
+    } else if (stdout_text != nullptr) {
+        std::istringstream input(stdout_text);
+        std::string line;
+        while (std::getline(input, line)) {
+            std::vector<std::string> fields;
+            std::size_t start = 0U;
+            for (;;) {
+                const std::size_t tab =
+                    line.find('\t', start);
+                fields.push_back(
+                    line.substr(
+                        start,
+                        tab == std::string::npos
+                            ? std::string::npos
+                            : tab - start));
+                if (tab == std::string::npos) {
+                    break;
+                }
+                start = tab + 1U;
+            }
+
+            if (fields.size() >= 3U &&
+                fields[0] == "TARGET") {
+                result->target_name = fields[1];
+                result->target_codename = fields[2];
+            } else if (
+                fields.size() >= 2U &&
+                fields[0] == "SPEC") {
+                result->specs.push_back(fields[1]);
+            } else if (
+                fields.size() >= 7U &&
+                fields[0] == "ITEM") {
+                TransactionItem item;
+                if (fields[1] == "Remove") {
+                    item.action =
+                        TransactionAction::remove;
+                } else if (fields[1] == "Install") {
+                    item.action =
+                        TransactionAction::install;
+                } else {
+                    item.action =
+                        TransactionAction::upgrade;
+                }
+                item.package_id = fields[2];
+                item.from_version = fields[3];
+                item.to_version = fields[4];
+                try {
+                    item.download_bytes =
+                        static_cast<std::uint64_t>(
+                            std::stoull(fields[5]));
+                } catch (...) {
+                    item.download_bytes = 0U;
+                }
+                item.system_critical =
+                    fields[6] == "1";
+                result->plan.download_bytes +=
+                    item.download_bytes;
+                result->plan.touches_system =
+                    result->plan.touches_system ||
+                    item.system_critical;
+                result->plan.items.emplace_back(
+                    std::move(item));
+            }
+        }
+
+        if (result->target_name.empty() ||
+            result->specs.empty() ||
+            result->plan.items.empty()) {
+            result->error =
+                "The release-upgrade planner returned an incomplete review plan.";
+        }
+    }
+
+    g_free(stdout_text);
+    g_free(stderr_text);
+    g_clear_error(&gerror);
+
+    g_task_return_pointer(
+        task,
+        result,
+        [](gpointer pointer) {
+            delete static_cast<ReleaseUpgradePlanResult *>(
+                pointer);
+        });
+}
+
+void destroy_release_upgrade_apply(
+    ReleaseUpgradeApply *apply)
+{
+    if (apply == nullptr) {
+        return;
+    }
+    if (apply->window != nullptr) {
+        g_object_unref(apply->window);
+    }
+    delete apply;
+}
+
+void release_upgrade_apply_complete(
+    GObject *source_object,
+    GAsyncResult *async_result,
+    gpointer user_data)
+{
+    auto *process =
+        G_SUBPROCESS(source_object);
+    auto *apply =
+        static_cast<ReleaseUpgradeApply *>(
+            user_data);
+    GError *error = nullptr;
+    gchar *out = nullptr;
+    gchar *err = nullptr;
+    const gboolean communicated =
+        g_subprocess_communicate_utf8_finish(
+            process,
+            async_result,
+            &out,
+            &err,
+            &error);
+    const bool success =
+        communicated &&
+        g_subprocess_get_successful(process);
+
+    if (apply != nullptr &&
+        apply->state != nullptr &&
+        apply->state->system_status != nullptr) {
+        std::string message;
+        if (success) {
+            message =
+                out != nullptr && *out != '\0'
+                    ? one_line(out)
+                    : "Operating-system release upgrade completed.";
+        } else if (
+            err != nullptr &&
+            *err != '\0') {
+            message =
+                "Release upgrade failed: " +
+                one_line(err);
+        } else if (
+            error != nullptr &&
+            error->message != nullptr) {
+            message =
+                "Release upgrade failed: " +
+                one_line(error->message);
+        } else {
+            message =
+                "Release upgrade failed.";
+        }
+        gtk_label_set_text(
+            GTK_LABEL(
+                apply->state->system_status),
+            message.c_str());
+    }
+
+    g_free(out);
+    g_free(err);
+    g_clear_error(&error);
+    destroy_release_upgrade_apply(apply);
+}
+
+void release_upgrade_confirm_response(
+    GtkDialog *dialog,
+    const gint response_id,
+    gpointer user_data)
+{
+    auto *apply =
+        static_cast<ReleaseUpgradeApply *>(
+            user_data);
+    gtk_window_destroy(
+        GTK_WINDOW(dialog));
+
+    if (apply == nullptr) {
+        return;
+    }
+    if (response_id != GTK_RESPONSE_ACCEPT) {
+        destroy_release_upgrade_apply(apply);
+        return;
+    }
+
+    std::vector<std::string> arguments{
+        "pkexec",
+        "/usr/bin/infiltrator-software-release-upgrade",
+        "apply"
+    };
+    arguments.insert(
+        arguments.end(),
+        apply->specs.begin(),
+        apply->specs.end());
+
+    std::vector<const gchar *> argv;
+    argv.reserve(arguments.size() + 1U);
+    for (const std::string &argument :
+         arguments) {
+        argv.push_back(argument.c_str());
+    }
+    argv.push_back(nullptr);
+
+    GError *error = nullptr;
+    GSubprocess *process =
+        g_subprocess_newv(
+            argv.data(),
+            static_cast<GSubprocessFlags>(
+                G_SUBPROCESS_FLAGS_STDOUT_PIPE |
+                G_SUBPROCESS_FLAGS_STDERR_PIPE),
+            &error);
+    if (process == nullptr) {
+        if (apply->state != nullptr &&
+            apply->state->system_status != nullptr) {
+            gtk_label_set_text(
+                GTK_LABEL(
+                    apply->state->system_status),
+                error != nullptr &&
+                error->message != nullptr
+                    ? error->message
+                    : "Unable to start the release upgrade.");
+        }
+        g_clear_error(&error);
+        destroy_release_upgrade_apply(apply);
+        return;
+    }
+
+    if (apply->state != nullptr &&
+        apply->state->system_status != nullptr) {
+        gtk_label_set_text(
+            GTK_LABEL(
+                apply->state->system_status),
+            "Release upgrade is running. Do not shut down the computer.");
+    }
+
+    g_subprocess_communicate_utf8_async(
+        process,
+        nullptr,
+        nullptr,
+        release_upgrade_apply_complete,
+        apply);
+    g_object_unref(process);
+}
+
+void release_upgrade_plan_complete(
+    GObject *source_object,
+    GAsyncResult *async_result,
+    gpointer)
+{
+    auto *window =
+        GTK_WINDOW(source_object);
+    auto *state =
+        static_cast<WindowState *>(
+            g_object_get_data(
+                G_OBJECT(window),
+                "infiltrator-window-state"));
+    auto *result =
+        static_cast<ReleaseUpgradePlanResult *>(
+            g_task_propagate_pointer(
+                G_TASK(async_result),
+                nullptr));
+
+    if (state == nullptr ||
+        result == nullptr) {
+        delete result;
+        return;
+    }
+
+    if (!result->error.empty()) {
+        if (state->system_status != nullptr) {
+            gtk_label_set_text(
+                GTK_LABEL(state->system_status),
+                result->error.c_str());
+        }
+        delete result;
+        return;
+    }
+
+    auto *apply =
+        new ReleaseUpgradeApply{};
+    apply->window =
+        GTK_WINDOW(g_object_ref(window));
+    apply->state = state;
+    apply->specs = result->specs;
+
+    const std::string heading =
+        "Upgrade Linux Mint to " +
+        result->target_name +
+        " (" +
+        result->target_codename +
+        ")?";
+    GtkWidget *dialog =
+        make_transaction_confirmation_dialog(
+            state->window,
+            "Review operating-system upgrade",
+            heading,
+            "Upgrade release",
+            result->plan,
+            true);
+    g_signal_connect(
+        dialog,
+        "response",
+        G_CALLBACK(
+            release_upgrade_confirm_response),
+        apply);
+    gtk_window_present(
+        GTK_WINDOW(dialog));
+    delete result;
+}
+
+void system_release_upgrade_clicked(
+    GtkButton *,
+    gpointer user_data)
+{
+    auto *state =
+        static_cast<WindowState *>(
+            user_data);
+    if (state == nullptr ||
+        state->window == nullptr) {
+        return;
+    }
+
+    if (state->system_status != nullptr) {
+        gtk_label_set_text(
+            GTK_LABEL(state->system_status),
+            "Checking Linux Mint release-upgrade metadata and calculating the exact target package plan…");
+    }
+
+    GTask *task =
+        g_task_new(
+            G_OBJECT(state->window),
+            nullptr,
+            release_upgrade_plan_complete,
+            nullptr);
+    g_task_run_in_thread(
+        task,
+        release_upgrade_plan_worker);
+    g_object_unref(task);
+}
+
+void system_snapshots_clicked(
+    GtkButton *,
+    gpointer user_data)
+{
+    auto *state =
+        static_cast<WindowState *>(
+            user_data);
+    GError *error = nullptr;
+    if (!g_spawn_command_line_async(
+            "pkexec timeshift-gtk",
+            &error) &&
+        state != nullptr &&
+        state->system_status != nullptr) {
+        gtk_label_set_text(
+            GTK_LABEL(state->system_status),
+            error != nullptr &&
+            error->message != nullptr
+                ? error->message
+                : "Timeshift is not installed.");
+    }
+    g_clear_error(&error);
+}
+
 GtkWidget *make_system_page(WindowState *state)
 {
     GtkWidget *page =
@@ -4119,6 +4543,32 @@ GtkWidget *make_system_page(WindowState *state)
     gtk_box_append(
         GTK_BOX(controls),
         state->system_review_updates);
+
+    GtkWidget *snapshots =
+        gtk_button_new_with_label(
+            "Snapshots…");
+    gtk_widget_add_css_class(
+        snapshots, "control-button");
+    g_signal_connect(
+        snapshots,
+        "clicked",
+        G_CALLBACK(system_snapshots_clicked),
+        state);
+    gtk_box_append(
+        GTK_BOX(controls), snapshots);
+
+    GtkWidget *release_upgrade =
+        gtk_button_new_with_label(
+            "OS upgrade…");
+    gtk_widget_add_css_class(
+        release_upgrade, "control-button");
+    g_signal_connect(
+        release_upgrade,
+        "clicked",
+        G_CALLBACK(system_release_upgrade_clicked),
+        state);
+    gtk_box_append(
+        GTK_BOX(controls), release_upgrade);
 
     gtk_box_append(GTK_BOX(page), controls);
 
