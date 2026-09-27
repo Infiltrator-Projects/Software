@@ -45,6 +45,7 @@ struct DebianPackageVersion {
     std::uint64_t size_bytes{0};
     std::uint64_t installed_size_bytes{0};
     bool essential{false};
+    bool security_update{false};
 };
 
 class DebianPackageIndex final {
