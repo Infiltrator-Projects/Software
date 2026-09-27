@@ -265,6 +265,10 @@ struct SourcePublication {
     bool obsolete_existed{false};
 };
 
+bool rollback_target_sources(
+    const SourcePublication &publication,
+    std::string &error);
+
 bool publish_target_sources(
     const ReleaseInfo &release,
     SourcePublication &publication,
@@ -373,9 +377,22 @@ bool publish_target_sources(
     std::filesystem::remove(
         publication.obsolete, ec);
     if (ec) {
-        error =
-            "Unable to retire legacy Mint source repositories: " +
-            ec.message();
+        const std::string remove_error = ec.message();
+        std::string rollback_error;
+        if (!rollback_target_sources(
+                publication,
+                rollback_error)) {
+            error =
+                "Unable to retire legacy Mint source repositories: " +
+                remove_error +
+                "; rollback also failed: " +
+                rollback_error;
+        } else {
+            error =
+                "Unable to retire legacy Mint source repositories: " +
+                remove_error +
+                "; previous repository configuration was restored.";
+        }
         return false;
     }
     return true;
