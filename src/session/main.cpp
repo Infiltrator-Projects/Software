@@ -22,6 +22,12 @@ int main()
 
     bool success = true;
 
+    if (system_on_battery()) {
+        g_message(
+            "Automatic Software session updates deferred while on battery power.");
+        return 0;
+    }
+
     if (preferences.auto_update_flatpaks) {
         std::string flatpak_error;
         if (!apply_flatpak_updates(
