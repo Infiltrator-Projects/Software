@@ -145,6 +145,7 @@ add_library(software-engine STATIC
     src/engine/debian_reconcile.cpp
     src/engine/package_state_store.cpp
     src/engine/debian_transaction.cpp
+    src/engine/kernel_inventory.cpp
     src/engine/engine_service_core.cpp)
 target_include_directories(software-engine PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/src")
@@ -453,6 +454,13 @@ if(BUILD_TESTING)
     add_test(
         NAME software-debian-transaction-test
         COMMAND software-debian-transaction-test)
+
+    add_executable(software-kernel-inventory-test
+        tests/kernel_inventory_test.cpp)
+    target_link_libraries(software-kernel-inventory-test PRIVATE software-engine)
+    add_test(
+        NAME software-kernel-inventory-test
+        COMMAND software-kernel-inventory-test)
 
     add_executable(software-engine-service-core-test
         tests/engine_service_core_test.cpp)
