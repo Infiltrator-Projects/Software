@@ -5,6 +5,7 @@
 #include <gio/gio.h>
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <charconv>
 #include <set>
@@ -123,6 +124,122 @@ bool run_command(
 
     g_free(out);
     g_free(err);
+    g_clear_error(&gerror);
+    g_object_unref(process);
+    return success;
+}
+
+
+bool run_command_streaming(
+    const std::vector<std::string> &arguments,
+    std::string &output,
+    std::string &error,
+    const ExternalProgressCallback &progress)
+{
+    output.clear();
+    error.clear();
+    if (arguments.empty()) {
+        error = "External update command is empty.";
+        return false;
+    }
+
+    std::vector<const gchar *> argv;
+    argv.reserve(arguments.size() + 1U);
+    for (const std::string &argument : arguments) {
+        argv.push_back(argument.c_str());
+    }
+    argv.push_back(nullptr);
+
+    GError *gerror = nullptr;
+    GSubprocess *process =
+        g_subprocess_newv(
+            argv.data(),
+            static_cast<GSubprocessFlags>(
+                G_SUBPROCESS_FLAGS_STDOUT_PIPE |
+                G_SUBPROCESS_FLAGS_STDERR_MERGE),
+            &gerror);
+    if (process == nullptr) {
+        error =
+            gerror == nullptr || gerror->message == nullptr
+                ? "Unable to start external update command."
+                : gerror->message;
+        g_clear_error(&gerror);
+        return false;
+    }
+
+    GInputStream *stream =
+        g_subprocess_get_stdout_pipe(process);
+    std::array<char, 1024U> buffer{};
+    std::string pending;
+    for (;;) {
+        const gssize bytes =
+            g_input_stream_read(
+                stream,
+                buffer.data(),
+                buffer.size(),
+                nullptr,
+                &gerror);
+        if (bytes < 0) {
+            error =
+                gerror == nullptr || gerror->message == nullptr
+                    ? "Unable to read external update progress."
+                    : gerror->message;
+            g_clear_error(&gerror);
+            g_object_unref(process);
+            return false;
+        }
+        if (bytes == 0) {
+            break;
+        }
+
+        output.append(
+            buffer.data(),
+            static_cast<std::size_t>(bytes));
+        pending.append(
+            buffer.data(),
+            static_cast<std::size_t>(bytes));
+        for (;;) {
+            const std::size_t separator =
+                pending.find_first_of("\r\n");
+            if (separator == std::string::npos) {
+                break;
+            }
+            const std::string line =
+                trim(std::string_view(pending).substr(
+                    0U, separator));
+            pending.erase(0U, separator + 1U);
+            while (!pending.empty() &&
+                   (pending.front() == '\r' ||
+                    pending.front() == '\n')) {
+                pending.erase(pending.begin());
+            }
+            if (progress && !line.empty()) {
+                progress(line);
+            }
+        }
+    }
+
+    const std::string last = trim(pending);
+    if (progress && !last.empty()) {
+        progress(last);
+    }
+
+    const gboolean success =
+        g_subprocess_wait_check(
+            process,
+            nullptr,
+            &gerror);
+    if (!success) {
+        if (!last.empty()) {
+            error = last;
+        } else if (
+            gerror != nullptr &&
+            gerror->message != nullptr) {
+            error = gerror->message;
+        } else {
+            error = "External update command returned an error.";
+        }
+    }
     g_clear_error(&gerror);
     g_object_unref(process);
     return success;
@@ -643,7 +760,18 @@ bool apply_flatpak_updates_selected(
             update.user_installation ? "--user" : "--system",
             "--", update.ref};
         std::string output;
-        if (!run_command(command,output,error)) {
+        if (!run_command_streaming(
+                command,
+                output,
+                error,
+                [&](std::string_view detail) {
+                    if (progress) {
+                        progress(
+                            "Flatpak " + std::to_string(index) + "/" +
+                            std::to_string(selected.size()) +
+                            " • " + std::string(detail));
+                    }
+                })) {
             return false;
         }
         if (progress) {
