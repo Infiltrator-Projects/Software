@@ -6,6 +6,7 @@
 #include <glib.h>
 
 #include <algorithm>
+#include <fstream>
 #include <iostream>
 #include <optional>
 #include <string>
@@ -71,6 +72,32 @@ bool parse_options(int argc, char **argv, int start, Options &options, std::stri
         return false;
     }
     return true;
+}
+
+void append_system_ignores(
+    SoftwarePreferences &preferences)
+{
+    std::ifstream input(
+        "/etc/infiltrator-software/automatic-updates.conf");
+    std::string line;
+    while (std::getline(input, line)) {
+        static constexpr std::string_view prefix{
+            "ignore="};
+        if (line.rfind(
+                prefix.data(), 0U) == 0U &&
+            line.size() > prefix.size()) {
+            const std::string rule =
+                line.substr(prefix.size());
+            if (std::find(
+                    preferences.ignored_packages.begin(),
+                    preferences.ignored_packages.end(),
+                    rule) ==
+                preferences.ignored_packages.end()) {
+                preferences.ignored_packages.push_back(
+                    rule);
+            }
+        }
+    }
 }
 
 bool matches(const PackageRecord &p, const Options &o, const SoftwarePreferences &prefs)
@@ -185,6 +212,7 @@ int main(int argc,char **argv)
 
     SoftwarePreferences prefs;
     if (!load_software_preferences(prefs,error)) { std::cerr<<error<<"\n"; return 1; }
+    append_system_ignores(prefs);
     for (const std::string &rule:options.ignores) prefs.ignored_packages.push_back(rule);
 
     if ((command=="upgrade" || options.refresh_cache) &&
