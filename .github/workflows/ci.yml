@@ -105,6 +105,8 @@ jobs:
           external_updates = Path("src/external/external_updates.cpp").read_text()
           session_updater = Path("src/session/main.cpp").read_text()
           auto_updater = Path("src/automation/main.cpp").read_text()
+          maintenance = Path("src/automation/maintenance.cpp").read_text()
+          dependency = Path("src/engine/debian_dependency.cpp").read_text()
           cli = Path("src/cli/main.cpp").read_text()
           release_upgrader = Path("src/release/main.cpp").read_text()
           tray = Path("src/tray/main.cpp").read_text()
@@ -188,6 +190,33 @@ jobs:
           assert "plan_removal(" in transaction
           assert "Refusing to remove Essential package" in transaction
           assert "Authentication is required to install, update or remove system software." in policy
+
+          # Automatic maintenance must execute the exact reviewed purge set,
+          # never safety-check one autoremove and later run an unconstrained one.
+          assert '"--purge-removals"' in helper
+          assert '"--purge-removals"' in maintenance
+          assert 'remove:" + removal.identity + "="' in maintenance
+          assert '"/usr/libexec/infiltrator-software-update-helper"' in maintenance
+          assert '"apt-get",\n                "autoremove"' not in maintenance
+
+          # Recommends policy is resolved into the reviewed native/fallback
+          # plan; the privileged executor must not independently broaden it.
+          assert "request.install_recommends" in transaction
+          assert "owner.recommends" in dependency
+          assert '"--install-recommends"' in backend
+          assert '"--no-install-recommends"' in backend
+
+          # Release source switching is transactional across a failed package
+          # mutation, and Preferences must not synchronously block GTK.
+          assert "rollback_target_sources" in release_upgrader
+          assert "Previous repository configuration was restored." in release_upgrader
+          assert "start_preferences_automation_sync" in app
+          assert "g_subprocess_communicate_utf8_async" in app
+
+          # D-Bus transaction parsing fails closed on unknown actions.
+          assert "bool parse_action(" in engine_client
+          assert 'value == "Install"' in engine_client
+          assert "if (!parsed || item.package_id.empty())" in engine_client
 
           # A stale graphical update row must not turn an already-completed
           # exact version into a false transaction failure.
