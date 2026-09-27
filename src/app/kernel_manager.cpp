@@ -881,59 +881,6 @@ void bulk_remove_clicked(
     }
 }
 
-void combine_plan(
-    TransactionPlan &combined,
-    const TransactionPlan &part,
-    std::string &error)
-{
-    if (!error.empty()) return;
-
-    if (combined.items.empty()) {
-        combined.state_generation =
-            part.state_generation;
-        combined.source_fingerprint =
-            part.source_fingerprint;
-    } else if (
-        combined.state_generation !=
-            part.state_generation ||
-        combined.source_fingerprint !=
-            part.source_fingerprint) {
-        error =
-            "Kernel transaction state changed while planning. Refresh and review again.";
-        return;
-    }
-
-    std::unordered_map<std::string, TransactionAction> actions;
-    for (const TransactionItem &item :
-         combined.items) {
-        actions[item.package_id] = item.action;
-    }
-
-    for (const TransactionItem &item :
-         part.items) {
-        const auto existing =
-            actions.find(item.package_id);
-        if (existing != actions.end()) {
-            if (existing->second != item.action) {
-                error =
-                    "Kernel transaction requires incompatible actions for " +
-                    item.package_id + ".";
-                return;
-            }
-            continue;
-        }
-        combined.items.push_back(item);
-        actions[item.package_id] = item.action;
-        combined.download_bytes +=
-            item.download_bytes;
-        combined.disk_delta_bytes +=
-            item.disk_delta_bytes;
-        combined.touches_system =
-            combined.touches_system ||
-            item.system_critical;
-    }
-}
-
 void plan_worker(
     GTask *task,
     gpointer,
@@ -948,50 +895,36 @@ void plan_worker(
             "Kernel transaction task state is unavailable.";
     } else {
         EngineClient engine;
-        TransactionPlan combined;
+        TransactionRequest request;
 
-        if (!data->remove_ids.empty()) {
-            TransactionRequest request;
-            request.action = TransactionAction::remove;
-            request.package_ids = data->remove_ids;
-            std::string error;
-            const auto plan =
-                engine.plan(request, error);
-            if (!plan.has_value()) {
-                result->error =
-                    "Unable to prove kernel removal safety: " +
-                    error;
-            } else {
-                combine_plan(
-                    combined, *plan, result->error);
-            }
-        }
-
-        if (result->error.empty() &&
-            !data->install_ids.empty()) {
-            TransactionRequest request;
+        if (!data->install_ids.empty()) {
+            /*
+             * Resolve additions and removals in one projected final state.
+             * This prevents two independently valid plans from being merged
+             * into a combination that the dependency solver never reviewed.
+             */
             request.action = TransactionAction::install;
             request.package_ids = data->install_ids;
-            std::string error;
-            const auto plan =
-                engine.plan(request, error);
-            if (!plan.has_value()) {
-                result->error =
-                    "Unable to resolve kernel installation: " +
-                    error;
-            } else {
-                combine_plan(
-                    combined, *plan, result->error);
-            }
-        }
-
-        if (result->error.empty() &&
-            combined.items.empty()) {
+            request.remove_package_ids = data->remove_ids;
+        } else if (!data->remove_ids.empty()) {
+            request.action = TransactionAction::remove;
+            request.package_ids = data->remove_ids;
+        } else {
             result->error =
                 "The queued kernel transaction contains no package changes.";
         }
+
         if (result->error.empty()) {
-            result->plan = std::move(combined);
+            std::string error;
+            const auto plan =
+                engine.plan(request, error);
+            if (!plan.has_value()) {
+                result->error =
+                    "Unable to resolve the queued kernel transaction: " +
+                    error;
+            } else {
+                result->plan = *plan;
+            }
         }
     }
 

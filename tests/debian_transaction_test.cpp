@@ -422,5 +422,118 @@ int main()
             *recommends_plan,
             "recommended-addon") != nullptr);
 
+    /*
+     * A mixed transaction must be solved as one projected final state.
+     * Removing old-provider is safe only because new-provider is selected in
+     * the same dependency solution and satisfies consumer's alternative.
+     */
+    PackageRecord consumer =
+        installed("consumer", "1.0", 100U);
+    consumer.depends =
+        "old-provider | new-provider";
+    PackageRecord old_provider =
+        installed("old-provider", "1.0", 50U);
+    DebianPackageVersion new_provider =
+        available(
+            "new-provider",
+            "2.0",
+            10U,
+            60U);
+
+    TransactionRequest mixed_request;
+    mixed_request.action =
+        TransactionAction::install;
+    mixed_request.package_ids =
+        {"new-provider"};
+    mixed_request.remove_package_ids =
+        {"old-provider"};
+
+    error.clear();
+    const auto mixed_plan =
+        DebianTransactionPlanner::plan(
+            mixed_request,
+            {consumer, old_provider},
+            {new_provider},
+            "amd64",
+            17U,
+            "snapshot-17",
+            policy,
+            error);
+    assert(mixed_plan.has_value());
+    assert(error.empty());
+    assert(mixed_plan->items.size() == 2U);
+    const TransactionItem *old_provider_item =
+        find_item(*mixed_plan, "old-provider");
+    const TransactionItem *new_provider_item =
+        find_item(*mixed_plan, "new-provider");
+    assert(old_provider_item != nullptr);
+    assert(
+        old_provider_item->action ==
+        TransactionAction::remove);
+    assert(old_provider_item->requested);
+    assert(new_provider_item != nullptr);
+    assert(
+        new_provider_item->action ==
+        TransactionAction::install);
+    assert(new_provider_item->requested);
+
+    DebianPackageVersion unrelated =
+        available(
+            "unrelated",
+            "1.0",
+            5U,
+            5U);
+    TransactionRequest broken_mixed;
+    broken_mixed.action =
+        TransactionAction::install;
+    broken_mixed.package_ids =
+        {"unrelated"};
+    broken_mixed.remove_package_ids =
+        {"old-provider"};
+
+    error.clear();
+    const auto broken_mixed_plan =
+        DebianTransactionPlanner::plan(
+            broken_mixed,
+            {consumer, old_provider},
+            {unrelated},
+            "amd64",
+            18U,
+            "snapshot-18",
+            policy,
+            error);
+    assert(!broken_mixed_plan.has_value());
+    assert(error.find("consumer") != std::string::npos);
+
+    TransactionRequest contradictory;
+    contradictory.action =
+        TransactionAction::install;
+    contradictory.package_ids =
+        {"old-provider"};
+    contradictory.remove_package_ids =
+        {"old-provider"};
+    DebianPackageVersion old_provider_available =
+        available(
+            "old-provider",
+            "2.0",
+            10U,
+            55U);
+
+    error.clear();
+    const auto contradictory_plan =
+        DebianTransactionPlanner::plan(
+            contradictory,
+            {old_provider},
+            {old_provider_available},
+            "amd64",
+            19U,
+            "snapshot-19",
+            policy,
+            error);
+    assert(!contradictory_plan.has_value());
+    assert(
+        error.find("cannot explicitly remove") !=
+        std::string::npos);
+
     return 0;
 }

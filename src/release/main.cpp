@@ -447,53 +447,65 @@ bool build_plan(const ReleaseInfo &release,TransactionPlan &combined,std::string
     std::set<std::string> blocked;
     for (const std::string &name:release.blacklist) blocked.insert(base(name));
 
-    TransactionRequest install_request;
-    install_request.action=TransactionAction::install;
+    TransactionRequest request;
+    request.action=TransactionAction::install;
     for (const PackageRecord &p:updates) {
         const std::string id=p.package_name.empty()?p.id:p.package_name;
         if (blocked.find(base(id))==blocked.end())
-            install_request.package_ids.push_back(id);
+            request.package_ids.push_back(id);
     }
     for (const std::string &name:release.additions)
         if (blocked.find(base(name))==blocked.end())
-            install_request.package_ids.push_back(name);
+            request.package_ids.push_back(name);
 
-    std::sort(install_request.package_ids.begin(),install_request.package_ids.end());
-    install_request.package_ids.erase(std::unique(install_request.package_ids.begin(),install_request.package_ids.end()),install_request.package_ids.end());
-
-    combined=TransactionPlan{};
-    const auto status=core.status();
-    combined.state_generation=status.generation;
-    combined.source_fingerprint=status.source_fingerprint;
-
-    if (!install_request.package_ids.empty()) {
-        auto plan=core.plan(install_request,{},error);
-        if (!plan.has_value()) return false;
-        combined=*plan;
-    }
+    std::sort(request.package_ids.begin(),request.package_ids.end());
+    request.package_ids.erase(
+        std::unique(
+            request.package_ids.begin(),
+            request.package_ids.end()),
+        request.package_ids.end());
 
     std::set<std::string> installed_names;
     for (const PackageRecord &p:installed)
-        installed_names.insert(base(p.package_name.empty()?p.id:p.package_name));
+        installed_names.insert(
+            base(p.package_name.empty()?p.id:p.package_name));
 
-    TransactionRequest remove_request;
-    remove_request.action=TransactionAction::remove;
-    for (const std::string &name:release.removals)
+    for (const std::string &name:release.removals) {
         if (installed_names.find(base(name))!=installed_names.end())
-            remove_request.package_ids.push_back(name);
-
-    if (!remove_request.package_ids.empty()) {
-        auto removal=core.plan(remove_request,{},error);
-        if (!removal.has_value()) return false;
-        combined.items.insert(combined.items.end(),removal->items.begin(),removal->items.end());
-        combined.disk_delta_bytes+=removal->disk_delta_bytes;
-        combined.touches_system=combined.touches_system||removal->touches_system;
+            request.remove_package_ids.push_back(name);
     }
+    std::sort(
+        request.remove_package_ids.begin(),
+        request.remove_package_ids.end());
+    request.remove_package_ids.erase(
+        std::unique(
+            request.remove_package_ids.begin(),
+            request.remove_package_ids.end()),
+        request.remove_package_ids.end());
 
-    if (combined.items.empty()) {
+    if (request.package_ids.empty() &&
+        request.remove_package_ids.empty()) {
         error="The target release does not require any package changes.";
         return false;
     }
+
+    /*
+     * Resolve the release additions/upgrades and required removals in one
+     * projected final state. A release plan shown to the user is therefore
+     * exactly one dependency solution, not two independently valid plans
+     * concatenated after the fact.
+     */
+    if (request.package_ids.empty()) {
+        request.action=TransactionAction::remove;
+        request.package_ids=
+            std::move(request.remove_package_ids);
+        request.remove_package_ids.clear();
+    }
+
+    const auto plan=core.plan(request,{},error);
+    if (!plan.has_value()) return false;
+    combined=*plan;
+
     return true;
 }
 

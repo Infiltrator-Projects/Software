@@ -60,6 +60,12 @@ struct PackageRecord {
 struct TransactionRequest {
     TransactionAction action{TransactionAction::install};
     std::vector<std::string> package_ids;
+    /*
+     * Optional explicit removals that must be resolved in the same projected
+     * final state as an install/upgrade request. Pure removal transactions
+     * continue to use action=remove and package_ids.
+     */
+    std::vector<std::string> remove_package_ids;
     bool install_recommends{false};
 };
 

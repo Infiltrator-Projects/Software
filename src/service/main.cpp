@@ -28,7 +28,7 @@ constexpr const char *kObjectPath =
     "/net/ssmith/infiltrator/software/Engine";
 constexpr const char *kInterfaceName =
     "net.ssmith.infiltrator.software.Engine";
-constexpr guint kApiVersion = 3U;
+constexpr guint kApiVersion = 4U;
 constexpr std::size_t kMaximumPlanPackages = 4096U;
 
 constexpr const char *kIntrospectionXml = R"XML(
@@ -50,6 +50,12 @@ constexpr const char *kIntrospectionXml = R"XML(
     <method name="PlanTransaction">
       <arg name="action" type="s" direction="in"/>
       <arg name="package_ids" type="as" direction="in"/>
+      <arg name="plan" type="a{sv}" direction="out"/>
+    </method>
+    <method name="PlanMixedTransaction">
+      <arg name="action" type="s" direction="in"/>
+      <arg name="package_ids" type="as" direction="in"/>
+      <arg name="remove_package_ids" type="as" direction="in"/>
       <arg name="plan" type="a{sv}" direction="out"/>
     </method>
     <method name="ReloadState">
@@ -769,14 +775,27 @@ void handle_method_call(
         return;
     }
 
-    if (method == "PlanTransaction") {
+    if (method == "PlanTransaction" ||
+        method == "PlanMixedTransaction") {
+        const bool mixed =
+            method == "PlanMixedTransaction";
         const gchar *action_text = nullptr;
         GVariant *package_ids_variant = nullptr;
-        g_variant_get(
-            parameters,
-            "(&s@as)",
-            &action_text,
-            &package_ids_variant);
+        GVariant *remove_ids_variant = nullptr;
+        if (mixed) {
+            g_variant_get(
+                parameters,
+                "(&s@as@as)",
+                &action_text,
+                &package_ids_variant,
+                &remove_ids_variant);
+        } else {
+            g_variant_get(
+                parameters,
+                "(&s@as)",
+                &action_text,
+                &package_ids_variant);
+        }
 
         TransactionRequest request;
         if (!parse_action(
@@ -785,6 +804,9 @@ void handle_method_call(
                     : std::string_view(action_text),
                 request.action)) {
             g_variant_unref(package_ids_variant);
+            if (remove_ids_variant != nullptr) {
+                g_variant_unref(remove_ids_variant);
+            }
             return_engine_error(
                 invocation,
                 "net.ssmith.infiltrator.software.Engine.Error.InvalidRequest",
@@ -792,37 +814,61 @@ void handle_method_call(
             return;
         }
 
-        GVariantIter iterator;
-        g_variant_iter_init(&iterator, package_ids_variant);
-        const gchar *package_id = nullptr;
-        while (g_variant_iter_next(
-                   &iterator, "&s", &package_id)) {
-            if (request.package_ids.size() >=
-                kMaximumPlanPackages) {
-                g_variant_unref(package_ids_variant);
-                return_engine_error(
-                    invocation,
-                    "net.ssmith.infiltrator.software.Engine.Error.InvalidRequest",
-                    "Transaction contains too many package identities.");
-                return;
-            }
+        const auto read_id_array =
+            [&](GVariant *variant,
+                std::vector<std::string> &destination) {
+                if (variant == nullptr) {
+                    return true;
+                }
+                GVariantIter iterator;
+                g_variant_iter_init(&iterator, variant);
+                const gchar *package_id = nullptr;
+                while (g_variant_iter_next(
+                           &iterator, "&s", &package_id)) {
+                    if (request.package_ids.size() +
+                            request.remove_package_ids.size() >=
+                        kMaximumPlanPackages) {
+                        return_engine_error(
+                            invocation,
+                            "net.ssmith.infiltrator.software.Engine.Error.InvalidRequest",
+                            "Transaction contains too many package identities.");
+                        return false;
+                    }
 
-            const std::string identity =
-                package_id == nullptr
-                    ? std::string{}
-                    : std::string(package_id);
-            if (identity.empty() ||
-                identity.size() > 512U) {
-                g_variant_unref(package_ids_variant);
-                return_engine_error(
-                    invocation,
-                    "net.ssmith.infiltrator.software.Engine.Error.InvalidRequest",
-                    "Transaction contains an invalid package identity.");
-                return;
-            }
-            request.package_ids.emplace_back(identity);
-        }
+                    const std::string identity =
+                        package_id == nullptr
+                            ? std::string{}
+                            : std::string(package_id);
+                    if (identity.empty() ||
+                        identity.size() > 512U) {
+                        return_engine_error(
+                            invocation,
+                            "net.ssmith.infiltrator.software.Engine.Error.InvalidRequest",
+                            "Transaction contains an invalid package identity.");
+                        return false;
+                    }
+                    destination.emplace_back(identity);
+                }
+                return true;
+            };
+
+        const bool package_ids_valid =
+            read_id_array(
+                package_ids_variant,
+                request.package_ids);
+        const bool remove_ids_valid =
+            package_ids_valid &&
+            read_id_array(
+                remove_ids_variant,
+                request.remove_package_ids);
         g_variant_unref(package_ids_variant);
+        if (remove_ids_variant != nullptr) {
+            g_variant_unref(remove_ids_variant);
+        }
+        if (!package_ids_valid ||
+            !remove_ids_valid) {
+            return;
+        }
 
         infiltrator::software::SoftwarePreferences preferences;
         std::string preferences_error;

@@ -607,9 +607,53 @@ std::optional<TransactionPlan> DebianTransactionPlanner::plan(
     }
 
     if (request.action == TransactionAction::remove) {
+        if (!request.remove_package_ids.empty()) {
+            error =
+                "Pure removal transactions cannot contain a second removal set.";
+            return std::nullopt;
+        }
         return plan_removal(
             request, installed, target_architecture,
             state_generation, source_fingerprint, policy, error);
+    }
+
+    std::vector<const PackageRecord *> explicit_removing;
+    std::unordered_set<std::string> explicit_remove_ids;
+    for (const std::string &identity :
+         request.remove_package_ids) {
+        const PackageRecord *package =
+            find_installed_request(
+                identity,
+                installed,
+                target_architecture);
+        if (package == nullptr) {
+            error =
+                "Selected mixed-transaction removal package is not installed "
+                "or is architecture-ambiguous: " + identity + ".";
+            return std::nullopt;
+        }
+        if (held(package->id, policy)) {
+            error = "Package is held: " + package->id + ".";
+            return std::nullopt;
+        }
+        if (package->essential) {
+            error =
+                "Refusing to remove Essential package " +
+                package->id + ".";
+            return std::nullopt;
+        }
+        if (explicit_remove_ids.insert(package->id).second) {
+            explicit_removing.push_back(package);
+        }
+    }
+
+    std::vector<PackageRecord> projected_installed;
+    projected_installed.reserve(installed.size());
+    for (const PackageRecord &package : installed) {
+        if (explicit_remove_ids.find(package.id) ==
+            explicit_remove_ids.end()) {
+            projected_installed.push_back(package);
+        }
     }
 
     std::vector<DebianPackageVersion> roots;
@@ -630,7 +674,9 @@ std::optional<TransactionPlan> DebianTransactionPlanner::plan(
         if (request.action == TransactionAction::upgrade) {
             const PackageRecord *current =
                 find_installed_request(
-                    identity, installed, target_architecture);
+                    identity,
+                    projected_installed,
+                    target_architecture);
             if (current == nullptr) {
                 error =
                     "Selected upgrade package is not installed or is "
@@ -665,7 +711,9 @@ std::optional<TransactionPlan> DebianTransactionPlanner::plan(
             root = *candidate;
 
             const PackageRecord *current =
-                find_installed_candidate(*candidate, installed);
+                find_installed_candidate(
+                    *candidate,
+                    projected_installed);
             if (current != nullptr &&
                 current->architecture != candidate->architecture &&
                 candidate->architecture != "all" &&
@@ -675,6 +723,21 @@ std::optional<TransactionPlan> DebianTransactionPlanner::plan(
                     candidate->architecture +
                     " beside the installed architecture is not permitted "
                     "by its Multi-Arch metadata.";
+                return std::nullopt;
+            }
+        }
+
+        for (const PackageRecord *removing :
+             explicit_removing) {
+            if (package_base(removing->package_name) ==
+                    root->package &&
+                (root->architecture == "all" ||
+                 removing->architecture ==
+                    root->architecture)) {
+                error =
+                    "A mixed transaction cannot explicitly remove and "
+                    "install/upgrade the same package: " +
+                    removing->package_name + ".";
                 return std::nullopt;
             }
         }
@@ -690,7 +753,7 @@ std::optional<TransactionPlan> DebianTransactionPlanner::plan(
     const DebianResolution resolution =
         DebianDependencyResolver::resolve(
             roots,
-            installed,
+            projected_installed,
             available,
             target_architecture,
             policy,
@@ -704,11 +767,38 @@ std::optional<TransactionPlan> DebianTransactionPlanner::plan(
     plan.state_generation = state_generation;
     plan.source_fingerprint = std::string(source_fingerprint);
 
+    for (const PackageRecord *package :
+         explicit_removing) {
+        TransactionItem item;
+        item.package_id = package->id;
+        item.action = TransactionAction::remove;
+        item.architecture = package->architecture;
+        item.from_version = package->installed_version;
+        item.disk_delta_bytes =
+            signed_size_delta(
+                0U,
+                package->installed_size_bytes);
+        item.requested = true;
+        item.system_critical =
+            installed_system_critical(*package);
+
+        plan.disk_delta_bytes =
+            add_delta(
+                plan.disk_delta_bytes,
+                item.disk_delta_bytes);
+        plan.touches_system =
+            plan.touches_system ||
+            item.system_critical;
+        plan.items.emplace_back(std::move(item));
+    }
+
     for (const std::string &identity :
          resolution.remove_installed) {
         const PackageRecord *package =
             find_installed_request(
-                identity, installed, target_architecture);
+                identity,
+                projected_installed,
+                target_architecture);
         if (package == nullptr) {
             error =
                 "Resolved replacement removal is no longer installed: " +
@@ -753,7 +843,9 @@ std::optional<TransactionPlan> DebianTransactionPlanner::plan(
     for (const DebianPackageVersion &candidate :
          resolution.selected) {
         const PackageRecord *current =
-            find_installed_candidate(candidate, installed);
+            find_installed_candidate(
+                candidate,
+                projected_installed);
 
         if (current != nullptr &&
             current->installed_version == candidate.version) {

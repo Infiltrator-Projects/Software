@@ -503,13 +503,16 @@ jobs:
           # Self-update hand-off is directional. An older GUI/tray may finish
           # against a newer engine with a compatible API, while a newly
           # installed client must recycle an older resident engine.
-          assert "constexpr guint kApiVersion = 3U;" in engine_service
+          assert "constexpr guint kApiVersion = 4U;" in engine_service
           assert '"engine-version"' in engine_service
           assert '<method name="Quit"/>' in engine_interface
-          assert "kRequiredApiVersion = 3U" in engine_client
+          assert "kRequiredApiVersion = 4U" in engine_client
           assert "kRequiredEngineVersion" in engine_client
           assert "engine_version_is_compatible_with_client" in engine_client
           assert "kEngineRestartAttempts = 200U" in engine_client
+          assert '"PlanMixedTransaction"' in engine_service
+          assert 'name="PlanMixedTransaction"' in engine_interface
+          assert "request.remove_package_ids" in engine_client
           assert "ensure_engine_identity(" in engine_client
           assert "GetConnectionUnixUser" in engine_client
           assert "GetConnectionUnixProcessID" in engine_client

@@ -25,7 +25,7 @@ constexpr const char *kInterfaceName =
 constexpr int kInventoryCallTimeoutMs = 750;
 constexpr int kControlCallTimeoutMs = 5000;
 constexpr int kRefreshCallTimeoutMs = 125000;
-constexpr guint32 kRequiredApiVersion = 3U;
+constexpr guint32 kRequiredApiVersion = 4U;
 constexpr const char *kRequiredEngineVersion =
     INFILTRATOR_SOFTWARE_VERSION;
 constexpr guint kEngineRestartAttempts = 200U;
@@ -766,13 +766,32 @@ std::optional<TransactionPlan> EngineClient::plan(
     }
     ids.push_back(nullptr);
 
+    std::vector<const gchar *> removals;
+    removals.reserve(
+        request.remove_package_ids.size() + 1U);
+    for (const std::string &id :
+         request.remove_package_ids) {
+        removals.push_back(id.c_str());
+    }
+    removals.push_back(nullptr);
+
+    const bool mixed =
+        !request.remove_package_ids.empty();
     GVariant *reply =
         call_engine(
-            "PlanTransaction",
-            g_variant_new(
-                "(s^as)",
-                action.c_str(),
-                ids.data()),
+            mixed
+                ? "PlanMixedTransaction"
+                : "PlanTransaction",
+            mixed
+                ? g_variant_new(
+                      "(s^as^as)",
+                      action.c_str(),
+                      ids.data(),
+                      removals.data())
+                : g_variant_new(
+                      "(s^as)",
+                      action.c_str(),
+                      ids.data()),
             G_VARIANT_TYPE("(a{sv})"),
             kControlCallTimeoutMs,
             error);
