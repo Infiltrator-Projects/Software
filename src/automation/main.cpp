@@ -177,14 +177,16 @@ int main()
 
     std::vector<std::string> command;
     gchar *inhibit=g_find_program_in_path("systemd-inhibit");
-    if (inhibit!=nullptr) {
-        g_free(inhibit);
-        command={"systemd-inhibit","--what=shutdown:sleep",
-            "--who=Infiltrator Software","--why=Installing automatic software updates",
-            "--mode=block","/usr/libexec/infiltrator-software-update-helper","apply-plan"};
-    } else {
-        command={"/usr/libexec/infiltrator-software-update-helper","apply-plan"};
+    if (inhibit==nullptr) {
+        g_printerr(
+            "Automatic system update refused because systemd-inhibit is unavailable; "
+            "Software will not mutate packages without shutdown/sleep inhibition.\n");
+        return 1;
     }
+    g_free(inhibit);
+    command={"systemd-inhibit","--what=shutdown:sleep",
+        "--who=Infiltrator Software","--why=Installing automatic software updates",
+        "--mode=block","/usr/libexec/infiltrator-software-update-helper","apply-plan"};
     if (prefs.keep_configuration) command.push_back("--force-confold");
 
     const auto specs=exact_specs(*plan);

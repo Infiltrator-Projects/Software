@@ -56,11 +56,12 @@ jobs:
               exit 1
             }
           done
-          pkg-config --exists gtk+-3.0
-          pkg-config --exists gtk4
-          pkg-config --exists glib-2.0
-          pkg-config --exists json-glib-1.0
-          pkg-config --exists sqlite3
+          for module in gtk+-3.0 gtk4 glib-2.0 gio-2.0 json-glib-1.0 sqlite3 appstream libcurl liblzma zlib xapp; do
+            pkg-config --exists "$module" || {
+              echo "Self-hosted runner is missing development module $module." >&2
+              exit 1
+            }
+          done
 
       - name: Configure
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
@@ -102,6 +103,56 @@ jobs:
           update_policy_path = Path("data/net.ssmith.infiltrator.software.updates.policy")
           source_policy_path = Path("data/net.ssmith.infiltrator.software.policy")
           policy = update_policy_path.read_text()
+          external_updates = Path("src/external/external_updates.cpp").read_text()
+          session_updater = Path("src/session/main.cpp").read_text()
+          auto_updater = Path("src/automation/main.cpp").read_text()
+          cli = Path("src/cli/main.cpp").read_text()
+          release_upgrader = Path("src/release/main.cpp").read_text()
+          tray = Path("src/tray/main.cpp").read_text()
+          parity = Path("docs/MINTUPDATE_PARITY.md").read_text()
+
+          required_rows = [
+              line for line in parity.splitlines()
+              if line.startswith("| ") and line.rstrip().endswith("| Required |")
+          ]
+          assert required_rows
+          assert all("**Missing**" not in line and "**Partial**" not in line for line in required_rows)
+          assert "The Required matrix is complete for Software 0.3.48." in parity
+
+          # Mint Update Manager replacement surfaces must remain wired, not
+          # merely documented as complete.
+          assert "discover_flatpak_updates" in app
+          assert "discover_cinnamon_updates" in app
+          assert "apply_flatpak_updates" in app
+          assert "apply_cinnamon_updates" in app
+          assert '"cinnamon-spice-updater"' in external_updates
+          assert '"flatpak", "uninstall"' in external_updates
+          assert '"--unused"' in external_updates
+          assert '"org.gtk.Gtk3theme."' in external_updates
+          assert "system_on_battery()" in session_updater
+          assert "system_on_battery()" in auto_updater
+          assert '"systemd-inhibit"' in auto_updater
+          assert "Automatic system update refused because systemd-inhibit is unavailable" in auto_updater
+          assert "evaluate_update_notification" in tray
+          assert "refresh_schedule_enabled" in tray
+          assert "hide_tray" in tray
+          assert '"--security-only"' in cli
+          assert '"--kernel-only"' in cli
+          assert '"--dry-run"' in cli
+          assert '"--refresh-cache"' in cli
+          assert '"--force-confold"' in cli
+          assert '"--force-confnew"' in cli
+          assert '"--install-recommends"' in cli
+          assert '"ignore"' in cli
+          assert "load_release_info" in release_upgrader
+          assert "build_plan" in release_upgrader
+          assert '"apply-plan"' in release_upgrader
+          assert "mint_mirror_status" in app
+          assert '"pkexec mintsources"' in app
+          assert "fetch_changelog_url" in app
+          assert "updates_restart_after_verify" in app
+          assert "create_snapshot_before_update" in app
+          assert "package_diagnostics" in app or "diagnostic" in app.lower()
 
           ui_vision = Path("docs/UI_VISION.md").read_text()
           assert Path("docs/design/software-ui-target.jpg").is_file()
@@ -492,6 +543,15 @@ jobs:
           dpkg-deb --fsys-tarfile "$package" | tar -tf - > package-files.txt
           grep -qx './usr/bin/infiltrator-software' package-files.txt
           grep -qx './usr/bin/infiltrator-software-tray' package-files.txt
+          grep -qx './usr/bin/infiltrator-software-session-updater' package-files.txt
+          grep -qx './usr/bin/infiltrator-software-cli' package-files.txt
+          grep -qx './usr/bin/infiltrator-software-release-upgrade' package-files.txt
+          grep -qx './usr/libexec/infiltrator-software-auto-updater' package-files.txt
+          grep -qx './usr/lib/systemd/system/infiltrator-software-auto-update.service' package-files.txt
+          grep -qx './usr/lib/systemd/system/infiltrator-software-auto-update.timer' package-files.txt
+          grep -qx './etc/xdg/autostart/infiltrator-software-session-updater.desktop' package-files.txt
+          ./build/infiltrator-software-cli --version | grep -qx "$(tr -d '[:space:]' < VERSION)"
+          ./build/infiltrator-software-cli --help | grep -Fq 'upgrade'
           grep -qx './usr/libexec/infiltrator-software-helper' package-files.txt
           grep -qx './usr/libexec/infiltrator-software-update-helper' package-files.txt
           grep -qx './usr/libexec/infiltrator-software-engine' package-files.txt

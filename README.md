@@ -6,7 +6,7 @@
 
 Infiltrator Software is the software-management application for the Infiltrator project family. It presents software discovery, installation, removal, updates, system components, repositories, release channels, history and repair as one coherent graphical product.
 
-**Current source version:** 0.3.47  
+**Current source version:** 0.3.48  
 **Language:** C++17 application/core with native GTK4 Linux shell; C11 Common foundation  
 **Shared foundation:** Common 1.19.35  
 **Current package compatibility:** Debian repositories and .deb packages; Flatpak and AppStream catalogue integration  
@@ -31,6 +31,10 @@ The application must answer:
 The UI is package-system-neutral. Debian repositories, .deb packages, AppStream and Flatpak remain supported formats and ecosystems. APT command-line programs are an implementation detail of the 0.3 line, not part of the product contract. Read-only package metadata refresh is unprivileged: checking for updates must never ask for administrator credentials. Authorization is reserved for actual system mutation.
 
 The 0.4 architecture replaces those APT command invocations with a native Infiltrator package engine. The engine reads Debian repository metadata directly, applies host compatibility policy including APT preferences and phased-update eligibility when selecting candidates, maintains its own derived package-state database, resolves updates and transactions itself, and uses a constrained privileged executor for final package writes. dpkg remains the temporary .deb payload installer until a later native installer exists.
+
+## Linux Mint Update Manager replacement status
+
+Software 0.3.48 completes the required Linux Mint Update Manager replacement gate against upstream `linuxmint/mintupdate` master at commit `a6a9f5767905b8fc94923d0b4ca0538a93309a90` (Update Manager 7.1.5 line). Required APT/Debian, Flatpak, Cinnamon Spice/Nemo action, unattended update, notification, reboot, changelog, repository/mirror, snapshot, release-upgrade, tray and CLI behaviours are implemented or deliberately superseded by a stricter reviewed-transaction mechanism. CI rejects a release if any Required row in `docs/MINTUPDATE_PARITY.md` returns to Missing or Partial.
 
 ## User experience
 

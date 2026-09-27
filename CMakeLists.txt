@@ -467,4 +467,12 @@ if(BUILD_TESTING)
     add_executable(software-sources-test tests/source_inventory_test.cpp)
     target_link_libraries(software-sources-test PRIVATE software-sources)
     add_test(NAME software-sources-test COMMAND software-sources-test)
+
+    add_executable(software-external-updates-test
+        tests/external_updates_test.cpp)
+    target_link_libraries(software-external-updates-test PRIVATE
+        software-external)
+    add_test(
+        NAME software-external-updates-test
+        COMMAND software-external-updates-test)
 endif()

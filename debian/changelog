@@ -1,3 +1,30 @@
+infiltrator-software (0.3.48) unstable; urgency=high
+
+  * Complete the Linux Mint Update Manager replacement gate against upstream
+    mintupdate 7.1.5/current master and make CI reject any Required parity row
+    that regresses to Missing or Partial.
+  * Finish Flatpak application/runtime and Cinnamon applet, desklet, extension,
+    theme and Nemo-action discovery/update execution in the graphical Updates
+    workflow, including recurring unattended session updates.
+  * Complete unattended package updates with persistent scheduling, ignore
+    policy, battery deferral, exact reviewed plans and fail-closed shutdown/
+    sleep inhibition; retain optional pre-system-update Timeshift snapshots.
+  * Complete update-age/security notifications, tray visibility policy,
+    self-update restart, reboot indication, graphical diagnostics, Debian/
+    Ubuntu/Launchpad changelogs and Linux Mint mirror health/switching guidance.
+  * Complete the reviewed Linux Mint point-release upgrade assistant and the
+    update CLI list/upgrade/filter/ignore/refresh/dry-run/conffile surfaces.
+  * Preserve Software's stricter transaction rule: implicit Recommends cannot
+    silently broaden an approved plan; recommended packages must be explicit.
+  * Add executable integration coverage for Flatpak/Cinnamon discovery,
+    runtime cleanup, host-theme matching and update execution.
+  * Verify all replacement executables, autostart files and systemd automation
+    units are present in the Debian package.
+  * Recommend Timeshift because snapshot parity is now an accepted replacement
+    capability on supported Linux Mint hosts.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Sun, 27 Sep 2026 15:10:00 +1000
+
 infiltrator-software (0.3.47) unstable; urgency=high
 
   * Add persistent update preferences and wildcard/version-specific ignore rules.
