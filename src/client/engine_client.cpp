@@ -710,11 +710,13 @@ bool EngineClient::list_kernels(
 
     const std::string type =
         kernel_type.empty()
-            ? KernelInventory::default_kernel_type()
+            ? std::string("-generic")
             : std::string(kernel_type);
-    if (!KernelInventory::supported_kernel_type(type)) {
+    if (type.size() > 64U ||
+        type.empty() ||
+        type.front() != '-') {
         kernels.clear();
-        error = "Unsupported Linux kernel type.";
+        error = "Invalid Linux kernel type.";
         return false;
     }
 
