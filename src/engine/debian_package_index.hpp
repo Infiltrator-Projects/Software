@@ -32,6 +32,7 @@ struct DebianPackageVersion {
     std::string release_archive;
     std::string release_codename;
     std::string component;
+    std::string supported;
     std::string site;
     std::string multi_arch;
     std::string depends;
