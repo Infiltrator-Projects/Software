@@ -519,6 +519,10 @@ bool selected_satisfies(
     return false;
 }
 
+bool candidate_requires_installed_removal(
+    const DebianPackageVersion &candidate,
+    const PackageRecord &installed);
+
 bool selected_replaces_installed(
     const std::unordered_map<std::string, DebianPackageVersion> &selected,
     const PackageRecord &installed)
@@ -526,12 +530,13 @@ bool selected_replaces_installed(
     const std::string name = base_package(installed.package_name);
     for (const auto &entry : selected) {
         const DebianPackageVersion &candidate = entry.second;
-        if (candidate.package != name) {
-            continue;
+        if (candidate.package == name &&
+            (candidate.architecture == "all" ||
+             installed.architecture.empty() ||
+             candidate.architecture == installed.architecture)) {
+            return true;
         }
-        if (candidate.architecture == "all" ||
-            installed.architecture.empty() ||
-            candidate.architecture == installed.architecture) {
+        if (candidate_requires_installed_removal(candidate, installed)) {
             return true;
         }
     }
@@ -597,6 +602,53 @@ bool relation_hits_installed(
            version_matches(package.installed_version, relation);
 }
 
+bool expression_hits_installed(
+    const std::string_view expression,
+    const PackageRecord &installed)
+{
+    if (expression.empty()) {
+        return false;
+    }
+
+    std::string parse_error;
+    const auto parsed =
+        DebianDependencyResolver::parse(expression, parse_error);
+    if (!parsed.has_value()) {
+        return false;
+    }
+
+    for (const DebianDependencyGroup &group : parsed->groups) {
+        for (const DebianDependencyAlternative &relation :
+             group.alternatives) {
+            if (relation_hits_installed(relation, installed)) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+bool candidate_requires_installed_removal(
+    const DebianPackageVersion &candidate,
+    const PackageRecord &installed)
+{
+    /*
+     * Replaces alone permits ownership takeover of files; it does not remove
+     * another package. Conflicts + Replaces is the Debian replacement pattern.
+     * Model that final state as an explicit removal rather than rejecting the
+     * candidate as an unsafe conflict.
+     */
+    if (candidate.package ==
+        base_package(installed.package_name)) {
+        return false;
+    }
+
+    return expression_hits_installed(
+               candidate.conflicts, installed) &&
+           expression_hits_installed(
+               candidate.replaces, installed);
+}
+
 void check_conflicts(
     const std::unordered_map<std::string, DebianPackageVersion> &selected,
     const std::vector<PackageRecord> &installed,
@@ -645,6 +697,7 @@ void check_conflicts(
 
                 for (const PackageRecord &other : installed) {
                     if (base_package(other.package_name) == owner.package ||
+                        candidate_requires_installed_removal(owner, other) ||
                         selected_replaces_installed(selected, other)) {
                         continue;
                     }
@@ -949,6 +1002,24 @@ DebianResolution DebianDependencyResolver::resolve(
         target_architecture,
         result.problems);
     check_conflicts(selected, installed, result.problems);
+
+    for (const PackageRecord &package : installed) {
+        for (const auto &entry : selected) {
+            if (candidate_requires_installed_removal(
+                    entry.second, package)) {
+                result.remove_installed.push_back(package.id);
+                break;
+            }
+        }
+    }
+    std::sort(
+        result.remove_installed.begin(),
+        result.remove_installed.end());
+    result.remove_installed.erase(
+        std::unique(
+            result.remove_installed.begin(),
+            result.remove_installed.end()),
+        result.remove_installed.end());
 
     result.selected.reserve(selected.size());
     for (auto &entry : selected) {
