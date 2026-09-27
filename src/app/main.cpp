@@ -10675,6 +10675,144 @@ void repair_configure_clicked(
     g_object_unref(process);
 }
 
+std::string tail_text_file(
+    const std::filesystem::path &path,
+    const std::size_t maximum = 64U * 1024U)
+{
+    std::ifstream input(
+        path,
+        std::ios::binary);
+    if (!input) {
+        return {};
+    }
+
+    input.seekg(
+        0,
+        std::ios::end);
+    const std::streamoff length =
+        input.tellg();
+    const std::streamoff start =
+        length > static_cast<std::streamoff>(
+                     maximum)
+            ? length -
+                  static_cast<std::streamoff>(
+                      maximum)
+            : 0;
+    input.seekg(
+        start,
+        std::ios::beg);
+
+    std::ostringstream text;
+    text << input.rdbuf();
+    return text.str();
+}
+
+void repair_log_clicked(
+    GtkButton *,
+    gpointer user_data)
+{
+    auto *state =
+        static_cast<WindowState *>(
+            user_data);
+    if (state == nullptr ||
+        state->window == nullptr) {
+        return;
+    }
+
+    GtkWidget *window =
+        gtk_window_new();
+    gtk_window_set_title(
+        GTK_WINDOW(window),
+        "Software diagnostics log");
+    gtk_window_set_transient_for(
+        GTK_WINDOW(window),
+        state->window);
+    gtk_window_set_destroy_with_parent(
+        GTK_WINDOW(window),
+        true);
+    gtk_window_set_default_size(
+        GTK_WINDOW(window),
+        900,
+        650);
+
+    std::ostringstream log;
+    log << "Infiltrator Software "
+        << INFILTRATOR_SOFTWARE_VERSION
+        << "\n\n";
+
+    const std::filesystem::path runtime =
+        update_runtime_state_path();
+    if (!runtime.empty()) {
+        const std::string state_text =
+            tail_text_file(
+                runtime,
+                4096U);
+        if (!state_text.empty()) {
+            log << "Current Software state\n"
+                << "----------------------\n"
+                << state_text
+                << "\n";
+        }
+    }
+
+    const std::string apt =
+        tail_text_file(
+            "/var/log/apt/history.log");
+    if (!apt.empty()) {
+        log << "APT transaction history\n"
+            << "-----------------------\n"
+            << apt
+            << "\n";
+    }
+
+    const std::string dpkg =
+        tail_text_file(
+            "/var/log/dpkg.log");
+    if (!dpkg.empty()) {
+        log << "dpkg activity\n"
+            << "-------------\n"
+            << dpkg
+            << "\n";
+    }
+
+    if (apt.empty() &&
+        dpkg.empty()) {
+        log << "No host package-manager log files are readable. "
+            << "Software's structured transaction records remain available on the History page.\n";
+    }
+
+    GtkWidget *scroll =
+        gtk_scrolled_window_new();
+    gtk_scrolled_window_set_policy(
+        GTK_SCROLLED_WINDOW(scroll),
+        GTK_POLICY_AUTOMATIC,
+        GTK_POLICY_AUTOMATIC);
+    GtkWidget *view =
+        gtk_text_view_new();
+    gtk_text_view_set_editable(
+        GTK_TEXT_VIEW(view),
+        false);
+    gtk_text_view_set_monospace(
+        GTK_TEXT_VIEW(view),
+        true);
+    gtk_text_view_set_wrap_mode(
+        GTK_TEXT_VIEW(view),
+        GTK_WRAP_NONE);
+    gtk_text_buffer_set_text(
+        gtk_text_view_get_buffer(
+            GTK_TEXT_VIEW(view)),
+        log.str().c_str(),
+        -1);
+    gtk_scrolled_window_set_child(
+        GTK_SCROLLED_WINDOW(scroll),
+        view);
+    gtk_window_set_child(
+        GTK_WINDOW(window),
+        scroll);
+    gtk_window_present(
+        GTK_WINDOW(window));
+}
+
 GtkWidget *make_repair_page(
     WindowState *state)
 {
@@ -10848,6 +10986,21 @@ GtkWidget *make_repair_page(
     gtk_box_append(
         GTK_BOX(buttons),
         state->repair_configure);
+
+    GtkWidget *diagnostics =
+        gtk_button_new_with_label(
+            "Diagnostics log…");
+    gtk_widget_add_css_class(
+        diagnostics,
+        "control-button");
+    g_signal_connect(
+        diagnostics,
+        "clicked",
+        G_CALLBACK(repair_log_clicked),
+        state);
+    gtk_box_append(
+        GTK_BOX(buttons),
+        diagnostics);
 
     gtk_box_append(
         GTK_BOX(controls), buttons);
