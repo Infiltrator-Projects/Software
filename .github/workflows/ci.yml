@@ -201,7 +201,8 @@ jobs:
           parity = Path("docs/MINTUPDATE_PARITY.md").read_text()
           assert "Linux Mint Update Manager replacement audit" in parity
           assert "Software must not be declared a complete Mint Update Manager replacement" in parity
-          assert "Installation completed; verifying final package state" in app
+          assert "Installation finished; checking installed versions and remaining update candidates." in app
+          assert "finish_update_progress(" in app
 
           assert "GTK_POLICY_ALWAYS" in app
           assert '"DETAIL",\n            "Exact versions",\n            "stat-info"' in app
