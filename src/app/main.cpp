@@ -12260,6 +12260,10 @@ struct PreferencesDialogContext {
     GtkWidget *recurring_refresh{};
     GtkWidget *notifications{};
     GtkWidget *security_notifications{};
+    GtkWidget *notify_max_days{};
+    GtkWidget *notify_max_age{};
+    GtkWidget *notify_grace{};
+    GtkWidget *notify_between{};
     GtkWidget *show_flatpak{};
     GtkWidget *show_cinnamon{};
     GtkWidget *auto_packages{};
@@ -12434,6 +12438,22 @@ void preferences_save(GtkButton *, gpointer user_data)
     preferences.notifications_security_only =
         gtk_check_button_get_active(
             GTK_CHECK_BUTTON(context->security_notifications));
+    preferences.notify_max_days =
+        static_cast<unsigned>(
+            gtk_spin_button_get_value_as_int(
+                GTK_SPIN_BUTTON(context->notify_max_days)));
+    preferences.notify_max_age_days =
+        static_cast<unsigned>(
+            gtk_spin_button_get_value_as_int(
+                GTK_SPIN_BUTTON(context->notify_max_age)));
+    preferences.notify_grace_period_days =
+        static_cast<unsigned>(
+            gtk_spin_button_get_value_as_int(
+                GTK_SPIN_BUTTON(context->notify_grace)));
+    preferences.notify_days_between =
+        static_cast<unsigned>(
+            gtk_spin_button_get_value_as_int(
+                GTK_SPIN_BUTTON(context->notify_between)));
 
     preferences.show_flatpak_updates =
         gtk_check_button_get_active(
@@ -12666,6 +12686,30 @@ void settings_clicked(GtkButton *, gpointer user_data)
     gtk_box_append(
         GTK_BOX(options),
         context->security_notifications);
+    gtk_box_append(
+        GTK_BOX(options),
+        preference_spin_row(
+            "Notify after an update has remained available for logged-in days",
+            state->preferences.notify_max_days,
+            &context->notify_max_days));
+    gtk_box_append(
+        GTK_BOX(options),
+        preference_spin_row(
+            "Notify when an update is older than days",
+            state->preferences.notify_max_age_days,
+            &context->notify_max_age));
+    gtk_box_append(
+        GTK_BOX(options),
+        preference_spin_row(
+            "Suppress notifications after a recent update for days",
+            state->preferences.notify_grace_period_days,
+            &context->notify_grace));
+    gtk_box_append(
+        GTK_BOX(options),
+        preference_spin_row(
+            "Minimum days between repeated notifications",
+            state->preferences.notify_days_between,
+            &context->notify_between));
 
     gtk_box_append(
         GTK_BOX(options),
