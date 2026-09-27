@@ -693,7 +693,8 @@ std::optional<TransactionPlan> DebianTransactionPlanner::plan(
             installed,
             available,
             target_architecture,
-            policy);
+            policy,
+            request.install_recommends);
     if (!resolution.complete()) {
         error = resolution_error(resolution);
         return std::nullopt;
