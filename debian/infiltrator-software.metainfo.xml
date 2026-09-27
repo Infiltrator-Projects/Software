@@ -34,6 +34,11 @@
   <url type="homepage">https://github.com/Infiltrator-Projects/Software</url>
 
   <releases>
+    <release version="0.3.52" date="2026-09-27">
+      <description>
+        <p>Fixes Conflicts+Replaces planning as an explicit reviewed removal and provides a bootstrap-safe upgrade path from Software 0.3.49 before removing Mint Update Manager.</p>
+      </description>
+    </release>
     <release version="0.3.51" date="2026-09-27">
       <description>
         <p>Completes Linux Mint Update Manager replacement parity with native exact Cinnamon and Nemo updates, visible external-update progress, tray/history integration and package-level mintupdate replacement semantics.</p>
