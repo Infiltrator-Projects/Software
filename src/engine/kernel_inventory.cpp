@@ -774,6 +774,116 @@ std::vector<KernelRecord> KernelInventory::build(
             record.remove_package_ids.push_back(name);
         }
 
+        /*
+         * When this is the last installed kernel of its type in a complete
+         * major.minor.patch series, remove a stale meta package whose current
+         * repository candidate points at that same series.  This mirrors
+         * Mint's kernel-window cleanup without guessing from package names
+         * alone: the candidate version must prove the association.
+         */
+        bool last_in_series = true;
+        const std::string full_series =
+            series_of(record.version, 3U);
+        for (const auto &[other_key, other_seed] : seeds) {
+            (void)other_key;
+            if (&other_seed == seed ||
+                !other_seed.record.installed ||
+                other_seed.record.kernel_type !=
+                    record.kernel_type) {
+                continue;
+            }
+            if (series_of(
+                    other_seed.record.version, 3U) ==
+                full_series) {
+                last_in_series = false;
+                break;
+            }
+        }
+        if (record.installed && last_in_series) {
+            std::vector<std::string> meta_names;
+            const std::string meta_prefix =
+                "linux" + record.kernel_type;
+            for (const std::string &installed_name :
+                 installed_names) {
+                if (starts_with(
+                        installed_name,
+                        meta_prefix)) {
+                    meta_names.push_back(installed_name);
+                }
+            }
+            if (record.kernel_type == "-generic" &&
+                installed_package(
+                    installed_names,
+                    "linux-virtual")) {
+                meta_names.emplace_back("linux-virtual");
+            }
+
+            for (const std::string &meta : meta_names) {
+                const DebianPackageVersion *candidate =
+                    best_available(available, meta);
+                if (candidate == nullptr ||
+                    series_of(
+                        candidate->version, 3U) !=
+                        full_series) {
+                    continue;
+                }
+
+                const std::array<std::string, 3> related{
+                    meta,
+                    starts_with(meta, "linux-")
+                        ? "linux-image-" + meta.substr(6U)
+                        : std::string{},
+                    starts_with(meta, "linux-")
+                        ? "linux-headers-" + meta.substr(6U)
+                        : std::string{}
+                };
+                for (const std::string &related_name :
+                     related) {
+                    if (!related_name.empty() &&
+                        installed_package(
+                            installed_names,
+                            related_name) &&
+                        std::find(
+                            record.remove_package_ids.begin(),
+                            record.remove_package_ids.end(),
+                            related_name) ==
+                            record.remove_package_ids.end()) {
+                        record.remove_package_ids.push_back(
+                            related_name);
+                    }
+                }
+                if (meta == "linux-virtual" &&
+                    installed_package(
+                        installed_names,
+                        "linux-headers-generic") &&
+                    std::find(
+                        record.remove_package_ids.begin(),
+                        record.remove_package_ids.end(),
+                        "linux-headers-generic") ==
+                        record.remove_package_ids.end()) {
+                    record.remove_package_ids.emplace_back(
+                        "linux-headers-generic");
+                }
+            }
+        }
+
+        std::sort(
+            record.install_package_ids.begin(),
+            record.install_package_ids.end());
+        record.install_package_ids.erase(
+            std::unique(
+                record.install_package_ids.begin(),
+                record.install_package_ids.end()),
+            record.install_package_ids.end());
+        std::sort(
+            record.remove_package_ids.begin(),
+            record.remove_package_ids.end());
+        record.remove_package_ids.erase(
+            std::unique(
+                record.remove_package_ids.begin(),
+                record.remove_package_ids.end()),
+            record.remove_package_ids.end());
+
         result.emplace_back(std::move(record));
     }
 
