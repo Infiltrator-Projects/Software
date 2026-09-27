@@ -28,7 +28,9 @@ bool safe_name(std::string_view value)
     if (value.empty() || value.size() > 64U) {
         return false;
     }
-    for (const unsigned char ch : value) {
+    for (const char raw : value) {
+        const unsigned char ch =
+            static_cast<unsigned char>(raw);
         if (!(std::isalnum(ch) != 0 || ch == '-' || ch == '_')) {
             return false;
         }
@@ -41,7 +43,9 @@ bool safe_token_list(std::string_view value)
     if (value.empty() || value.size() > 512U) {
         return false;
     }
-    for (const unsigned char ch : value) {
+    for (const char raw : value) {
+        const unsigned char ch =
+            static_cast<unsigned char>(raw);
         if (std::isalnum(ch) != 0 ||
             ch == '-' || ch == '_' || ch == '.' || ch == '+' ||
             ch == '/' || ch == ':' || ch == ' ' || ch == '\t') {
@@ -59,7 +63,9 @@ bool https_uri(std::string_view value)
         return false;
     }
 
-    for (const unsigned char ch : value) {
+    for (const char raw : value) {
+        const unsigned char ch =
+            static_cast<unsigned char>(raw);
         if (std::isspace(ch) != 0) {
             return false;
         }
