@@ -87,7 +87,10 @@ jobs:
           dpkg-deb -f "$DEB" Depends | grep -Eq '(^|, )gpgv([, ]|$)'
           dpkg-deb -f "$DEB" Depends | grep -Eq '(^|, )gettext([, ]|$)'
           dpkg-deb -f "$DEB" Provides | grep -Eq '(^|, )mintupdate([, ]|$)'
-          dpkg-deb -f "$DEB" Conflicts | grep -Eq '(^|, )mintupdate([, ]|$)'
+          if dpkg-deb -f "$DEB" Conflicts 2>/dev/null | grep -Eq '(^|, )mintupdate([, ]|$)'; then
+            echo "::error::Bootstrap release must not Conflict with mintupdate."
+            exit 1
+          fi
           dpkg-deb -f "$DEB" Replaces | grep -Eq '(^|, )mintupdate([, ]|$)'
           dpkg-deb --fsys-tarfile "$DEB" | tar -tf - > package-files.txt
           grep -qx './usr/bin/infiltrator-software' package-files.txt
