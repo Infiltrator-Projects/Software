@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "client/engine_client.hpp"
+#include "client/engine_compatibility.hpp"
 
 #include <gio/gio.h>
 
@@ -27,7 +28,7 @@ constexpr int kRefreshCallTimeoutMs = 125000;
 constexpr guint32 kRequiredApiVersion = 2U;
 constexpr const char *kRequiredEngineVersion =
     INFILTRATOR_SOFTWARE_VERSION;
-constexpr guint kEngineRestartAttempts = 40U;
+constexpr guint kEngineRestartAttempts = 200U;
 constexpr gulong kEngineRestartDelayUs = 50000U;
 
 std::string consume_error(GError *error)
@@ -201,7 +202,9 @@ bool wait_for_engine_identity(
                 engine_version,
                 probe_error) &&
             api_version >= required_api_version &&
-            engine_version == required_engine_version) {
+            engine_version_is_compatible_with_client(
+                engine_version,
+                required_engine_version)) {
             error.clear();
             return true;
         }
@@ -211,11 +214,14 @@ bool wait_for_engine_identity(
         }
     }
 
+    g_debug(
+        "Package engine hand-off did not reach a compatible service "
+        "(client %s, API >= %u).",
+        std::string(required_engine_version).c_str(),
+        required_api_version);
     error =
-        "Package engine did not restart as version " +
-        std::string(required_engine_version) +
-        " with API version " +
-        std::to_string(required_api_version) + ".";
+        "Software could not restart its package service. "
+        "Reopen Software and try again.";
     return false;
 }
 
@@ -299,8 +305,18 @@ bool ensure_engine_identity(std::string &error)
         return false;
     }
 
+    /*
+     * The D-Bus API is the compatibility boundary. During a self-update an
+     * older GUI or tray can legitimately meet the newly installed, newer
+     * engine before that client has restarted. Accept that forward hand-off
+     * when the API is compatible. A newly restarted client that encounters an
+     * older engine still recycles it so the resident service catches up to the
+     * installed package.
+     */
     if (api_version >= kRequiredApiVersion &&
-        engine_version == kRequiredEngineVersion) {
+        engine_version_is_compatible_with_client(
+            engine_version,
+            kRequiredEngineVersion)) {
         error.clear();
         return true;
     }

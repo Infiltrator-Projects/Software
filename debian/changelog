@@ -1,3 +1,22 @@
+infiltrator-software (0.3.49) unstable; urgency=high
+
+  * Fix the self-update hand-off so an older running GUI/tray accepts a newer
+    package engine when the D-Bus API remains compatible instead of trying to
+    restart the engine back to the old client version.
+  * Keep stale-engine repair directional: a newly installed client still
+    recycles an older resident engine and waits up to ten seconds for D-Bus to
+    activate the installed service.
+  * Replace the updated GUI in-place with the newly installed executable after
+    post-transaction verification, avoiding the GtkApplication single-instance
+    race caused by spawning the replacement before the old instance exits.
+  * Stop exposing the internal package/API identity mismatch as a normal
+    desktop error; an unrecoverable service restart now reports a concise
+    user-facing recovery message while technical details remain diagnostic.
+  * Add regression coverage for same-version, forward-version, stale-version
+    and malformed engine-version compatibility decisions.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Sun, 27 Sep 2026 18:30:00 +1000
+
 infiltrator-software (0.3.48) unstable; urgency=high
 
   * Complete the Linux Mint Update Manager replacement gate against upstream

@@ -17,6 +17,7 @@
 #include <infiltratr/core.h>
 
 #include <algorithm>
+#include <cerrno>
 #include <cctype>
 #include <cstring>
 #include <filesystem>
@@ -7397,24 +7398,22 @@ void updates_complete(
 
             if (state->updates_restart_after_verify) {
                 state->updates_restart_after_verify = false;
-                GError *restart_error = nullptr;
-                if (g_spawn_command_line_async(
-                        "/usr/bin/infiltrator-software --updates",
-                        &restart_error)) {
-                    GApplication *application =
-                        g_application_get_default();
-                    if (application != nullptr) {
-                        g_application_quit(application);
-                    }
-                } else {
-                    g_warning(
-                        "Software updated successfully but could not restart: %s",
-                        restart_error != nullptr &&
-                        restart_error->message != nullptr
-                            ? restart_error->message
-                            : "unknown restart error");
-                    g_clear_error(&restart_error);
-                }
+                /*
+                 * Replace this process with the newly installed executable.
+                 * Spawning another GtkApplication first is racy: while this
+                 * process still owns the application bus name, the new
+                 * executable can simply forward --updates back to the old
+                 * instance and exit. exec() gives a deterministic hand-off.
+                 */
+                (void)execl(
+                    "/usr/bin/infiltrator-software",
+                    "infiltrator-software",
+                    "--updates",
+                    static_cast<char *>(nullptr));
+                g_warning(
+                    "Software updated successfully but could not replace "
+                    "the running process: %s",
+                    g_strerror(errno));
             }
         }
     }

@@ -49,7 +49,7 @@ this table and fails the release if that condition is violated.
 | Update details: description plus complete binary package list | Implemented using native repository description and source-package grouping | Required |
 | Changelog retrieval/display | Implemented for Debian/Ubuntu archive changelogs and Launchpad PPA change records | Required |
 | PPA/third-party source information in update details | Implemented from signed repository origin/site provenance and Launchpad PPA identity | Required |
-| Self-update handling/restart after Software itself is updated | Implemented after verified post-transaction state refresh | Required |
+| Self-update handling/restart after Software itself is updated | Implemented: compatible newer engines are accepted during the hand-off, verified state refresh completes, the GUI exec-replaces itself with the installed binary, and a new client recycles any older resident engine | Required |
 | dpkg/package-manager lock detection with clear user-facing wait state | Implemented with fcntl lock detection and visible timed wait/retry telemetry | Required |
 | Broken APT/source configuration detection with guided repository repair | Implemented through Repair, source inventory diagnostics and repository/mirror guidance | Required |
 | Mirror reachability/default-mirror checks and guided mirror switching | Implemented for Linux Mint repository freshness/reachability with direct Mint mirror settings hand-off | Required while hosted on Mint/Ubuntu |
@@ -72,7 +72,7 @@ this table and fails the release if that condition is violated.
 
 ## Replacement acceptance
 
-The Required matrix is complete for Software 0.3.48. The project therefore
+The Required matrix is complete for Software 0.3.49. The project therefore
 permits removal of Linux Mint Update Manager on the supported Linux Mint
 Cinnamon host once Software 0.3.48 or later is installed and its package
 verification has passed.

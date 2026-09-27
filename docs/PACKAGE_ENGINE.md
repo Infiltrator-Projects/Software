@@ -42,14 +42,24 @@ Repository refresh performs:
 A failed refresh leaves the last verified generation readable and clearly marks freshness/error state.
 
 The per-user D-Bus engine reports both its interface API version and the exact
-Software package version that built it. Clients require both identities to
-match before any engine operation. This matters even when the D-Bus API itself
-has not changed: a package upgrade may replace repository, resolver or state
-logic while leaving the previous per-user engine process alive in the desktop
-session. On any package-version mismatch, the client first requests a clean
-service exit when supported and otherwise recycles only the verified same-user
-stale engine process. D-Bus then activates the newly installed engine binary
-before the operation is retried.
+Software package version that built it. The API version is the compatibility
+boundary; the package version distinguishes a stale older resident engine from
+a forward-compatible engine installed during a self-update.
+
+A client accepts an engine built by the same or a newer Software package when
+the engine API is compatible. This is intentional: while Software updates
+itself, the old GUI and tray may briefly encounter the newly installed engine
+before those clients restart, and they must be allowed to finish verification
+instead of trying to force the service back to the old package version.
+
+A newly started client that encounters an older engine recycles it: the client
+first requests a clean service exit when supported and otherwise terminates
+only the verified same-user stale process. D-Bus then activates the newly
+installed engine and the client waits for a compatible identity. The main GUI
+replaces itself with the newly installed executable using `exec` after the
+post-transaction state has been verified, avoiding the single-instance race
+where a spawned replacement can forward its arguments back to the old process
+and exit.
 
 ## Debian package model
 

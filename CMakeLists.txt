@@ -162,7 +162,8 @@ target_link_libraries(software-history PUBLIC
     PRIVATE PkgConfig::SQLITE3)
 
 add_library(software-client STATIC
-    src/client/engine_client.cpp)
+    src/client/engine_client.cpp
+    src/client/engine_compatibility.cpp)
 target_include_directories(software-client PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_link_libraries(software-client PUBLIC
@@ -323,6 +324,14 @@ if(BUILD_TESTING)
     add_executable(software-model-test tests/model_test.cpp)
     target_link_libraries(software-model-test PRIVATE software-core)
     add_test(NAME software-model-test COMMAND software-model-test)
+
+    add_executable(software-engine-compatibility-test
+        tests/engine_compatibility_test.cpp)
+    target_link_libraries(software-engine-compatibility-test PRIVATE
+        software-client)
+    add_test(
+        NAME software-engine-compatibility-test
+        COMMAND software-engine-compatibility-test)
 
     add_executable(software-transaction-history-test
         tests/transaction_history_test.cpp)
