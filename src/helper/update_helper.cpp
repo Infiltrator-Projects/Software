@@ -235,6 +235,8 @@ const char *apt_get_path()
     return nullptr;
 }
 
+std::vector<char *> apt_argv(std::vector<std::string> &arguments);
+
 bool safe_progress_token(const std::string_view token)
 {
     if (token.empty() || token.size() > 96U) {
@@ -383,10 +385,21 @@ int run_apt_with_progress(
         const ssize_t count =
             read(pipe_fd[0], buffer, sizeof(buffer));
         if (count > 0) {
-            (void)write(
-                STDOUT_FILENO,
-                buffer,
-                static_cast<std::size_t>(count));
+            std::size_t forwarded = 0U;
+            while (forwarded < static_cast<std::size_t>(count)) {
+                const ssize_t written = write(
+                    STDOUT_FILENO,
+                    buffer + forwarded,
+                    static_cast<std::size_t>(count) - forwarded);
+                if (written > 0) {
+                    forwarded += static_cast<std::size_t>(written);
+                    continue;
+                }
+                if (written < 0 && errno == EINTR) {
+                    continue;
+                }
+                break;
+            }
             pending.append(
                 buffer,
                 static_cast<std::size_t>(count));
