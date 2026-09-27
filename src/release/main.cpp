@@ -256,30 +256,169 @@ bool run_command(std::vector<std::string> args,std::string &error)
     return ok;
 }
 
-bool publish_target_sources(const ReleaseInfo &release,std::string &error)
-{
-    const std::filesystem::path destination=
-        "/etc/apt/sources.list.d/official-package-repositories.list";
-    std::error_code ec;
-    std::filesystem::create_directories(destination.parent_path(),ec);
-    if (ec) { error="Unable to create APT source directory: "+ec.message(); return false; }
+struct SourcePublication {
+    std::filesystem::path destination;
+    std::filesystem::path destination_backup;
+    bool destination_existed{false};
+    std::filesystem::path obsolete;
+    std::filesystem::path obsolete_backup;
+    bool obsolete_existed{false};
+};
 
-    if (std::filesystem::exists(destination)) {
-        const auto backup=destination.string()+".infiltrator-"+release.current_codename+".bak";
-        std::filesystem::copy_file(destination,backup,std::filesystem::copy_options::overwrite_existing,ec);
-        if (ec) { error="Unable to back up current Mint repositories: "+ec.message(); return false; }
+bool publish_target_sources(
+    const ReleaseInfo &release,
+    SourcePublication &publication,
+    std::string &error)
+{
+    publication = SourcePublication{};
+    publication.destination =
+        "/etc/apt/sources.list.d/official-package-repositories.list";
+    publication.obsolete =
+        "/etc/apt/sources.list.d/official-source-repositories.list";
+    publication.destination_backup =
+        publication.destination.string() +
+        ".infiltrator-" + release.current_codename + ".bak";
+    publication.obsolete_backup =
+        publication.obsolete.string() +
+        ".infiltrator-" + release.current_codename + ".bak";
+
+    std::error_code ec;
+    std::filesystem::create_directories(
+        publication.destination.parent_path(), ec);
+    if (ec) {
+        error =
+            "Unable to create APT source directory: " +
+            ec.message();
+        return false;
     }
 
-    const auto temporary=destination.string()+".infiltrator-new";
-    std::filesystem::copy_file(release.repositories,temporary,std::filesystem::copy_options::overwrite_existing,ec);
-    if (ec) { error="Unable to stage target Mint repositories: "+ec.message(); return false; }
-    (void)chmod(temporary.c_str(),0644);
-    std::filesystem::rename(temporary,destination,ec);
-    if (ec) { std::filesystem::remove(temporary); error="Unable to activate target Mint repositories: "+ec.message(); return false; }
+    publication.destination_existed =
+        std::filesystem::exists(
+            publication.destination, ec);
+    if (ec) {
+        error =
+            "Unable to inspect current Mint repositories: " +
+            ec.message();
+        return false;
+    }
+    if (publication.destination_existed) {
+        std::filesystem::copy_file(
+            publication.destination,
+            publication.destination_backup,
+            std::filesystem::copy_options::overwrite_existing,
+            ec);
+        if (ec) {
+            error =
+                "Unable to back up current Mint repositories: " +
+                ec.message();
+            return false;
+        }
+    }
 
-    const std::filesystem::path obsolete=
-        "/etc/apt/sources.list.d/official-source-repositories.list";
-    std::filesystem::remove(obsolete,ec);
+    publication.obsolete_existed =
+        std::filesystem::exists(
+            publication.obsolete, ec);
+    if (ec) {
+        error =
+            "Unable to inspect legacy Mint source repositories: " +
+            ec.message();
+        return false;
+    }
+    if (publication.obsolete_existed) {
+        std::filesystem::copy_file(
+            publication.obsolete,
+            publication.obsolete_backup,
+            std::filesystem::copy_options::overwrite_existing,
+            ec);
+        if (ec) {
+            error =
+                "Unable to back up legacy Mint source repositories: " +
+                ec.message();
+            return false;
+        }
+    }
+
+    const auto temporary =
+        publication.destination.string() +
+        ".infiltrator-new";
+    std::filesystem::copy_file(
+        release.repositories,
+        temporary,
+        std::filesystem::copy_options::overwrite_existing,
+        ec);
+    if (ec) {
+        error =
+            "Unable to stage target Mint repositories: " +
+            ec.message();
+        return false;
+    }
+    if (chmod(temporary.c_str(), 0644) != 0) {
+        std::filesystem::remove(temporary, ec);
+        error =
+            "Unable to set permissions on staged target repositories.";
+        return false;
+    }
+    std::filesystem::rename(
+        temporary,
+        publication.destination,
+        ec);
+    if (ec) {
+        std::filesystem::remove(temporary);
+        error =
+            "Unable to activate target Mint repositories: " +
+            ec.message();
+        return false;
+    }
+
+    std::filesystem::remove(
+        publication.obsolete, ec);
+    if (ec) {
+        error =
+            "Unable to retire legacy Mint source repositories: " +
+            ec.message();
+        return false;
+    }
+    return true;
+}
+
+bool rollback_target_sources(
+    const SourcePublication &publication,
+    std::string &error)
+{
+    std::error_code ec;
+    if (publication.destination_existed) {
+        std::filesystem::copy_file(
+            publication.destination_backup,
+            publication.destination,
+            std::filesystem::copy_options::overwrite_existing,
+            ec);
+    } else {
+        std::filesystem::remove(
+            publication.destination, ec);
+    }
+    if (ec) {
+        error =
+            "Unable to restore previous Mint repositories: " +
+            ec.message();
+        return false;
+    }
+
+    if (publication.obsolete_existed) {
+        std::filesystem::copy_file(
+            publication.obsolete_backup,
+            publication.obsolete,
+            std::filesystem::copy_options::overwrite_existing,
+            ec);
+    } else {
+        std::filesystem::remove(
+            publication.obsolete, ec);
+    }
+    if (ec) {
+        error =
+            "Unable to restore legacy Mint source repositories: " +
+            ec.message();
+        return false;
+    }
     return true;
 }
 
@@ -342,13 +481,38 @@ int apply_command(int argc,char **argv)
         return 1;
     }
     g_free(inhibit);
-    if (!publish_target_sources(release,error)) { std::cerr<<error<<"\n"; return 1; }
+    SourcePublication publication;
+    if (!publish_target_sources(
+            release,
+            publication,
+            error)) {
+        std::cerr << error << "\n";
+        return 1;
+    }
 
     std::vector<std::string> command={"systemd-inhibit","--what=shutdown:sleep",
         "--who=Infiltrator Software","--why=Upgrading Linux Mint release","--mode=block",
         "/usr/libexec/infiltrator-software-update-helper","apply-plan"};
     command.insert(command.end(),approved.begin(),approved.end());
-    if (!run_command(std::move(command),error)) { std::cerr<<error<<"\n"; return 1; }
+    if (!run_command(std::move(command),error)) {
+        const std::string transaction_error = error;
+        std::string rollback_error;
+        if (!rollback_target_sources(
+                publication,
+                rollback_error)) {
+            std::cerr
+                << transaction_error
+                << "\nRelease upgrade also failed to restore the previous "
+                   "repository configuration: "
+                << rollback_error
+                << "\n";
+        } else {
+            std::cerr
+                << transaction_error
+                << "\nPrevious repository configuration was restored.\n";
+        }
+        return 1;
+    }
 
     if (g_find_program_in_path("update-grub")!=nullptr) {
         std::string ignored;
