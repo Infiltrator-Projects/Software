@@ -786,6 +786,7 @@ int main(int argc, char **argv)
         };
         ConffilePolicy conffile_policy =
             ConffilePolicy::defaults;
+        bool purge_removals = false;
 
         while (specification_start < argc) {
             const std::string_view option(
@@ -812,6 +813,11 @@ int main(int argc, char **argv)
             if (option == "--force-confnew") {
                 conffile_policy =
                     ConffilePolicy::take_maintainer;
+                ++specification_start;
+                continue;
+            }
+            if (option == "--purge-removals") {
+                purge_removals = true;
                 ++specification_start;
                 continue;
             }
@@ -906,6 +912,13 @@ int main(int argc, char **argv)
 
         if (!has_removal) {
             arguments.insert(arguments.begin() + 1, "--no-remove");
+        } else if (purge_removals) {
+            /*
+             * Automatic maintenance reviews an autoremove --purge result.
+             * Preserve the purge semantic while still executing the exact,
+             * version-pinned removal set through the normal plan guard.
+             */
+            arguments.insert(arguments.begin() + 1, "--purge");
         }
 
         /*
@@ -1036,7 +1049,7 @@ int main(int argc, char **argv)
         stderr,
         "Usage: infiltrator-software-update-helper "
         "apply-plan [--progress-token=TOKEN] [--force-confold|--force-confnew] "
-        "[remove:]PACKAGE=VERSION... | repair-configure | "
+        "[--purge-removals] [remove:]PACKAGE=VERSION... | repair-configure | "
         "configure-automation key=value...\n");
     return 64;
 }
