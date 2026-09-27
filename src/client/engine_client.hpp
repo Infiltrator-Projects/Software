@@ -3,9 +3,11 @@
 #define INFILTRATOR_SOFTWARE_ENGINE_CLIENT_HPP
 
 #include "core/model.hpp"
+#include "engine/kernel_inventory.hpp"
 
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace infiltrator::software {
@@ -18,6 +20,11 @@ public:
 
     bool list_updates(
         std::vector<PackageRecord> &packages,
+        std::string &error) const;
+
+    bool list_kernels(
+        std::string_view kernel_type,
+        std::vector<KernelRecord> &kernels,
         std::string &error) const;
 
     std::optional<TransactionPlan> plan(
