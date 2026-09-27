@@ -12265,6 +12265,7 @@ struct PreferencesDialogContext {
     GtkWidget *auto_packages{};
     GtkWidget *auto_flatpaks{};
     GtkWidget *auto_cinnamon{};
+    GtkWidget *auto_maintenance{};
     GtkWidget *hide_after{};
     GtkWidget *hide_tray{};
     GtkWidget *install_recommends{};
@@ -12326,6 +12327,8 @@ bool sync_system_automation_preferences(
         "configure-automation",
         std::string("auto-update-packages=") +
             (preferences.auto_update_packages ? "true" : "false"),
+        std::string("auto-remove-obsolete=") +
+            (preferences.auto_remove_obsolete ? "true" : "false"),
         "first-refresh-minutes=" +
             std::to_string(preferences.first_refresh_minutes),
         "recurring-refresh-minutes=" +
@@ -12448,6 +12451,9 @@ void preferences_save(GtkButton *, gpointer user_data)
     preferences.auto_update_cinnamon_spices =
         gtk_check_button_get_active(
             GTK_CHECK_BUTTON(context->auto_cinnamon));
+    preferences.auto_remove_obsolete =
+        gtk_check_button_get_active(
+            GTK_CHECK_BUTTON(context->auto_maintenance));
 
     preferences.hide_window_after_update =
         gtk_check_button_get_active(
@@ -12504,6 +12510,8 @@ void preferences_save(GtkButton *, gpointer user_data)
     const bool automation_changed =
         preferences.auto_update_packages !=
             context->state->preferences.auto_update_packages ||
+        preferences.auto_remove_obsolete !=
+            context->state->preferences.auto_remove_obsolete ||
         preferences.first_refresh_minutes !=
             context->state->preferences.first_refresh_minutes ||
         preferences.recurring_refresh_minutes !=
@@ -12688,9 +12696,23 @@ void settings_clicked(GtkButton *, gpointer user_data)
         preference_check(
             "Automatically update Cinnamon Spices",
             state->preferences.auto_update_cinnamon_spices);
+    context->auto_maintenance =
+        preference_check(
+            "Weekly: remove obsolete kernels and unused dependencies",
+            state->preferences.auto_remove_obsolete);
+    gtk_widget_set_tooltip_text(
+        context->auto_maintenance,
+        "Runs a simulated Debian autoremove first, refuses to remove the running kernel or Software's retained fallback, then applies maintenance under shutdown/sleep inhibition.");
     gtk_box_append(GTK_BOX(options), context->auto_packages);
     gtk_box_append(GTK_BOX(options), context->auto_flatpaks);
     gtk_box_append(GTK_BOX(options), context->auto_cinnamon);
+
+    gtk_box_append(
+        GTK_BOX(options),
+        make_label("Automatic maintenance", "card-title"));
+    gtk_box_append(
+        GTK_BOX(options),
+        context->auto_maintenance);
 
     gtk_box_append(
         GTK_BOX(options),
