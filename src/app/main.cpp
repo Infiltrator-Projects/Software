@@ -7026,7 +7026,7 @@ GtkWidget *make_external_update_row(
                 gtk_widget_set_sensitive(
                     apply,
                     !selection.empty() &&
-                        !state->updates_busy);
+                        !window_state->updates_busy);
             }
         }),
         state);
@@ -12279,32 +12279,6 @@ GtkWidget *make_navigation(WindowState *state)
         GTK_BOX(outer), settings);
 
     return outer;
-}
-
-void update_theme_button(WindowState *state)
-{
-    if (state == nullptr || state->theme_button == nullptr) {
-        return;
-    }
-
-    const std::string mode =
-        state->theme.mode_name();
-    const char *icon =
-        mode == "Day"
-            ? "weather-clear-symbolic"
-            : mode == "Night"
-                ? "weather-clear-night-symbolic"
-                : "video-display-symbolic";
-    gtk_button_set_icon_name(
-        GTK_BUTTON(state->theme_button),
-        icon);
-
-    const std::string tooltip =
-        "Theme: " + mode +
-        " — click to cycle System, Day and Night";
-    gtk_widget_set_tooltip_text(
-        state->theme_button,
-        tooltip.c_str());
 }
 
 void global_search_changed(
