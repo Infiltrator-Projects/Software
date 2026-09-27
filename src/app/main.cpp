@@ -4158,12 +4158,16 @@ struct UpdatesResult {
     bool refreshed_metadata{false};
     bool from_engine{false};
     std::vector<PackageRecord> records;
+    std::vector<ExternalUpdate> external_records;
+    std::string external_error;
     std::string error;
 };
 
 struct UpdatesTaskData {
     unsigned int generation{0U};
     bool refresh_metadata{false};
+    bool show_flatpak{true};
+    bool show_cinnamon{true};
 };
 
 struct UpdatePlanResult {
@@ -5871,6 +5875,41 @@ void updates_worker(
                 result->records,
                 result->error);
         }
+
+        if (data->show_flatpak) {
+            std::vector<ExternalUpdate> flatpak;
+            std::string external_error;
+            if (discover_flatpak_updates(
+                    flatpak,
+                    external_error)) {
+                result->external_records.insert(
+                    result->external_records.end(),
+                    std::make_move_iterator(flatpak.begin()),
+                    std::make_move_iterator(flatpak.end()));
+            } else {
+                result->external_error =
+                    "Flatpak: " + external_error;
+            }
+        }
+
+        if (data->show_cinnamon) {
+            std::vector<ExternalUpdate> cinnamon;
+            std::string external_error;
+            if (discover_cinnamon_updates(
+                    cinnamon,
+                    external_error)) {
+                result->external_records.insert(
+                    result->external_records.end(),
+                    std::make_move_iterator(cinnamon.begin()),
+                    std::make_move_iterator(cinnamon.end()));
+            } else {
+                if (!result->external_error.empty()) {
+                    result->external_error += "\n";
+                }
+                result->external_error +=
+                    "Cinnamon: " + external_error;
+            }
+        }
     }
 
     g_task_return_pointer(
@@ -6156,7 +6195,10 @@ void refresh_updates(WindowState *state, const bool refresh_metadata)
     set_update_runtime_state("checking");
 
     auto *data = new UpdatesTaskData{
-        state->updates_generation, refresh_metadata};
+        state->updates_generation,
+        refresh_metadata,
+        state->preferences.show_flatpak_updates,
+        state->preferences.show_cinnamon_updates};
     GTask *task = g_task_new(
         G_OBJECT(state->window),
         nullptr,
