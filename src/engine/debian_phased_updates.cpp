@@ -150,7 +150,9 @@ bool readable_config_file(
         name.back() == '~') {
         return false;
     }
-    for (const unsigned char ch : name) {
+    for (const char raw : name) {
+        const unsigned char ch =
+            static_cast<unsigned char>(raw);
         if (std::isalnum(ch) != 0 ||
             ch == '-' || ch == '_') {
             continue;
