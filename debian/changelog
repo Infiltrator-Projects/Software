@@ -1,3 +1,15 @@
+infiltrator-software (0.3.53) unstable; urgency=high
+
+  * Fix Discover/header search synchronization so each typed character appends
+    normally instead of recursive search callbacks and repeated navigation
+    selection stealing focus between keystrokes.
+  * Keep the header search focused when it moves the user to Discover and
+    preserve the insertion point at the end of the accumulated query.
+  * Broaden Discover matching across summary, description, publisher,
+    catalogue identity, package/source-package names, category and source.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Sun, 27 Sep 2026 22:20:00 +1000
+
 infiltrator-software (0.3.52) unstable; urgency=high
 
   * Fix native dependency resolution for Debian replacement transactions:
