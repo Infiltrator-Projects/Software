@@ -6082,6 +6082,12 @@ void updates_complete(
             error.empty()
                 ? "Installation complete. Final installed state has been verified."
                 : "Packages were applied, but final state verification did not complete successfully.");
+        if (error.empty() &&
+            state->preferences.hide_window_after_update &&
+            state->window != nullptr) {
+            gtk_widget_set_visible(
+                GTK_WIDGET(state->window), false);
+        }
         if (error.empty()) {
             /*
              * The native refresh has now published the authoritative
@@ -10286,6 +10292,15 @@ void activate(GtkApplication *application, gpointer)
 
     auto *state = new WindowState{};
     state->window = GTK_WINDOW(window);
+    std::string preferences_error;
+    if (!load_software_preferences(
+            state->preferences,
+            preferences_error) &&
+        !preferences_error.empty()) {
+        g_warning(
+            "Unable to load Software preferences: %s",
+            preferences_error.c_str());
+    }
     g_signal_connect(
         window,
         "notify::maximized",
