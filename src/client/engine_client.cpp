@@ -403,6 +403,8 @@ PackageRecord parse_package(GVariant *dictionary)
     package.name = lookup_string(dictionary, "name");
     package.package_name =
         lookup_string(dictionary, "package-name");
+    package.source_package =
+        lookup_string(dictionary, "source-package");
     package.architecture =
         lookup_string(dictionary, "architecture");
     package.installed_version =
@@ -410,6 +412,8 @@ PackageRecord parse_package(GVariant *dictionary)
     package.available_version =
         lookup_string(dictionary, "available-version");
     package.source = lookup_string(dictionary, "source");
+    package.description =
+        lookup_string(dictionary, "description");
     package.repository_origin =
         lookup_string(dictionary, "repository-origin");
     package.repository_site =
@@ -431,6 +435,8 @@ PackageRecord parse_package(GVariant *dictionary)
         lookup_u64(dictionary, "download-bytes");
     package.system_critical =
         lookup_bool(dictionary, "system-critical");
+    package.security_update =
+        lookup_bool(dictionary, "security-update");
     package.kind =
         parse_kind(lookup_string(dictionary, "kind"));
 
