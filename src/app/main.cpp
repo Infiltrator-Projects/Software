@@ -6353,9 +6353,18 @@ void updates_complete(
             state->selected_update_ids.insert(identity);
         }
     }
-    const bool refreshed_metadata = result->refreshed_metadata;
-    const bool from_engine = result->from_engine;
-    const std::string error = result->error;
+    state->external_update_records =
+        std::move(result->external_records);
+    const std::string external_error =
+        result->external_error;
+    rebuild_external_updates(state);
+
+    const bool refreshed_metadata =
+        result->refreshed_metadata;
+    const bool from_engine =
+        result->from_engine;
+    const std::string error =
+        result->error;
     delete result;
 
     if (refreshed_metadata && error.empty()) {
@@ -6443,7 +6452,16 @@ void updates_complete(
         }
     }
     if (state->updates_refresh != nullptr) {
-        gtk_widget_set_sensitive(state->updates_refresh, true);
+        gtk_widget_set_sensitive(
+            state->updates_refresh, true);
+    }
+
+    if (!external_error.empty() &&
+        state->external_updates_status != nullptr) {
+        gtk_label_set_text(
+            GTK_LABEL(
+                state->external_updates_status),
+            external_error.c_str());
     }
 
     if (error.empty()) {
