@@ -191,6 +191,7 @@ void refresh_installed(WindowState *state);
 void refresh_system(WindowState *state, bool refresh_metadata = false);
 void refresh_history(WindowState *state);
 void refresh_repair(WindowState *state, bool refresh_metadata = false);
+void rebuild_updates(WindowState *state);
 std::string history_timestamp(std::int64_t unix_time);
 const char *update_icon_name(const PackageRecord &package);
 void select_page(WindowState *state, int index);
@@ -5202,6 +5203,252 @@ void update_selection_toggled(GtkCheckButton *button, gpointer user_data)
     }
     update_selection_controls(state);
 }
+
+void select_security_updates(GtkButton *, gpointer user_data)
+{
+    auto *state = static_cast<WindowState *>(user_data);
+    if (state == nullptr || state->updates_busy) {
+        return;
+    }
+
+    state->selected_update_ids.clear();
+    for (const PackageRecord &package : state->update_records) {
+        if (!package.security_update) {
+            continue;
+        }
+        const std::string identity = update_identity(package);
+        if (!identity.empty()) {
+            state->selected_update_ids.insert(identity);
+        }
+    }
+
+    rebuild_updates(state);
+    update_selection_controls(state);
+}
+
+struct UpdateDetailsContext {
+    WindowState *state{};
+    PackageRecord package;
+    GtkWidget *status{};
+};
+
+void destroy_update_details_context(gpointer data)
+{
+    delete static_cast<UpdateDetailsContext *>(data);
+}
+
+void ignore_update_clicked(GtkButton *, gpointer user_data)
+{
+    auto *context = static_cast<UpdateDetailsContext *>(user_data);
+    if (context == nullptr || context->state == nullptr) {
+        return;
+    }
+
+    std::string identity =
+        context->package.source_package.empty()
+            ? context->package.package_name
+            : context->package.source_package;
+    if (identity.empty()) {
+        identity = context->package.id;
+    }
+    if (identity.empty()) {
+        return;
+    }
+
+    auto &rules = context->state->preferences.ignored_packages;
+    if (std::find(rules.begin(), rules.end(), identity) ==
+        rules.end()) {
+        rules.push_back(identity);
+    }
+
+    std::string error;
+    if (!save_software_preferences(
+            context->state->preferences,
+            error)) {
+        if (context->status != nullptr) {
+            gtk_label_set_text(
+                GTK_LABEL(context->status),
+                error.c_str());
+        }
+        return;
+    }
+
+    auto &updates = context->state->update_records;
+    updates.erase(
+        std::remove_if(
+            updates.begin(), updates.end(),
+            [&](const PackageRecord &item) {
+                return update_is_ignored(
+                    item, context->state->preferences);
+            }),
+        updates.end());
+
+    context->state->selected_update_ids.clear();
+    for (const PackageRecord &item : updates) {
+        const std::string key = update_identity(item);
+        if (!key.empty()) {
+            context->state->selected_update_ids.insert(key);
+        }
+    }
+
+    rebuild_updates(context->state);
+    update_selection_controls(context->state);
+
+    if (context->status != nullptr) {
+        gtk_label_set_text(
+            GTK_LABEL(context->status),
+            "Ignored. Remove this rule in Software Preferences to show it again.");
+    }
+}
+
+void update_details_clicked(GtkButton *button, gpointer user_data)
+{
+    auto *state = static_cast<WindowState *>(user_data);
+    auto *package = static_cast<PackageRecord *>(
+        g_object_get_data(
+            G_OBJECT(button),
+            "update-package"));
+    if (state == nullptr || state->window == nullptr ||
+        package == nullptr) {
+        return;
+    }
+
+    GtkWidget *window = gtk_window_new();
+    gtk_window_set_title(
+        GTK_WINDOW(window),
+        "Update details");
+    gtk_window_set_transient_for(
+        GTK_WINDOW(window),
+        state->window);
+    gtk_window_set_modal(
+        GTK_WINDOW(window), true);
+    gtk_window_set_default_size(
+        GTK_WINDOW(window), 620, 520);
+
+    GtkWidget *box =
+        gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
+    gtk_widget_add_css_class(
+        box, "preferences-page");
+    gtk_widget_set_margin_top(box, 18);
+    gtk_widget_set_margin_bottom(box, 18);
+    gtk_widget_set_margin_start(box, 18);
+    gtk_widget_set_margin_end(box, 18);
+
+    std::string title = package->name;
+    if (package->security_update) {
+        title += "  •  Security update";
+    }
+    gtk_box_append(
+        GTK_BOX(box),
+        make_label(
+            title.c_str(),
+            "preferences-title"));
+
+    if (!package->description.empty()) {
+        GtkWidget *description =
+            make_label(
+                package->description.c_str(),
+                "preferences-copy");
+        gtk_label_set_wrap(
+            GTK_LABEL(description), true);
+        gtk_box_append(
+            GTK_BOX(box), description);
+    }
+
+    gtk_box_append(
+        GTK_BOX(box),
+        detail_row(
+            "Installed",
+            package->installed_version));
+    gtk_box_append(
+        GTK_BOX(box),
+        detail_row(
+            "Available",
+            package->available_version));
+
+    const std::string source_identity =
+        package->source_package.empty()
+            ? package->package_name
+            : package->source_package;
+    gtk_box_append(
+        GTK_BOX(box),
+        detail_row(
+            "Source package",
+            source_identity));
+    gtk_box_append(
+        GTK_BOX(box),
+        detail_row(
+            "Repository",
+            package->repository_origin));
+    gtk_box_append(
+        GTK_BOX(box),
+        detail_row(
+            "Site",
+            package->repository_site));
+    gtk_box_append(
+        GTK_BOX(box),
+        detail_row(
+            "Download",
+            display_size(
+                package->download_size_bytes)));
+
+    std::string binaries;
+    for (const PackageRecord &candidate :
+         state->update_records) {
+        const std::string candidate_source =
+            candidate.source_package.empty()
+                ? candidate.package_name
+                : candidate.source_package;
+        if (candidate_source != source_identity) {
+            continue;
+        }
+
+        if (!binaries.empty()) {
+            binaries += ", ";
+        }
+        binaries += candidate.package_name;
+    }
+    gtk_box_append(
+        GTK_BOX(box),
+        detail_row(
+            "Binary packages",
+            binaries));
+
+    auto *context = new UpdateDetailsContext{
+        state, *package, nullptr};
+
+    GtkWidget *ignore =
+        gtk_button_new_with_label(
+            "Ignore this package");
+    gtk_widget_set_halign(
+        ignore, GTK_ALIGN_START);
+    g_signal_connect(
+        ignore,
+        "clicked",
+        G_CALLBACK(ignore_update_clicked),
+        context);
+    gtk_box_append(
+        GTK_BOX(box), ignore);
+
+    context->status =
+        make_label(
+            "",
+            "preferences-copy");
+    gtk_box_append(
+        GTK_BOX(box), context->status);
+
+    g_object_set_data_full(
+        G_OBJECT(window),
+        "update-details-context",
+        context,
+        destroy_update_details_context);
+
+    gtk_window_set_child(
+        GTK_WINDOW(window), box);
+    gtk_window_present(
+        GTK_WINDOW(window));
+}
+
 
 GtkWidget *make_update_row(
     WindowState *state,
