@@ -126,7 +126,8 @@ pkg_check_modules(SQLITE3 REQUIRED IMPORTED_TARGET sqlite3)
 
 add_library(software-core STATIC
     src/core/model.cpp
-    src/core/update_freshness.cpp)
+    src/core/update_freshness.cpp
+    src/core/update_policy.cpp)
 target_include_directories(software-core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
 
 add_library(software-engine STATIC
@@ -294,6 +295,12 @@ if(BUILD_TESTING)
     target_link_libraries(software-update-freshness-test PRIVATE software-core)
     add_test(NAME software-update-freshness-test
         COMMAND software-update-freshness-test)
+
+    add_executable(software-update-policy-test
+        tests/update_policy_test.cpp)
+    target_link_libraries(software-update-policy-test PRIVATE software-core)
+    add_test(NAME software-update-policy-test
+        COMMAND software-update-policy-test)
 
     add_executable(software-debian-installed-test
         tests/debian_installed_state_test.cpp)
