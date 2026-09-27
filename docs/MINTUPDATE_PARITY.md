@@ -21,7 +21,7 @@ an integration check on an installed system before removal can be recommended.
 | Discover APT/Debian updates from configured repositories | Implemented | Required |
 | Refresh repository metadata without freezing the GUI | Implemented | Required |
 | Select individual updates, Select All and Clear Selection | Implemented | Required |
-| Select individual Flatpak and Cinnamon updates in the unified update list | Partial: Flatpak and Cinnamon are listed, but the current controls apply all available external updates | Required |
+| Select individual Flatpak and Cinnamon updates in the unified update list | Partial: Flatpak refs can be selected individually in their user/system installation; Cinnamon still applies all available Spices | Required |
 | Show installed and target versions | Implemented | Required |
 | Show package origin/source and planned download size | Implemented | Required |
 | Resolve dependencies before authorization | Implemented, stricter than Mint | Required |
@@ -40,7 +40,7 @@ an integration check on an installed system before removal can be recommended.
 | Ignore/blacklist packages, with wildcard and optional version matching | Implemented with persistent source-package rules, per-update ignore UI and CLI/system-wide rules | Required |
 | Security-update classification and security-only selection/filtering | Implemented from signed Ubuntu/Debian release metadata plus Mint browser-source rules | Required |
 | Flatpak update discovery, runtime updates and update execution | Implemented for user and system installations, including applications and runtimes | Required |
-| Cinnamon applet/desklet/theme/extension/Nemo-action update discovery and execution | Implemented through the Cinnamon Spice updater surface | Required on Cinnamon |
+| Cinnamon applet/desklet/theme/extension/Nemo-action update discovery and execution | Partial: the four Spice types supported by cinnamon-spice-updater are discoverable; Nemo actions need a separate inventory path | Required on Cinnamon |
 | Automatic package updates | Implemented through the root systemd timer and exact reviewed package plan | Required |
 | Automatic Flatpak updates | Implemented through the recurring Cinnamon-session updater | Required when Flatpak is enabled |
 | Automatic Cinnamon-spice updates | Implemented through the recurring Cinnamon-session updater | Required on Cinnamon |

@@ -210,6 +210,8 @@ void parse_flatpak_output(
                     update.detail.empty()
                         ? update.id
                         : update.detail;
+                update.ref = ref;
+                update.user_installation = installation == "User";
                 update.kind = flatpak_kind(ref);
                 update.detail =
                     std::string(installation) +
@@ -531,8 +533,7 @@ bool discover_cinnamon_updates(
         "applet",
         "desklet",
         "extension",
-        "theme",
-        "action"
+        "theme"
     };
 
     for (const char *type : types) {
@@ -543,12 +544,14 @@ bool discover_cinnamon_updates(
                  "--list-simple",
                  type},
                 output,
-                command_error)) {
+                command_error) ||
+            output.find("Cinnamon updates failed:") != std::string::npos) {
             error =
                 "Unable to discover Cinnamon " +
                 std::string(type) +
                 " updates: " +
-                command_error;
+                (command_error.empty() ? trim(output) : command_error);
+            updates.clear();
             return false;
         }
 
@@ -641,11 +644,57 @@ bool apply_cinnamon_updates(
 
     std::string output;
     if (progress) progress("Applying Cinnamon Spice updates");
-    return run_command(
+    const bool completed = run_command(
         {"cinnamon-spice-updater",
          "--update-all"},
         output,
         error);
+    if (completed && output.find("Cinnamon updates failed:") !=
+            std::string::npos) {
+        error=trim(output);
+        return false;
+    }
+    return completed;
+}
+
+bool apply_flatpak_updates_selected(
+    const std::vector<ExternalUpdate> &selected,
+    std::string &error,
+    ExternalProgressCallback progress)
+{
+    error.clear();
+    if (selected.empty()) return true;
+    if (!program_available("flatpak")) {
+        error="Flatpak is unavailable; selected updates were not installed.";
+        return false;
+    }
+    for (const ExternalUpdate &update : selected) {
+        if (update.backend != "Flatpak" ||
+            (update.ref.rfind("app/",0U) != 0U &&
+             update.ref.rfind("runtime/",0U) != 0U) ||
+            update.ref.find_first_of(" \t\r\n") != std::string::npos) {
+            error="Invalid Flatpak update selection.";
+            return false;
+        }
+    }
+    for (const bool user : {false, true}) {
+        std::set<std::string> refs;
+        for (const ExternalUpdate &update : selected) {
+            if (update.user_installation == user)
+                refs.insert(update.ref);
+        }
+        if (refs.empty()) continue;
+        if (progress) progress(user
+            ? "Downloading and installing selected user Flatpaks"
+            : "Downloading and installing selected system Flatpaks");
+        std::vector<std::string> command{
+            "flatpak","update","-y","--noninteractive",
+            user ? "--user" : "--system","--"};
+        command.insert(command.end(),refs.begin(),refs.end());
+        std::string output;
+        if (!run_command(command,output,error)) return false;
+    }
+    return true;
 }
 
 } // namespace infiltrator::software

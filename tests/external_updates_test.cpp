@@ -91,17 +91,25 @@ exit 0
 
     write_script(
         root / "cinnamon-spice-updater",
-        R"(if [ "$1" = "--list-simple" ]; then
+R"(if [ "$1" = "--list-simple" ]; then
+  if [ "$FAIL_CINNAMON_SCAN" = 1 ]; then
+    echo 'Cinnamon updates failed: cache unavailable'
+    exit 0
+  fi
   case "$2" in
     applet) printf 'weather@mock\n' ;;
     desklet) printf 'clock@mock\n' ;;
     extension) printf 'tiling@mock\n' ;;
     theme) printf 'theme@mock\n' ;;
-    action) printf 'action@mock\n' ;;
+    action) echo 'unsupported Cinnamon Spice type' >&2; exit 2 ;;
   esac
   exit 0
 fi
 if [ "$1" = "--update-all" ]; then
+  if [ "$FAIL_CINNAMON_APPLY" = 1 ]; then
+    echo 'Cinnamon updates failed: installation failed'
+    exit 0
+  fi
   echo "cinnamon-update-all" >> "$TRACE"
   exit 0
 fi
@@ -134,6 +142,31 @@ exit 1
     assert(saw_app);
     assert(saw_runtime);
 
+    std::vector<ExternalUpdate> selected;
+    for (const ExternalUpdate &update : flatpak) {
+        if ((!update.user_installation &&
+             update.kind == ExternalUpdateKind::flatpak_application) ||
+            (update.user_installation &&
+             update.kind == ExternalUpdateKind::flatpak_runtime))
+            selected.push_back(update);
+    }
+    assert(selected.size() == 2U);
+    assert(selected[0].ref.rfind("app/",0U) == 0U);
+    assert(selected[1].ref.rfind("runtime/",0U) == 0U);
+    assert(apply_flatpak_updates_selected(selected, error));
+    const std::string selected_trace = read_all(trace);
+    assert(selected_trace.find("--system -- app/org.example.App/") !=
+        std::string::npos);
+    assert(selected_trace.find("--user -- runtime/org.example.Runtime/") !=
+        std::string::npos);
+    assert(selected_trace.find("flatpak-uninstall") == std::string::npos);
+    ExternalUpdate invalid = selected.front();
+    invalid.ref = "--unsafe";
+    selected.push_back(invalid);
+    assert(!apply_flatpak_updates_selected(selected, error));
+    assert(read_all(trace) == selected_trace);
+    selected.pop_back();
+
     (void)setenv("FAIL_SYSTEM_SCAN", "1", 1);
     flatpak.clear();
     assert(!discover_flatpak_updates(flatpak, error));
@@ -145,15 +178,12 @@ exit 1
     std::vector<ExternalUpdate> cinnamon;
     assert(discover_cinnamon_updates(cinnamon, error));
     assert(error.empty());
-    assert(cinnamon.size() == 5U);
-    bool saw_action = false;
-    for (const ExternalUpdate &update : cinnamon) {
-        saw_action =
-            saw_action ||
-            update.kind ==
-                ExternalUpdateKind::nemo_action;
-    }
-    assert(saw_action);
+    assert(cinnamon.size() == 4U);
+    (void)setenv("FAIL_CINNAMON_SCAN", "1", 1);
+    assert(!discover_cinnamon_updates(cinnamon, error));
+    assert(cinnamon.empty());
+    assert(error.find("cache unavailable") != std::string::npos);
+    (void)unsetenv("FAIL_CINNAMON_SCAN");
 
     std::vector<std::string> flatpak_phases;
     assert(apply_flatpak_updates(true, true, error,
@@ -173,6 +203,10 @@ exit 1
         }));
     assert(error.empty());
     assert(cinnamon_phases.size() == 1U);
+    (void)setenv("FAIL_CINNAMON_APPLY", "1", 1);
+    assert(!apply_cinnamon_updates(error));
+    assert(error.find("installation failed") != std::string::npos);
+    (void)unsetenv("FAIL_CINNAMON_APPLY");
 
     const std::string logged = read_all(trace);
     assert(logged.find("flatpak-uninstall") != std::string::npos);

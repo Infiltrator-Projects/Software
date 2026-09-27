@@ -27,6 +27,8 @@ struct ExternalUpdate {
     std::string name;
     std::string version;
     std::string detail;
+    std::string ref;
+    bool user_installation{false};
     std::uint64_t download_bytes{0U};
 };
 
@@ -47,6 +49,11 @@ bool discover_cinnamon_updates(
 bool apply_flatpak_updates(
     bool remove_unused,
     bool match_host_theme,
+    std::string &error,
+    ExternalProgressCallback progress = {});
+
+bool apply_flatpak_updates_selected(
+    const std::vector<ExternalUpdate> &selected,
     std::string &error,
     ExternalProgressCallback progress = {});
 
