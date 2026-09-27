@@ -447,6 +447,9 @@ ExternalUpdateKind cinnamon_kind(
     if (type == "theme") {
         return ExternalUpdateKind::cinnamon_theme;
     }
+    if (type == "action") {
+        return ExternalUpdateKind::nemo_action;
+    }
     return ExternalUpdateKind::cinnamon_applet;
 }
 
@@ -468,6 +471,8 @@ std::string_view external_update_kind_name(
         return "Cinnamon extension";
     case ExternalUpdateKind::cinnamon_theme:
         return "Cinnamon theme";
+    case ExternalUpdateKind::nemo_action:
+        return "Nemo action";
     }
     return "External update";
 }
@@ -523,7 +528,8 @@ bool discover_cinnamon_updates(
         "applet",
         "desklet",
         "extension",
-        "theme"
+        "theme",
+        "action"
     };
 
     for (const char *type : types) {
