@@ -39,7 +39,9 @@ bool parse_bool(const std::string_view value, const bool fallback)
 {
     std::string lower;
     lower.reserve(value.size());
-    for (const unsigned char ch : value) {
+    for (const char raw : value) {
+        const unsigned char ch =
+            static_cast<unsigned char>(raw);
         lower.push_back(
             static_cast<char>(std::tolower(ch)));
     }
