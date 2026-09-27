@@ -44,6 +44,7 @@ using infiltrator::software::CatalogueSnapshot;
 using infiltrator::software::CatalogueSnapshotStore;
 using infiltrator::software::EngineClient;
 using infiltrator::software::PackageRecord;
+using infiltrator::software::KernelRecord;
 using infiltrator::software::RepositoryCatalogue;
 using infiltrator::software::SourceInventory;
 using infiltrator::software::SourceKind;
