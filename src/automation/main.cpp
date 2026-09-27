@@ -48,9 +48,27 @@ void write_stamp()
 bool due(const SoftwarePreferences &prefs)
 {
     const std::int64_t last=read_stamp();
-    if (last<=0) return true;
+    if (last<=0) {
+        std::ifstream uptime("/proc/uptime");
+        double seconds_since_boot = 0.0;
+        if (uptime &&
+            (uptime >> seconds_since_boot)) {
+            const double first =
+                static_cast<double>(
+                    std::max(
+                        prefs.first_refresh_minutes,
+                        1U)) *
+                60.0;
+            return seconds_since_boot >= first;
+        }
+        return true;
+    }
     const std::int64_t seconds=
-        static_cast<std::int64_t>(std::max(prefs.recurring_refresh_minutes,1U))*60;
+        static_cast<std::int64_t>(
+            std::max(
+                prefs.recurring_refresh_minutes,
+                1U)) *
+        60;
     return now_unix()-last>=seconds;
 }
 
