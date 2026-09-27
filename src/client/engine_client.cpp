@@ -400,16 +400,23 @@ PackageKind parse_kind(const std::string_view value) noexcept
     return PackageKind::unknown;
 }
 
-TransactionAction parse_action(
-    const std::string_view value) noexcept
+bool parse_action(
+    const std::string_view value,
+    TransactionAction &action) noexcept
 {
+    if (value == "Install") {
+        action = TransactionAction::install;
+        return true;
+    }
     if (value == "Upgrade") {
-        return TransactionAction::upgrade;
+        action = TransactionAction::upgrade;
+        return true;
     }
     if (value == "Remove") {
-        return TransactionAction::remove;
+        action = TransactionAction::remove;
+        return true;
     }
-    return TransactionAction::install;
+    return false;
 }
 
 PackageRecord parse_package(GVariant *dictionary)
@@ -613,13 +620,18 @@ bool parse_kernels_reply(
     return true;
 }
 
-TransactionItem parse_item(GVariant *dictionary)
+bool parse_item(
+    GVariant *dictionary,
+    TransactionItem &item)
 {
-    TransactionItem item;
+    item = TransactionItem{};
     item.package_id =
         lookup_string(dictionary, "package-id");
-    item.action =
-        parse_action(lookup_string(dictionary, "action"));
+    if (!parse_action(
+            lookup_string(dictionary, "action"),
+            item.action)) {
+        return false;
+    }
     item.architecture =
         lookup_string(dictionary, "architecture");
     item.from_version =
@@ -640,7 +652,7 @@ TransactionItem parse_item(GVariant *dictionary)
         lookup_bool(dictionary, "requested");
     item.system_critical =
         lookup_bool(dictionary, "system-critical");
-    return item;
+    return true;
 }
 
 std::string action_text(const TransactionAction action)
@@ -805,10 +817,11 @@ std::optional<TransactionPlan> EngineClient::plan(
     GVariant *item_dictionary = nullptr;
     while ((item_dictionary =
                 g_variant_iter_next_value(&iterator)) != nullptr) {
-        TransactionItem item =
-            parse_item(item_dictionary);
+        TransactionItem item;
+        const bool parsed =
+            parse_item(item_dictionary, item);
         g_variant_unref(item_dictionary);
-        if (item.package_id.empty()) {
+        if (!parsed || item.package_id.empty()) {
             g_variant_unref(items);
             g_variant_unref(dictionary);
             error =
