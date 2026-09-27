@@ -5806,6 +5806,29 @@ void select_security_updates(GtkButton *, gpointer user_data)
     update_selection_controls(state);
 }
 
+void select_kernel_updates(GtkButton *, gpointer user_data)
+{
+    auto *state = static_cast<WindowState *>(user_data);
+    if (state == nullptr || state->updates_busy) {
+        return;
+    }
+
+    state->selected_update_ids.clear();
+    for (const PackageRecord &package : state->update_records) {
+        if (package.kind !=
+            infiltrator::software::PackageKind::kernel) {
+            continue;
+        }
+        const std::string identity = update_identity(package);
+        if (!identity.empty()) {
+            state->selected_update_ids.insert(identity);
+        }
+    }
+
+    rebuild_updates(state);
+    update_selection_controls(state);
+}
+
 struct ChangelogTaskData {
     PackageRecord package;
 };
@@ -8657,7 +8680,7 @@ GtkWidget *make_updates_page(WindowState *state)
         "discover-details");
     gtk_widget_set_tooltip_text(
         state->updates_security,
-        "Select only updates classified as security fixes.");
+        "Select only updates classified as security fixes (Ctrl+S).");
     g_signal_connect(
         state->updates_security,
         "clicked",
@@ -8666,6 +8689,23 @@ GtkWidget *make_updates_page(WindowState *state)
     gtk_box_append(
         GTK_BOX(controls),
         state->updates_security);
+
+    GtkWidget *kernel_only =
+        gtk_button_new_with_label("Kernel only");
+    gtk_widget_add_css_class(
+        kernel_only,
+        "discover-details");
+    gtk_widget_set_tooltip_text(
+        kernel_only,
+        "Select only Linux kernel package updates (Ctrl+K).");
+    g_signal_connect(
+        kernel_only,
+        "clicked",
+        G_CALLBACK(select_kernel_updates),
+        state);
+    gtk_box_append(
+        GTK_BOX(controls),
+        kernel_only);
 
     GtkWidget *clear_selection =
         gtk_button_new_with_label("Clear selection");
