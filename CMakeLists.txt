@@ -239,6 +239,11 @@ add_executable(infiltrator-software-auto-updater
 target_link_libraries(infiltrator-software-auto-updater PRIVATE
     software-core software-engine PkgConfig::GLIB)
 
+add_executable(infiltrator-software-release-upgrade
+    src/release/main.cpp)
+target_link_libraries(infiltrator-software-release-upgrade PRIVATE
+    software-core software-engine PkgConfig::GLIB)
+
 add_executable(infiltrator-software
     src/app/main.cpp
     src/app/theme.cpp)
@@ -257,6 +262,7 @@ install(TARGETS
     infiltrator-software-tray
     infiltrator-software-session-updater
     infiltrator-software-cli
+    infiltrator-software-release-upgrade
     RUNTIME DESTINATION bin)
 install(TARGETS
     infiltrator-software-helper
@@ -295,7 +301,8 @@ foreach(target IN ITEMS
         infiltrator-software-helper infiltrator-software-update-helper
         infiltrator-software-engine infiltrator-software-tray
         infiltrator-software-session-updater infiltrator-software-cli
-        infiltrator-software-auto-updater infiltrator-software)
+        infiltrator-software-auto-updater infiltrator-software-release-upgrade
+        infiltrator-software)
     if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
         target_compile_options(${target} PRIVATE
             -Wall -Wextra -Wpedantic -Wshadow -Wconversion -Wsign-conversion)
