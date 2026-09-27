@@ -147,6 +147,7 @@ void append_record(
     package.breaks = field(fields, "breaks");
     package.replaces = field(fields, "replaces");
     package.description = field(fields, "description");
+    package.supported = field(fields, "supported");
     package.size_bytes =
         parse_unsigned(field(fields, "size"));
     package.installed_size_bytes =
