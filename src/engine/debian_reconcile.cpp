@@ -11,6 +11,7 @@
 #include <glib.h>
 
 #include <algorithm>
+#include <cctype>
 #include <cstdlib>
 #include <filesystem>
 #include <string>
