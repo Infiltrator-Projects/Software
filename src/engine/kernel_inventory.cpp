@@ -677,6 +677,13 @@ std::vector<KernelRecord> KernelInventory::build(
     for (Seed *seed : ordered) {
         KernelRecord record = seed->record;
 
+        // Match Mint's inventory rule: always show installed kernels of any
+        // type, but only offer not-yet-installed kernels for the selected type.
+        if (!record.installed &&
+            record.kernel_type != selected_type) {
+            continue;
+        }
+
         if (seed->support_months > 0 &&
             !seed->release.empty() &&
             seed->candidate != nullptr &&
