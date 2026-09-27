@@ -13,7 +13,6 @@
 #include <fstream>
 #include <map>
 #include <optional>
-#include <set>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -673,7 +672,29 @@ std::vector<KernelRecord> KernelInventory::build(
                    right->record.kernel_type;
         });
 
-    std::set<std::string> supported_series_seen;
+    /*
+     * Lifecycle support and supersession are distinct.  An available newer
+     * kernel must never make the running kernel look unsupported.  For each
+     * type/series use the running kernel as the installed reference when
+     * present; otherwise use the newest installed kernel.  Older installed
+     * kernels may then be labelled superseded while every in-lifecycle kernel
+     * still carries its real support window.
+     */
+    std::map<std::string, Seed *> installed_reference;
+    for (Seed *seed : ordered) {
+        if (!seed->record.installed) {
+            continue;
+        }
+        const std::string key =
+            seed->record.kernel_type + "|" +
+            seed->record.series;
+        auto &reference = installed_reference[key];
+        if (reference == nullptr ||
+            seed->record.active) {
+            reference = seed;
+        }
+    }
+
     for (Seed *seed : ordered) {
         KernelRecord record = seed->record;
 
@@ -704,23 +725,35 @@ std::vector<KernelRecord> KernelInventory::build(
                     record.end_of_life = true;
                     record.support_status = "End of Life";
                 } else {
+                    record.supported = true;
+                    record.support_end =
+                        month_name(end_month) +
+                        " " +
+                        std::to_string(end_year);
+
                     const std::string support_key =
                         record.kernel_type + "|" +
                         record.series;
-                    if (supported_series_seen.insert(
-                            support_key).second) {
-                        record.supported = true;
-                        record.support_end =
-                            month_name(end_month) +
-                            " " +
-                            std::to_string(end_year);
-                        record.support_status =
-                            "Supported until " +
-                            record.support_end;
-                    } else {
+                    const auto reference =
+                        installed_reference.find(
+                            support_key);
+                    const bool older_installed =
+                        record.installed &&
+                        !record.active &&
+                        reference != installed_reference.end() &&
+                        reference->second != nullptr &&
+                        compare_numeric_versions(
+                            record.version,
+                            reference->second->record.version) < 0;
+
+                    if (older_installed) {
                         record.superseded = true;
                         record.support_status =
                             "Superseded";
+                    } else {
+                        record.support_status =
+                            "Supported until " +
+                            record.support_end;
                     }
                 }
             }
