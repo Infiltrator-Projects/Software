@@ -153,6 +153,23 @@ int main()
     assert(conflicting.problems.size() == 1U);
     assert(conflicting.problems[0].package == "new-tool");
 
+    DebianPackageVersion replacement =
+        package("infiltrator-software", "0.3.53");
+    replacement.provides = "mintupdate";
+    replacement.conflicts = "mintupdate";
+    replacement.replaces = "mintupdate";
+    PackageRecord mint_meta =
+        installed("mint-meta-cinnamon", "2026.1");
+    mint_meta.depends = "mintupdate";
+    const DebianResolution replacement_resolution =
+        DebianDependencyResolver::resolve(
+            {replacement},
+            {installed("mintupdate", "7.1.4"), mint_meta},
+            {}, "amd64", {});
+    assert(replacement_resolution.complete());
+    assert(replacement_resolution.remove_installed.size() == 1U);
+    assert(replacement_resolution.remove_installed.front() == "mintupdate");
+
     DebianPackageVersion pinned_root =
         package("pinned-root", "1.0");
     pinned_root.depends = "libpin";
