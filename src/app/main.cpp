@@ -9,6 +9,7 @@
 #include "core/transaction_history.hpp"
 #include "core/update_freshness.hpp"
 #include "core/update_policy.hpp"
+#include "external/external_updates.hpp"
 #include "sources/source_inventory.hpp"
 
 #include <gtk/gtk.h>
@@ -56,6 +57,13 @@ using infiltrator::software::save_software_preferences;
 using infiltrator::software::update_is_ignored;
 using infiltrator::software::reboot_required;
 using infiltrator::software::reboot_required_packages;
+using infiltrator::software::ExternalUpdate;
+using infiltrator::software::ExternalUpdateKind;
+using infiltrator::software::external_update_kind_name;
+using infiltrator::software::discover_flatpak_updates;
+using infiltrator::software::discover_cinnamon_updates;
+using infiltrator::software::apply_flatpak_updates;
+using infiltrator::software::apply_cinnamon_updates;
 using infiltrator::software::source_kind_name;
 using infiltrator::software::update_metadata_refresh_due;
 
@@ -114,6 +122,11 @@ struct WindowState {
     GtkWidget *updates_reboot_banner{};
     GtkWidget *updates_reboot_detail{};
     GtkWidget *updates_backend{};
+    GtkListBox *external_updates_list{};
+    GtkWidget *external_updates_status{};
+    GtkWidget *external_flatpak_apply{};
+    GtkWidget *external_cinnamon_apply{};
+    std::vector<ExternalUpdate> external_update_records;
     GtkWidget *updates_transaction_panel{};
     GtkWidget *updates_transaction_phase{};
     GtkWidget *updates_transaction_detail{};
