@@ -154,6 +154,7 @@ struct WindowState {
     bool updates_restart_after_verify{false};
     std::vector<PackageRecord> update_records;
     std::unordered_set<std::string> selected_update_ids;
+    std::string pending_update_selection;
     std::optional<TransactionPlan> pending_update_plan;
     unsigned int updates_generation{0U};
     bool updates_busy{false};
@@ -7650,7 +7651,19 @@ void updates_complete(
         }
     }
     state->selected_update_ids.clear();
+    const std::string selection_preset =
+        std::exchange(
+            state->pending_update_selection,
+            std::string{});
     for (const PackageRecord &package : state->update_records) {
+        const bool include =
+            selection_preset == "security"
+                ? package.security_update
+                : selection_preset == "kernel"
+                    ? package.kind ==
+                        infiltrator::software::PackageKind::kernel
+                    : true;
+        if (!include) continue;
         const std::string identity = update_identity(package);
         if (!identity.empty()) {
             state->selected_update_ids.insert(identity);
@@ -13137,6 +13150,45 @@ void select_page(WindowState *state, const int index)
     }
 }
 
+gboolean window_key_pressed(
+    GtkEventControllerKey *,
+    guint keyval,
+    guint,
+    GdkModifierType state_mask,
+    gpointer user_data)
+{
+    auto *state = static_cast<WindowState *>(user_data);
+    if (state == nullptr ||
+        (state_mask & GDK_CONTROL_MASK) == 0) {
+        return FALSE;
+    }
+
+    if (keyval != GDK_KEY_k &&
+        keyval != GDK_KEY_K &&
+        keyval != GDK_KEY_s &&
+        keyval != GDK_KEY_S) {
+        return FALSE;
+    }
+
+    const bool kernels =
+        keyval == GDK_KEY_k ||
+        keyval == GDK_KEY_K;
+    state->pending_update_selection =
+        kernels ? "kernel" : "security";
+    select_page(state, 2);
+
+    if (state->updates_loaded &&
+        !state->updates_busy) {
+        if (kernels) {
+            select_kernel_updates(nullptr, state);
+        } else {
+            select_security_updates(nullptr, state);
+        }
+        state->pending_update_selection.clear();
+    }
+    return TRUE;
+}
+
 void activate(GtkApplication *application, gpointer)
 {
     const bool open_updates =
@@ -13189,6 +13241,18 @@ void activate(GtkApplication *application, gpointer)
         "notify::maximized",
         G_CALLBACK(window_maximized_changed),
         state);
+
+    GtkEventController *keyboard_controller =
+        gtk_event_controller_key_new();
+    g_signal_connect(
+        keyboard_controller,
+        "key-pressed",
+        G_CALLBACK(window_key_pressed),
+        state);
+    gtk_widget_add_controller(
+        window,
+        keyboard_controller);
+
     state->theme.initialise();
     ensure_update_indicator();
 
