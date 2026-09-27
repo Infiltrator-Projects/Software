@@ -233,6 +233,8 @@ add_executable(infiltrator-software-cli
     src/cli/main.cpp)
 target_link_libraries(infiltrator-software-cli PRIVATE
     software-core software-client PkgConfig::GLIB)
+target_compile_definitions(infiltrator-software-cli PRIVATE
+    INFILTRATOR_SOFTWARE_VERSION="${PROJECT_VERSION}")
 
 add_executable(infiltrator-software-auto-updater
     src/automation/main.cpp)
