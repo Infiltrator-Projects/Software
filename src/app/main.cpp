@@ -7375,6 +7375,101 @@ GtkWidget *make_updates_page(WindowState *state)
 
     gtk_box_append(GTK_BOX(page), card);
 
+    GtkWidget *external_card =
+        gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
+    gtk_widget_add_css_class(
+        external_card, "card");
+    gtk_widget_add_css_class(
+        external_card, "card-info");
+
+    GtkWidget *external_heading =
+        gtk_box_new(
+            GTK_ORIENTATION_HORIZONTAL, 10);
+    GtkWidget *external_icon =
+        make_icon(
+            "applications-system-symbolic", 22);
+    gtk_box_append(
+        GTK_BOX(external_heading),
+        external_icon);
+
+    GtkWidget *external_copy =
+        gtk_box_new(
+            GTK_ORIENTATION_VERTICAL, 1);
+    gtk_widget_set_hexpand(
+        external_copy, true);
+    gtk_box_append(
+        GTK_BOX(external_copy),
+        make_label(
+            "Flatpak & Cinnamon updates",
+            "card-title"));
+    state->external_updates_status =
+        make_label(
+            "Checking Flatpak and Cinnamon sources…",
+            "card-copy");
+    gtk_box_append(
+        GTK_BOX(external_copy),
+        state->external_updates_status);
+    gtk_box_append(
+        GTK_BOX(external_heading),
+        external_copy);
+
+    state->external_flatpak_apply =
+        gtk_button_new_with_label(
+            "Update Flatpaks");
+    gtk_widget_add_css_class(
+        state->external_flatpak_apply,
+        "discover-details");
+    gtk_widget_set_sensitive(
+        state->external_flatpak_apply,
+        false);
+    g_signal_connect(
+        state->external_flatpak_apply,
+        "clicked",
+        G_CALLBACK(external_apply_clicked),
+        state);
+    gtk_box_append(
+        GTK_BOX(external_heading),
+        state->external_flatpak_apply);
+
+    state->external_cinnamon_apply =
+        gtk_button_new_with_label(
+            "Update Cinnamon");
+    gtk_widget_add_css_class(
+        state->external_cinnamon_apply,
+        "discover-details");
+    gtk_widget_set_sensitive(
+        state->external_cinnamon_apply,
+        false);
+    g_signal_connect(
+        state->external_cinnamon_apply,
+        "clicked",
+        G_CALLBACK(external_apply_clicked),
+        state);
+    gtk_box_append(
+        GTK_BOX(external_heading),
+        state->external_cinnamon_apply);
+
+    gtk_box_append(
+        GTK_BOX(external_card),
+        external_heading);
+
+    GtkWidget *external_list =
+        gtk_list_box_new();
+    state->external_updates_list =
+        GTK_LIST_BOX(external_list);
+    gtk_widget_add_css_class(
+        external_list, "package-list");
+    gtk_list_box_set_selection_mode(
+        state->external_updates_list,
+        GTK_SELECTION_NONE);
+    gtk_box_append(
+        GTK_BOX(external_card),
+        external_list);
+
+    gtk_box_append(
+        GTK_BOX(page),
+        external_card);
+
     return page;
 }
 
