@@ -4742,6 +4742,7 @@ struct UpdatePlanResult {
 struct UpdatePlanTaskData {
     std::vector<std::string> package_ids;
     bool use_engine{false};
+    bool install_recommends{false};
 };
 
 struct UpdateProcessRun {
@@ -5200,6 +5201,7 @@ void finish_update_progress(
 struct DiscoverPlanTaskData {
     std::string package_id;
     TransactionAction action{TransactionAction::install};
+    bool install_recommends{false};
     GtkWindow *main_window{};
 };
 
@@ -5250,6 +5252,8 @@ void discover_plan_worker(
         infiltrator::software::TransactionRequest request;
         request.action = data->action;
         request.package_ids = {data->package_id};
+        request.install_recommends =
+            data->install_recommends;
 
         std::string engine_error;
         EngineClient engine;
@@ -5670,6 +5674,8 @@ void discover_install_clicked(
     auto *data = new DiscoverPlanTaskData{};
     data->package_id = record->package_name;
     data->action = action;
+    data->install_recommends =
+        state->preferences.install_recommends;
     data->main_window = GTK_WINDOW(g_object_ref(state->window));
 
     GTask *task = g_task_new(
@@ -8524,6 +8530,8 @@ void update_plan_worker(
         request.action =
             infiltrator::software::TransactionAction::upgrade;
         request.package_ids = data->package_ids;
+        request.install_recommends =
+            data->install_recommends;
 
         if (data->use_engine) {
             EngineClient engine;
@@ -8670,6 +8678,8 @@ void update_install_clicked(GtkButton *, gpointer user_data)
 
     auto *data = new UpdatePlanTaskData{};
     data->use_engine = state->updates_from_engine;
+    data->install_recommends =
+        state->preferences.install_recommends;
     data->package_ids.reserve(state->selected_update_ids.size());
     for (const PackageRecord &package : state->update_records) {
         const std::string identity = update_identity(package);
