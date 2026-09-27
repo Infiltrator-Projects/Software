@@ -859,7 +859,8 @@ DebianResolution DebianDependencyResolver::resolve(
     const std::vector<PackageRecord> &installed,
     const std::vector<DebianPackageVersion> &available,
     const std::string_view target_architecture,
-    const DebianCandidatePolicy &policy)
+    const DebianCandidatePolicy &policy,
+    const bool include_recommends)
 {
     DebianResolution result;
     std::unordered_map<std::string, DebianPackageVersion> selected;
