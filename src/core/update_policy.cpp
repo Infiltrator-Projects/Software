@@ -291,11 +291,50 @@ bool save_software_preferences(
         return false;
     }
 
-    (void)chmod(temporary.c_str(), 0600);
+    if (chmod(temporary.c_str(), 0600) != 0) {
+        std::filesystem::remove(temporary, ec);
+        error = "Unable to secure Software preferences before publication.";
+        return false;
+    }
+
+    const int temporary_fd =
+        open(temporary.c_str(), O_RDONLY | O_CLOEXEC);
+    if (temporary_fd < 0) {
+        std::filesystem::remove(temporary, ec);
+        error = "Unable to reopen Software preferences for durability verification.";
+        return false;
+    }
+    const bool file_synced =
+        fsync(temporary_fd) == 0;
+    const bool file_closed =
+        close(temporary_fd) == 0;
+    if (!file_synced || !file_closed) {
+        std::filesystem::remove(temporary, ec);
+        error = "Unable to durably write Software preferences.";
+        return false;
+    }
+
     std::filesystem::rename(temporary, target, ec);
     if (ec) {
         std::filesystem::remove(temporary, ec);
         error = "Unable to publish Software preferences atomically.";
+        return false;
+    }
+
+    const int directory_fd =
+        open(
+            target.parent_path().c_str(),
+            O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+    if (directory_fd < 0) {
+        error = "Unable to open Software preferences directory for durability verification.";
+        return false;
+    }
+    const bool directory_synced =
+        fsync(directory_fd) == 0;
+    const bool directory_closed =
+        close(directory_fd) == 0;
+    if (!directory_synced || !directory_closed) {
+        error = "Unable to durably publish Software preferences.";
         return false;
     }
     return true;
