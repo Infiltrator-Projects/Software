@@ -16,7 +16,7 @@
 namespace infiltrator::software {
 namespace {
 
-constexpr int kSchemaVersion = 5;
+constexpr int kSchemaVersion = 6;
 
 struct Database {
     sqlite3 *handle{nullptr};
@@ -365,6 +365,8 @@ bool ensure_schema(
         " policy_provider TEXT NOT NULL DEFAULT 'repository-default',"
         " policy_reason TEXT NOT NULL DEFAULT '',"
         " release_origin TEXT NOT NULL DEFAULT '',"
+        " release_archive TEXT NOT NULL DEFAULT '',"
+        " supported_text TEXT NOT NULL DEFAULT '',"
         " site TEXT NOT NULL DEFAULT '',"
         " multi_arch TEXT NOT NULL,"
         " depends_text TEXT NOT NULL,"
@@ -438,10 +440,19 @@ bool ensure_schema(
         }
     }
 
+    if (version >= 1 && version <= 5) {
+        static constexpr const char *migration_v6 =
+            "ALTER TABLE available_packages ADD COLUMN release_archive TEXT NOT NULL DEFAULT '';"
+            "ALTER TABLE available_packages ADD COLUMN supported_text TEXT NOT NULL DEFAULT '';";
+        if (!exec_sql(database, migration_v6, error)) {
+            return false;
+        }
+    }
+
     if (version != kSchemaVersion &&
         !exec_sql(
             database,
-            "PRAGMA user_version=5;",
+            "PRAGMA user_version=6;",
             error)) {
         return false;
     }
@@ -634,13 +645,15 @@ bool insert_available(
             " generation_id, package_name, version, architecture,"
             " filename, sha256, source, source_package, security_update,"
             " priority, pin_priority, policy_provider, policy_reason,"
-            " release_origin, site, multi_arch, depends_text, pre_depends,"
+            " release_origin, release_archive, supported_text, site,"
+            " multi_arch, depends_text, pre_depends,"
             " recommends, provides, conflicts, breaks_text, replaces,"
             " description, size_bytes, installed_size_bytes, essential"
             ") VALUES("
             " ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,"
             " ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,"
-            " ?, ?, ?, ?, ?, ?, ?"
+            " ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,"
+            " ?, ?, ?, ?, ?, ?, ?, ?, ?"
             ");",
             statement,
             error)) {
@@ -667,28 +680,30 @@ bool insert_available(
             !bind_text(statement.handle, 12, package.policy_provider) ||
             !bind_text(statement.handle, 13, package.policy_reason) ||
             !bind_text(statement.handle, 14, package.release_origin) ||
-            !bind_text(statement.handle, 15, package.site) ||
-            !bind_text(statement.handle, 16, package.multi_arch) ||
-            !bind_text(statement.handle, 17, package.depends) ||
-            !bind_text(statement.handle, 18, package.pre_depends) ||
-            !bind_text(statement.handle, 19, package.recommends) ||
-            !bind_text(statement.handle, 20, package.provides) ||
-            !bind_text(statement.handle, 21, package.conflicts) ||
-            !bind_text(statement.handle, 22, package.breaks) ||
-            !bind_text(statement.handle, 23, package.replaces) ||
-            !bind_text(statement.handle, 24, package.description) ||
+            !bind_text(statement.handle, 15, package.release_archive) ||
+            !bind_text(statement.handle, 16, package.supported) ||
+            !bind_text(statement.handle, 17, package.site) ||
+            !bind_text(statement.handle, 18, package.multi_arch) ||
+            !bind_text(statement.handle, 19, package.depends) ||
+            !bind_text(statement.handle, 20, package.pre_depends) ||
+            !bind_text(statement.handle, 21, package.recommends) ||
+            !bind_text(statement.handle, 22, package.provides) ||
+            !bind_text(statement.handle, 23, package.conflicts) ||
+            !bind_text(statement.handle, 24, package.breaks) ||
+            !bind_text(statement.handle, 25, package.replaces) ||
+            !bind_text(statement.handle, 26, package.description) ||
             sqlite3_bind_int64(
                 statement.handle,
-                25,
+                27,
                 to_sqlite_integer(package.size_bytes)) != SQLITE_OK ||
             sqlite3_bind_int64(
                 statement.handle,
-                26,
+                28,
                 to_sqlite_integer(
                     package.installed_size_bytes)) != SQLITE_OK ||
             sqlite3_bind_int(
                 statement.handle,
-                27,
+                29,
                 package.essential ? 1 : 0) != SQLITE_OK) {
             error = sqlite_error(database);
             return false;
@@ -947,7 +962,8 @@ PackageStateStore::load_current(
                 "SELECT package_name, version, architecture,"
                 " filename, sha256, source, source_package, security_update,"
                 " priority, pin_priority, policy_provider, policy_reason,"
-                " release_origin, site, multi_arch, depends_text, pre_depends,"
+                " release_origin, release_archive, supported_text, site,"
+                " multi_arch, depends_text, pre_depends,"
                 " recommends, provides, conflicts, breaks_text, replaces,"
                 " description, size_bytes, installed_size_bytes, essential"
                 " FROM available_packages"
@@ -992,27 +1008,29 @@ PackageStateStore::load_current(
             package.policy_provider = column_text(statement.handle, 10);
             package.policy_reason = column_text(statement.handle, 11);
             package.release_origin = column_text(statement.handle, 12);
-            package.site = column_text(statement.handle, 13);
-            package.multi_arch = column_text(statement.handle, 14);
-            package.depends = column_text(statement.handle, 15);
-            package.pre_depends = column_text(statement.handle, 16);
-            package.recommends = column_text(statement.handle, 17);
-            package.provides = column_text(statement.handle, 18);
-            package.conflicts = column_text(statement.handle, 19);
-            package.breaks = column_text(statement.handle, 20);
-            package.replaces = column_text(statement.handle, 21);
-            package.description = column_text(statement.handle, 22);
+            package.release_archive = column_text(statement.handle, 13);
+            package.supported = column_text(statement.handle, 14);
+            package.site = column_text(statement.handle, 15);
+            package.multi_arch = column_text(statement.handle, 16);
+            package.depends = column_text(statement.handle, 17);
+            package.pre_depends = column_text(statement.handle, 18);
+            package.recommends = column_text(statement.handle, 19);
+            package.provides = column_text(statement.handle, 20);
+            package.conflicts = column_text(statement.handle, 21);
+            package.breaks = column_text(statement.handle, 22);
+            package.replaces = column_text(statement.handle, 23);
+            package.description = column_text(statement.handle, 24);
             package.size_bytes =
                 from_sqlite_unsigned(
                     sqlite3_column_int64(
-                        statement.handle, 23));
+                        statement.handle, 25));
             package.installed_size_bytes =
                 from_sqlite_unsigned(
                     sqlite3_column_int64(
-                        statement.handle, 24));
+                        statement.handle, 26));
             package.essential =
                 sqlite3_column_int(
-                    statement.handle, 25) != 0;
+                    statement.handle, 27) != 0;
             snapshot.available.emplace_back(std::move(package));
         }
     }
