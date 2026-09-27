@@ -3,6 +3,7 @@
 #include "core/update_policy.hpp"
 #include "core/update_tracker.hpp"
 #include "core/transaction_history.hpp"
+#include "external/external_updates.hpp"
 
 #include <gtk/gtk.h>
 #include <libxapp/xapp-status-icon.h>
@@ -31,9 +32,13 @@ using infiltrator::software::UpdateNotificationResult;
 using infiltrator::software::evaluate_update_notification;
 using infiltrator::software::update_tracker_path;
 using infiltrator::software::TransactionHistoryStore;
+using infiltrator::software::ExternalUpdate;
+using infiltrator::software::discover_flatpak_updates;
+using infiltrator::software::discover_cinnamon_updates;
 
 struct CheckResult {
     std::vector<PackageRecord> updates;
+    std::size_t external_update_count{0U};
     std::string error;
 };
 
@@ -239,7 +244,8 @@ void send_update_notification(
 
 void evaluate_notification(
     TrayState *state,
-    const std::vector<PackageRecord> &updates)
+    const std::vector<PackageRecord> &updates,
+    const std::size_t total_count)
 {
     if (state == nullptr ||
         !state->last_error.empty()) {
@@ -267,7 +273,7 @@ void evaluate_notification(
 
     if (result.notify) {
         send_update_notification(
-            updates.size(),
+            total_count,
             result.relevant_updates,
             result.oldest_age_days);
     }
@@ -390,6 +396,31 @@ void check_worker(
             result->updates.end());
     }
 
+    if (result->error.empty()) {
+        std::vector<ExternalUpdate> external;
+        std::string external_error;
+        if (preferences.show_flatpak_updates) {
+            if (!discover_flatpak_updates(
+                    external,
+                    external_error)) {
+                result->error = external_error;
+            } else {
+                result->external_update_count += external.size();
+            }
+        }
+        if (result->error.empty() &&
+            preferences.show_cinnamon_updates) {
+            external.clear();
+            if (!discover_cinnamon_updates(
+                    external,
+                    external_error)) {
+                result->error = external_error;
+            } else {
+                result->external_update_count += external.size();
+            }
+        }
+    }
+
     g_task_return_pointer(
         task,
         result,
@@ -424,12 +455,15 @@ void check_complete(
     }
 
     if (result != nullptr) {
-        state->update_count = result->updates.size();
+        state->update_count =
+            result->updates.size() +
+            result->external_update_count;
         state->last_error = result->error;
         if (state->last_error.empty()) {
             evaluate_notification(
                 state,
-                result->updates);
+                result->updates,
+                state->update_count);
         }
         delete result;
     } else {
