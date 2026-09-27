@@ -7641,6 +7641,41 @@ void updates_complete(
                     package, state->preferences);
             }),
         state->update_records.end());
+
+    /*
+     * Match Mint Update Manager's priority-update rule.  Software must update
+     * its own package engine/client contract before attempting unrelated APT,
+     * Flatpak or Cinnamon changes.  This also guarantees that migrations such
+     * as an engine API bump cannot be hidden in a larger transaction.
+     */
+    const bool self_update =
+        std::any_of(
+            state->update_records.begin(),
+            state->update_records.end(),
+            [](const PackageRecord &package) {
+                const std::string_view name =
+                    package.package_name.empty()
+                        ? std::string_view(package.id)
+                        : std::string_view(package.package_name);
+                return name == "infiltrator-software";
+            });
+    if (self_update) {
+        state->update_records.erase(
+            std::remove_if(
+                state->update_records.begin(),
+                state->update_records.end(),
+                [](const PackageRecord &package) {
+                    const std::string_view name =
+                        package.package_name.empty()
+                            ? std::string_view(package.id)
+                            : std::string_view(package.package_name);
+                    return name != "infiltrator-software";
+                }),
+            state->update_records.end());
+        result->external_records.clear();
+        result->external_error.clear();
+    }
+
     state->updates_from_engine = result->from_engine;
     if (state->discover_updates_summary != nullptr) {
         const std::string summary =
