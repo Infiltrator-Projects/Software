@@ -139,15 +139,43 @@ std::string repository_site(const std::string_view uri)
     return lower_ascii(std::string(authority));
 }
 
+constexpr std::size_t kMaximumRepositoryDownloadBytes =
+    512U * 1024U * 1024U;
+
+struct DownloadBuffer {
+    std::string *output{};
+    std::size_t maximum{0U};
+    bool exceeded{false};
+};
+
 std::size_t curl_writer(
     char *data,
     const std::size_t size,
     const std::size_t count,
     void *user_data)
 {
+    auto *buffer =
+        static_cast<DownloadBuffer *>(user_data);
+    if (buffer == nullptr ||
+        buffer->output == nullptr ||
+        (size != 0U &&
+         count >
+             std::numeric_limits<std::size_t>::max() /
+                 size)) {
+        return 0U;
+    }
+
     const std::size_t bytes = size * count;
-    auto *output = static_cast<std::string *>(user_data);
-    output->append(data, bytes);
+    if (buffer->output->size() >
+            buffer->maximum ||
+        bytes >
+            buffer->maximum -
+                buffer->output->size()) {
+        buffer->exceeded = true;
+        return 0U;
+    }
+
+    buffer->output->append(data, bytes);
     return bytes;
 }
 
@@ -173,16 +201,30 @@ bool download(
     curl_easy_setopt(handle, CURLOPT_TIMEOUT, 120L);
     curl_easy_setopt(handle, CURLOPT_USERAGENT, "Infiltrator-Software/0.4");
     curl_easy_setopt(handle, CURLOPT_ERRORBUFFER, curl_error.data());
+    DownloadBuffer buffer{
+        &content,
+        kMaximumRepositoryDownloadBytes,
+        false};
     curl_easy_setopt(handle, CURLOPT_WRITEFUNCTION, curl_writer);
-    curl_easy_setopt(handle, CURLOPT_WRITEDATA, &content);
+    curl_easy_setopt(handle, CURLOPT_WRITEDATA, &buffer);
+    curl_easy_setopt(
+        handle,
+        CURLOPT_MAXFILESIZE_LARGE,
+        static_cast<curl_off_t>(
+            kMaximumRepositoryDownloadBytes));
 
     const CURLcode status = curl_easy_perform(handle);
     curl_easy_cleanup(handle);
 
     if (status != CURLE_OK) {
-        error = curl_error[0] != '\0'
-            ? std::string(curl_error.data())
-            : std::string(curl_easy_strerror(status));
+        if (buffer.exceeded) {
+            error =
+                "Repository download exceeded the 512 MiB safety limit.";
+        } else {
+            error = curl_error[0] != '\0'
+                ? std::string(curl_error.data())
+                : std::string(curl_easy_strerror(status));
+        }
         content.clear();
         return false;
     }

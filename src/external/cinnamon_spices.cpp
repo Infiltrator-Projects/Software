@@ -11,15 +11,18 @@
 #include <chrono>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <ctime>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
+#include <limits>
 #include <optional>
 #include <sstream>
 #include <string>
 #include <string_view>
 #include <system_error>
+#include <unistd.h>
 #include <utility>
 #include <vector>
 
@@ -32,6 +35,7 @@ constexpr std::string_view kSpiceRoot =
     "https://cinnamon-spices.linuxmint.com";
 constexpr std::uint64_t kMaxArchiveBytes = 256ULL * 1024ULL * 1024ULL;
 constexpr std::uint64_t kMaxExpandedBytes = 512ULL * 1024ULL * 1024ULL;
+constexpr std::size_t kMaxMetadataBytes = 64U * 1024U * 1024U;
 
 struct SpiceDescriptor {
     ExternalUpdateKind kind{};
@@ -64,15 +68,39 @@ bool curl_ready()
     return status == CURLE_OK;
 }
 
+struct TextDownloadBuffer {
+    std::string *text{};
+    std::size_t maximum{0U};
+    bool exceeded{false};
+};
+
 size_t append_to_string(
     char *data,
     const size_t size,
     const size_t count,
     void *user_data)
 {
-    auto *text = static_cast<std::string *>(user_data);
+    auto *buffer =
+        static_cast<TextDownloadBuffer *>(user_data);
+    if (buffer == nullptr ||
+        buffer->text == nullptr ||
+        (size != 0U &&
+         count >
+             std::numeric_limits<std::size_t>::max() /
+                 size)) {
+        return 0U;
+    }
+
     const size_t bytes = size * count;
-    text->append(data, bytes);
+    if (buffer->text->size() >
+            buffer->maximum ||
+        bytes >
+            buffer->maximum -
+                buffer->text->size()) {
+        buffer->exceeded = true;
+        return 0U;
+    }
+    buffer->text->append(data, bytes);
     return bytes;
 }
 
@@ -100,14 +128,23 @@ bool fetch_text(
     curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 15L);
     curl_easy_setopt(curl, CURLOPT_TIMEOUT, 30L);
     curl_easy_setopt(curl, CURLOPT_USERAGENT, "Infiltrator-Software/1");
+    TextDownloadBuffer buffer{
+        &text,
+        kMaxMetadataBytes,
+        false};
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, append_to_string);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &text);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &buffer);
+    curl_easy_setopt(
+        curl,
+        CURLOPT_MAXFILESIZE_LARGE,
+        static_cast<curl_off_t>(kMaxMetadataBytes));
 
     const CURLcode result = curl_easy_perform(curl);
     if (result != CURLE_OK) {
-        error =
-            "Unable to fetch Cinnamon Spice metadata: " +
-            std::string(curl_easy_strerror(result));
+        error = buffer.exceeded
+            ? "Cinnamon Spice metadata exceeded the 64 MiB safety limit."
+            : "Unable to fetch Cinnamon Spice metadata: " +
+                std::string(curl_easy_strerror(result));
         curl_easy_cleanup(curl);
         return false;
     }
@@ -724,6 +761,8 @@ struct DownloadContext {
     std::string label;
     std::size_t index{0U};
     std::size_t count{0U};
+    std::uint64_t written{0U};
+    bool exceeded{false};
 };
 
 size_t write_download(
@@ -734,11 +773,28 @@ size_t write_download(
 {
     auto *context =
         static_cast<DownloadContext *>(user_data);
-    return std::fwrite(
-        data,
-        size,
-        count,
-        context->file);
+    if (context == nullptr ||
+        context->file == nullptr ||
+        (size != 0U &&
+         count >
+             std::numeric_limits<std::size_t>::max() /
+                 size)) {
+        return 0U;
+    }
+    const std::size_t bytes = size * count;
+    if (context->written >
+            kMaxArchiveBytes ||
+        static_cast<std::uint64_t>(bytes) >
+            kMaxArchiveBytes -
+                context->written) {
+        context->exceeded = true;
+        return 0U;
+    }
+    const std::size_t written =
+        std::fwrite(data, 1U, bytes, context->file);
+    context->written +=
+        static_cast<std::uint64_t>(written);
+    return written;
 }
 
 int report_download(
@@ -804,7 +860,9 @@ bool download_archive(
         progress,
         update.name.empty() ? update.id : update.name,
         index,
-        count
+        count,
+        0U,
+        false
     };
     CURL *curl = curl_easy_init();
     if (curl == nullptr) {
@@ -826,6 +884,10 @@ bool download_archive(
     curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
     curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, report_download);
     curl_easy_setopt(curl, CURLOPT_XFERINFODATA, &context);
+    curl_easy_setopt(
+        curl,
+        CURLOPT_MAXFILESIZE_LARGE,
+        static_cast<curl_off_t>(kMaxArchiveBytes));
 
     const CURLcode result = curl_easy_perform(curl);
     long response = 0L;
@@ -838,9 +900,11 @@ bool download_archive(
         error =
             "Unable to download Cinnamon Spice " +
             update.id + ": " +
-            (result == CURLE_OK
-                 ? "HTTP " + std::to_string(response)
-                 : std::string(curl_easy_strerror(result)));
+            (context.exceeded
+                 ? "archive exceeded the 256 MiB safety limit"
+                 : result == CURLE_OK
+                     ? "HTTP " + std::to_string(response)
+                     : std::string(curl_easy_strerror(result)));
         return false;
     }
 
@@ -987,11 +1051,28 @@ bool write_revision(
     return success;
 }
 
+struct TranslationArtifact {
+    fs::path staged;
+    fs::path destination;
+};
+
+void remove_staged_translations(
+    const std::vector<TranslationArtifact> &artifacts) noexcept
+{
+    std::error_code ignored;
+    for (const TranslationArtifact &artifact : artifacts) {
+        fs::remove(artifact.staged, ignored);
+        ignored.clear();
+    }
+}
+
 bool compile_translations(
     const fs::path &source,
     const std::string &identity,
+    std::vector<TranslationArtifact> &artifacts,
     std::string &error)
 {
+    artifacts.clear();
     const fs::path po = source / "po";
     if (!fs::is_directory(po)) {
         return true;
@@ -1015,6 +1096,8 @@ bool compile_translations(
     for (const fs::directory_entry &entry :
          fs::directory_iterator(po, ec)) {
         if (ec) {
+            remove_staged_translations(artifacts);
+            artifacts.clear();
             error = "Unable to enumerate Cinnamon Spice translations.";
             return false;
         }
@@ -1026,9 +1109,12 @@ bool compile_translations(
         const std::string language =
             entry.path().stem().string();
         if (!safe_component(language)) {
+            remove_staged_translations(artifacts);
+            artifacts.clear();
             error = "Cinnamon Spice contains an unsafe translation name.";
             return false;
         }
+
         const fs::path destination =
             fs::path(data) / "locale" /
             language / "LC_MESSAGES" /
@@ -1037,45 +1123,185 @@ bool compile_translations(
             destination.parent_path(),
             ec);
         if (ec) {
+            remove_staged_translations(artifacts);
+            artifacts.clear();
             error = "Unable to create the Cinnamon Spice locale directory.";
             return false;
         }
+
+        std::string pattern =
+            (destination.parent_path() /
+             ("." + identity + "-" + language +
+              "-XXXXXX")).string();
+        std::vector<char> writable(
+            pattern.begin(),
+            pattern.end());
+        writable.push_back('\0');
+        const int descriptor = mkstemp(writable.data());
+        if (descriptor < 0) {
+            remove_staged_translations(artifacts);
+            artifacts.clear();
+            error =
+                "Unable to stage a Cinnamon Spice translation.";
+            return false;
+        }
+        if (close(descriptor) != 0) {
+            const fs::path failed(writable.data());
+            fs::remove(failed, ec);
+            remove_staged_translations(artifacts);
+            artifacts.clear();
+            error =
+                "Unable to close a staged Cinnamon Spice translation.";
+            return false;
+        }
+
+        TranslationArtifact artifact{
+            fs::path(writable.data()),
+            destination};
         if (!run_command(
                 {"msgfmt", "-c",
                  entry.path().string(),
-                 "-o", destination.string()},
+                 "-o", artifact.staged.string()},
                 error)) {
+            fs::remove(artifact.staged, ec);
+            remove_staged_translations(artifacts);
+            artifacts.clear();
             return false;
         }
+        artifacts.emplace_back(
+            std::move(artifact));
     }
     return true;
 }
 
-bool remove_previous_copies(
-    const ExternalUpdate &update,
+struct PublishedPath {
+    fs::path destination;
+    fs::path backup;
+    bool had_existing{false};
+    bool new_present{false};
+};
+
+fs::path backup_path(
+    const fs::path &destination,
+    const std::size_t ordinal)
+{
+    return destination.string() +
+        ".infiltrator-old-" +
+        std::to_string(
+            static_cast<unsigned long long>(getpid())) +
+        "-" + std::to_string(ordinal);
+}
+
+bool publish_path(
+    const fs::path *staged,
+    const fs::path &destination,
+    std::vector<PublishedPath> &published,
     std::string &error)
 {
     std::error_code ec;
-    for (const fs::path &folder :
-         user_install_folders(update.kind)) {
-        fs::remove_all(folder / update.id, ec);
+    fs::create_directories(
+        destination.parent_path(), ec);
+    if (ec) {
+        error =
+            "Unable to create Cinnamon Spice destination directory: " +
+            ec.message();
+        return false;
+    }
+
+    PublishedPath change;
+    change.destination = destination;
+    change.backup =
+        backup_path(
+            destination,
+            published.size());
+    if (fs::exists(change.backup, ec) || ec) {
+        error =
+            "A stale Cinnamon Spice transaction backup blocks installation: " +
+            change.backup.string();
+        return false;
+    }
+
+    change.had_existing =
+        fs::exists(destination, ec);
+    if (ec) {
+        error =
+            "Unable to inspect the existing Cinnamon Spice installation.";
+        return false;
+    }
+    if (change.had_existing) {
+        fs::rename(
+            destination,
+            change.backup,
+            ec);
         if (ec) {
             error =
-                "Unable to remove the previous Cinnamon Spice copy: " +
+                "Unable to stage the existing Cinnamon Spice for rollback: " +
                 ec.message();
             return false;
         }
-        if (update.kind == ExternalUpdateKind::nemo_action) {
-            fs::remove(folder / (update.id + ".nemo_action"), ec);
-            if (ec) {
-                error =
-                    "Unable to replace the previous Nemo action: " +
-                    ec.message();
-                return false;
+    }
+
+    if (staged != nullptr) {
+        fs::rename(
+            *staged,
+            destination,
+            ec);
+        if (ec) {
+            if (change.had_existing) {
+                std::error_code restore_error;
+                fs::rename(
+                    change.backup,
+                    destination,
+                    restore_error);
             }
+            error =
+                "Unable to atomically publish the Cinnamon Spice update: " +
+                ec.message();
+            return false;
+        }
+        change.new_present = true;
+    }
+
+    published.emplace_back(
+        std::move(change));
+    return true;
+}
+
+void rollback_published_paths(
+    std::vector<PublishedPath> &published) noexcept
+{
+    std::error_code ignored;
+    for (auto iterator = published.rbegin();
+         iterator != published.rend();
+         ++iterator) {
+        if (iterator->new_present) {
+            fs::remove_all(
+                iterator->destination,
+                ignored);
+            ignored.clear();
+        }
+        if (iterator->had_existing) {
+            fs::rename(
+                iterator->backup,
+                iterator->destination,
+                ignored);
+            ignored.clear();
         }
     }
-    return true;
+}
+
+void discard_backups(
+    const std::vector<PublishedPath> &published) noexcept
+{
+    std::error_code ignored;
+    for (const PublishedPath &change : published) {
+        if (change.had_existing) {
+            fs::remove_all(
+                change.backup,
+                ignored);
+            ignored.clear();
+        }
+    }
 }
 
 bool install_extracted(
@@ -1089,8 +1315,9 @@ bool install_extracted(
         error = "No writable Cinnamon Spice installation directory exists.";
         return false;
     }
-    const fs::path destination_root = folders.front();
-    const fs::path source = extracted / update.id;
+
+    const fs::path source =
+        extracted / update.id;
     if (!fs::is_directory(source)) {
         error =
             "Downloaded Cinnamon Spice does not contain its expected " +
@@ -1098,17 +1325,44 @@ bool install_extracted(
         return false;
     }
 
-    if (!compile_translations(source, update.id, error)) {
-        return false;
-    }
-    if (!remove_previous_copies(update, error)) {
+    std::vector<TranslationArtifact> translations;
+    if (!compile_translations(
+            source,
+            update.id,
+            translations,
+            error)) {
         return false;
     }
 
+    const fs::path destination_root =
+        folders.front();
     std::error_code ec;
-    fs::create_directories(destination_root, ec);
+    fs::create_directories(
+        destination_root, ec);
     if (ec) {
-        error = "Unable to create the Cinnamon Spice installation directory.";
+        remove_staged_translations(translations);
+        error =
+            "Unable to create the Cinnamon Spice installation directory.";
+        return false;
+    }
+
+    const fs::path stage_root =
+        destination_root /
+        (".infiltrator-stage-" +
+         update.id + "-" +
+         std::to_string(
+             static_cast<unsigned long long>(getpid())));
+    if (fs::exists(stage_root, ec) || ec) {
+        remove_staged_translations(translations);
+        error =
+            "A stale Cinnamon Spice staging directory blocks installation.";
+        return false;
+    }
+    fs::create_directories(stage_root, ec);
+    if (ec) {
+        remove_staged_translations(translations);
+        error =
+            "Unable to create the Cinnamon Spice staging directory.";
         return false;
     }
 
@@ -1116,20 +1370,22 @@ bool install_extracted(
         for (const fs::directory_entry &entry :
              fs::directory_iterator(extracted, ec)) {
             if (ec) {
-                error = "Unable to enumerate the Nemo action payload.";
+                fs::remove_all(stage_root, ec);
+                remove_staged_translations(translations);
+                error =
+                    "Unable to enumerate the Nemo action payload.";
                 return false;
             }
-            const fs::path destination =
-                destination_root / entry.path().filename();
             fs::copy(
                 entry.path(),
-                destination,
-                fs::copy_options::recursive |
-                    fs::copy_options::overwrite_existing,
+                stage_root / entry.path().filename(),
+                fs::copy_options::recursive,
                 ec);
             if (ec) {
+                fs::remove_all(stage_root, ec);
+                remove_staged_translations(translations);
                 error =
-                    "Unable to install the Nemo action payload: " +
+                    "Unable to stage the Nemo action payload: " +
                     ec.message();
                 return false;
             }
@@ -1137,26 +1393,121 @@ bool install_extracted(
     } else {
         fs::copy(
             source,
-            destination_root / update.id,
-            fs::copy_options::recursive |
-                fs::copy_options::overwrite_existing,
+            stage_root / update.id,
+            fs::copy_options::recursive,
             ec);
         if (ec) {
+            fs::remove_all(stage_root, ec);
+            remove_staged_translations(translations);
             error =
-                "Unable to install Cinnamon Spice " +
+                "Unable to stage Cinnamon Spice " +
                 update.id + ": " + ec.message();
             return false;
         }
     }
 
-    const fs::path metadata =
-        destination_root / update.id / "metadata.json";
+    const fs::path staged_metadata =
+        stage_root / update.id / "metadata.json";
     if (!write_revision(
-            metadata,
+            staged_metadata,
             update.remote_revision,
             error)) {
+        fs::remove_all(stage_root, ec);
+        remove_staged_translations(translations);
         return false;
     }
+
+    std::vector<fs::path> staged_payloads;
+    for (const fs::directory_entry &entry :
+         fs::directory_iterator(stage_root, ec)) {
+        if (ec) {
+            fs::remove_all(stage_root, ec);
+            remove_staged_translations(translations);
+            error =
+                "Unable to enumerate the staged Cinnamon Spice payload.";
+            return false;
+        }
+        staged_payloads.emplace_back(entry.path());
+    }
+
+    std::vector<PublishedPath> published;
+    for (const fs::path &staged : staged_payloads) {
+        if (!publish_path(
+                &staged,
+                destination_root /
+                    staged.filename(),
+                published,
+                error)) {
+            rollback_published_paths(published);
+            fs::remove_all(stage_root, ec);
+            remove_staged_translations(translations);
+            return false;
+        }
+    }
+
+    /*
+     * Remove duplicate copies from the alternate user Spice locations only
+     * after the new primary copy is live. Rename them into transaction
+     * backups so every deletion can be restored if a later step fails.
+     */
+    for (std::size_t index = 1U;
+         index < folders.size();
+         ++index) {
+        const fs::path duplicate =
+            folders[index] / update.id;
+        if (fs::exists(duplicate, ec)) {
+            if (ec ||
+                !publish_path(
+                    nullptr,
+                    duplicate,
+                    published,
+                    error)) {
+                rollback_published_paths(published);
+                fs::remove_all(stage_root, ec);
+                remove_staged_translations(translations);
+                return false;
+            }
+        }
+        ec.clear();
+
+        if (update.kind ==
+            ExternalUpdateKind::nemo_action) {
+            const fs::path action =
+                folders[index] /
+                (update.id + ".nemo_action");
+            if (fs::exists(action, ec)) {
+                if (ec ||
+                    !publish_path(
+                        nullptr,
+                        action,
+                        published,
+                        error)) {
+                    rollback_published_paths(published);
+                    fs::remove_all(stage_root, ec);
+                    remove_staged_translations(translations);
+                    return false;
+                }
+            }
+            ec.clear();
+        }
+    }
+
+    for (TranslationArtifact &artifact :
+         translations) {
+        if (!publish_path(
+                &artifact.staged,
+                artifact.destination,
+                published,
+                error)) {
+            rollback_published_paths(published);
+            fs::remove_all(stage_root, ec);
+            remove_staged_translations(translations);
+            return false;
+        }
+    }
+
+    fs::remove_all(stage_root, ec);
+    discard_backups(published);
     return true;
 }
 

@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <charconv>
 #include <filesystem>
+#include <fcntl.h>
 #include <fstream>
 #include <limits>
 #include <map>
@@ -11,6 +12,7 @@
 #include <string>
 #include <string_view>
 #include <system_error>
+#include <sys/stat.h>
 #include <unistd.h>
 #include <utility>
 
@@ -195,12 +197,59 @@ bool save_tracker(
         return false;
     }
 
+    if (chmod(temporary.c_str(), 0600) != 0) {
+        std::filesystem::remove(temporary, ec);
+        error =
+            "Unable to secure update notification tracker before publication.";
+        return false;
+    }
+
+    const int temporary_fd =
+        open(
+            temporary.c_str(),
+            O_RDONLY | O_CLOEXEC);
+    if (temporary_fd < 0) {
+        std::filesystem::remove(temporary, ec);
+        error =
+            "Unable to reopen update notification tracker for durability verification.";
+        return false;
+    }
+    const bool file_synced =
+        fsync(temporary_fd) == 0;
+    const bool file_closed =
+        close(temporary_fd) == 0;
+    if (!file_synced || !file_closed) {
+        std::filesystem::remove(temporary, ec);
+        error =
+            "Unable to durably write update notification tracker.";
+        return false;
+    }
+
     std::filesystem::rename(temporary, target, ec);
     if (ec) {
         std::filesystem::remove(temporary, ec);
         error =
             "Unable to publish update notification tracker: " +
             ec.message();
+        return false;
+    }
+
+    const int directory_fd =
+        open(
+            target.parent_path().c_str(),
+            O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+    if (directory_fd < 0) {
+        error =
+            "Unable to open update notification tracker directory for durability verification.";
+        return false;
+    }
+    const bool directory_synced =
+        fsync(directory_fd) == 0;
+    const bool directory_closed =
+        close(directory_fd) == 0;
+    if (!directory_synced || !directory_closed) {
+        error =
+            "Unable to durably publish update notification tracker.";
         return false;
     }
     return true;

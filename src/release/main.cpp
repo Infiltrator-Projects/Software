@@ -6,11 +6,17 @@
 #include <glib.h>
 
 #include <algorithm>
+#include <cerrno>
+#include <cstring>
+#include <cstdio>
 #include <cstdlib>
 #include <filesystem>
+#include <fcntl.h>
 #include <fstream>
 #include <iostream>
+#include <iterator>
 #include <map>
+#include <optional>
 #include <set>
 #include <sstream>
 #include <string>
@@ -46,6 +52,256 @@ std::string trim(std::string value)
          (value.front()=='\'' && value.back()=='\'')))
         value=value.substr(1U,value.size()-2U);
     return value;
+}
+
+class TemporaryDirectory final {
+public:
+    TemporaryDirectory() = default;
+    TemporaryDirectory(const TemporaryDirectory &) = delete;
+    TemporaryDirectory &operator=(const TemporaryDirectory &) = delete;
+
+    ~TemporaryDirectory()
+    {
+        if (!path_.empty()) {
+            std::error_code ignored;
+            std::filesystem::remove_all(path_, ignored);
+        }
+    }
+
+    bool create(std::string &error)
+    {
+        std::error_code ec;
+        const std::filesystem::path parent =
+            std::filesystem::temp_directory_path(ec);
+        if (ec) {
+            error =
+                "Unable to locate a private release-upgrade planning area: " +
+                ec.message();
+            return false;
+        }
+
+        std::string pattern =
+            (parent / "infiltrator-software-release-XXXXXX").string();
+        std::vector<char> writable(pattern.begin(), pattern.end());
+        writable.push_back('\0');
+        char *created = mkdtemp(writable.data());
+        if (created == nullptr) {
+            error =
+                "Unable to create a private release-upgrade planning area: " +
+                std::string(std::strerror(errno));
+            return false;
+        }
+
+        path_ = created;
+        if (chmod(path_.c_str(), 0700) != 0) {
+            const std::string detail = std::strerror(errno);
+            std::filesystem::remove_all(path_, ec);
+            path_.clear();
+            error =
+                "Unable to secure the release-upgrade planning area: " +
+                detail;
+            return false;
+        }
+        return true;
+    }
+
+    const std::filesystem::path &path() const noexcept
+    {
+        return path_;
+    }
+
+private:
+    std::filesystem::path path_;
+};
+
+class ScopedEnvironment final {
+public:
+    ScopedEnvironment() = default;
+    ScopedEnvironment(const ScopedEnvironment &) = delete;
+    ScopedEnvironment &operator=(const ScopedEnvironment &) = delete;
+
+    ~ScopedEnvironment()
+    {
+        for (auto iterator = saved_.rbegin();
+             iterator != saved_.rend();
+             ++iterator) {
+            if (iterator->second.has_value()) {
+                (void)setenv(
+                    iterator->first.c_str(),
+                    iterator->second->c_str(),
+                    1);
+            } else {
+                (void)unsetenv(iterator->first.c_str());
+            }
+        }
+    }
+
+    bool set(
+        const char *name,
+        const std::string &value,
+        std::string &error)
+    {
+        const char *current = std::getenv(name);
+        saved_.emplace_back(
+            name,
+            current == nullptr
+                ? std::optional<std::string>{}
+                : std::optional<std::string>{current});
+        if (setenv(name, value.c_str(), 1) != 0) {
+            error =
+                "Unable to isolate release-upgrade planning state: " +
+                std::string(std::strerror(errno));
+            saved_.pop_back();
+            return false;
+        }
+        return true;
+    }
+
+private:
+    std::vector<
+        std::pair<std::string, std::optional<std::string>>> saved_;
+};
+
+bool write_all(const int fd, const std::string_view content)
+{
+    std::size_t offset = 0U;
+    while (offset < content.size()) {
+        const ssize_t written =
+            write(
+                fd,
+                content.data() + offset,
+                content.size() - offset);
+        if (written > 0) {
+            offset += static_cast<std::size_t>(written);
+            continue;
+        }
+        if (written < 0 && errno == EINTR) {
+            continue;
+        }
+        return false;
+    }
+    return true;
+}
+
+bool sync_directory(
+    const std::filesystem::path &directory,
+    std::string &error)
+{
+    const int fd =
+        open(
+            directory.c_str(),
+            O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+    if (fd < 0) {
+        error =
+            "Unable to open " + directory.string() +
+            " for durability verification: " +
+            std::string(std::strerror(errno));
+        return false;
+    }
+    const bool synced = fsync(fd) == 0;
+    const int close_status = close(fd);
+    if (!synced || close_status != 0) {
+        error =
+            "Unable to durably publish changes in " +
+            directory.string() + ".";
+        return false;
+    }
+    return true;
+}
+
+bool durable_copy_file(
+    const std::filesystem::path &source,
+    const std::filesystem::path &destination,
+    const mode_t mode,
+    std::string &error)
+{
+    std::ifstream input(source, std::ios::binary);
+    if (!input) {
+        error =
+            "Unable to read " + source.string() +
+            " for durable publication.";
+        return false;
+    }
+    const std::string content{
+        std::istreambuf_iterator<char>(input),
+        std::istreambuf_iterator<char>()};
+    if (input.bad()) {
+        error =
+            "Unable to finish reading " + source.string() + ".";
+        return false;
+    }
+
+    std::error_code ec;
+    std::filesystem::create_directories(
+        destination.parent_path(), ec);
+    if (ec) {
+        error =
+            "Unable to create " +
+            destination.parent_path().string() + ": " +
+            ec.message();
+        return false;
+    }
+
+    std::string pattern =
+        (destination.parent_path() /
+         (".infiltrator-release-" +
+          destination.filename().string() +
+          "-XXXXXX")).string();
+    std::vector<char> writable(pattern.begin(), pattern.end());
+    writable.push_back('\0');
+    const int fd = mkstemp(writable.data());
+    if (fd < 0) {
+        error =
+            "Unable to stage " + destination.string() + ": " +
+            std::string(std::strerror(errno));
+        return false;
+    }
+
+    const std::filesystem::path temporary(writable.data());
+    bool ok =
+        write_all(fd, content) &&
+        fchmod(fd, mode) == 0 &&
+        fsync(fd) == 0;
+    if (close(fd) != 0) {
+        ok = false;
+    }
+    if (!ok) {
+        const std::string detail = std::strerror(errno);
+        std::filesystem::remove(temporary, ec);
+        error =
+            "Unable to durably stage " + destination.string() +
+            ": " + detail;
+        return false;
+    }
+
+    if (rename(
+            temporary.c_str(),
+            destination.c_str()) != 0) {
+        const std::string detail = std::strerror(errno);
+        std::filesystem::remove(temporary, ec);
+        error =
+            "Unable to atomically publish " +
+            destination.string() + ": " + detail;
+        return false;
+    }
+    return sync_directory(
+        destination.parent_path(), error);
+}
+
+bool durable_remove(
+    const std::filesystem::path &path,
+    std::string &error)
+{
+    if (unlink(path.c_str()) != 0) {
+        if (errno == ENOENT) {
+            return true;
+        }
+        error =
+            "Unable to remove " + path.string() + ": " +
+            std::string(std::strerror(errno));
+        return false;
+    }
+    return sync_directory(path.parent_path(), error);
 }
 
 std::map<std::string,std::string> read_assignments(const std::filesystem::path &path)
@@ -149,18 +405,25 @@ std::vector<std::string> specs_for(const TransactionPlan &plan)
 
 bool build_plan(const ReleaseInfo &release,TransactionPlan &combined,std::string &error)
 {
-    const std::string uid=std::to_string(static_cast<unsigned long long>(getuid()));
-    const std::filesystem::path root=
-        std::filesystem::temp_directory_path()/("infiltrator-software-release-"+uid);
-    std::error_code ec;
-    std::filesystem::create_directories(root,ec);
-    if (ec) { error="Unable to create release-upgrade planning area: "+ec.message(); return false; }
+    TemporaryDirectory workspace;
+    if (!workspace.create(error)) {
+        return false;
+    }
+    const std::filesystem::path &root = workspace.path();
 
     const std::string db=(root/"packages.db").string();
     const std::string cache=(root/"repositories").string();
-    (void)setenv("INFILTRATOR_SOFTWARE_STATE_DB",db.c_str(),1);
-    (void)setenv("INFILTRATOR_SOFTWARE_REPOSITORY_CACHE",cache.c_str(),1);
-    (void)setenv("INFILTRATOR_SOFTWARE_SOURCES_FILE",release.repositories.c_str(),1);
+    ScopedEnvironment environment;
+    if (!environment.set(
+            "INFILTRATOR_SOFTWARE_STATE_DB", db, error) ||
+        !environment.set(
+            "INFILTRATOR_SOFTWARE_REPOSITORY_CACHE", cache, error) ||
+        !environment.set(
+            "INFILTRATOR_SOFTWARE_SOURCES_FILE",
+            release.repositories.string(),
+            error)) {
+        return false;
+    }
 
     DebianCandidatePolicy policy;
     for (const std::string &name:release.blacklist) policy.held_packages.insert(base(name));
@@ -267,7 +530,8 @@ struct SourcePublication {
 
 bool rollback_target_sources(
     const SourcePublication &publication,
-    std::string &error);
+    std::string &error,
+    bool refresh_metadata = false);
 
 bool publish_target_sources(
     const ReleaseInfo &release,
@@ -305,18 +569,16 @@ bool publish_target_sources(
             ec.message();
         return false;
     }
-    if (publication.destination_existed) {
-        std::filesystem::copy_file(
+    if (publication.destination_existed &&
+        !durable_copy_file(
             publication.destination,
             publication.destination_backup,
-            std::filesystem::copy_options::overwrite_existing,
-            ec);
-        if (ec) {
-            error =
-                "Unable to back up current Mint repositories: " +
-                ec.message();
-            return false;
-        }
+            0644,
+            error)) {
+        error =
+            "Unable to back up current Mint repositories: " +
+            error;
+        return false;
     }
 
     publication.obsolete_existed =
@@ -328,56 +590,33 @@ bool publish_target_sources(
             ec.message();
         return false;
     }
-    if (publication.obsolete_existed) {
-        std::filesystem::copy_file(
+    if (publication.obsolete_existed &&
+        !durable_copy_file(
             publication.obsolete,
             publication.obsolete_backup,
-            std::filesystem::copy_options::overwrite_existing,
-            ec);
-        if (ec) {
-            error =
-                "Unable to back up legacy Mint source repositories: " +
-                ec.message();
-            return false;
-        }
+            0644,
+            error)) {
+        error =
+            "Unable to back up legacy Mint source repositories: " +
+            error;
+        return false;
     }
 
-    const auto temporary =
-        publication.destination.string() +
-        ".infiltrator-new";
-    std::filesystem::copy_file(
-        release.repositories,
-        temporary,
-        std::filesystem::copy_options::overwrite_existing,
-        ec);
-    if (ec) {
-        error =
-            "Unable to stage target Mint repositories: " +
-            ec.message();
-        return false;
-    }
-    if (chmod(temporary.c_str(), 0644) != 0) {
-        std::filesystem::remove(temporary, ec);
-        error =
-            "Unable to set permissions on staged target repositories.";
-        return false;
-    }
-    std::filesystem::rename(
-        temporary,
-        publication.destination,
-        ec);
-    if (ec) {
-        std::filesystem::remove(temporary);
+    if (!durable_copy_file(
+            release.repositories,
+            publication.destination,
+            0644,
+            error)) {
         error =
             "Unable to activate target Mint repositories: " +
-            ec.message();
+            error;
         return false;
     }
 
-    std::filesystem::remove(
-        publication.obsolete, ec);
-    if (ec) {
-        const std::string remove_error = ec.message();
+    std::string remove_error;
+    if (!durable_remove(
+            publication.obsolete,
+            remove_error)) {
         std::string rollback_error;
         if (!rollback_target_sources(
                 publication,
@@ -400,41 +639,59 @@ bool publish_target_sources(
 
 bool rollback_target_sources(
     const SourcePublication &publication,
-    std::string &error)
+    std::string &error,
+    const bool refresh_metadata)
 {
-    std::error_code ec;
     if (publication.destination_existed) {
-        std::filesystem::copy_file(
-            publication.destination_backup,
-            publication.destination,
-            std::filesystem::copy_options::overwrite_existing,
-            ec);
-    } else {
-        std::filesystem::remove(
-            publication.destination, ec);
-    }
-    if (ec) {
+        if (!durable_copy_file(
+                publication.destination_backup,
+                publication.destination,
+                0644,
+                error)) {
+            error =
+                "Unable to restore previous Mint repositories: " +
+                error;
+            return false;
+        }
+    } else if (!durable_remove(
+                   publication.destination,
+                   error)) {
         error =
-            "Unable to restore previous Mint repositories: " +
-            ec.message();
+            "Unable to remove target Mint repositories during rollback: " +
+            error;
         return false;
     }
 
     if (publication.obsolete_existed) {
-        std::filesystem::copy_file(
-            publication.obsolete_backup,
-            publication.obsolete,
-            std::filesystem::copy_options::overwrite_existing,
-            ec);
-    } else {
-        std::filesystem::remove(
-            publication.obsolete, ec);
-    }
-    if (ec) {
+        if (!durable_copy_file(
+                publication.obsolete_backup,
+                publication.obsolete,
+                0644,
+                error)) {
+            error =
+                "Unable to restore legacy Mint source repositories: " +
+                error;
+            return false;
+        }
+    } else if (!durable_remove(
+                   publication.obsolete,
+                   error)) {
         error =
-            "Unable to restore legacy Mint source repositories: " +
-            ec.message();
+            "Unable to remove legacy target repositories during rollback: " +
+            error;
         return false;
+    }
+
+    if (refresh_metadata) {
+        std::string refresh_error;
+        if (!run_command(
+                {"apt-get", "update"},
+                refresh_error)) {
+            error =
+                "Previous repository files were restored, but their APT metadata "
+                "could not be refreshed: " + refresh_error;
+            return false;
+        }
     }
     return true;
 }
@@ -470,7 +727,7 @@ int plan_command()
     return 0;
 }
 
-int apply_command(int argc,char **argv)
+int apply_inhibited_command(int argc,char **argv)
 {
     if (geteuid()!=0) {
         std::cerr<<"Release upgrade apply must run as root.\n";
@@ -492,12 +749,6 @@ int apply_command(int argc,char **argv)
         return 2;
     }
 
-    gchar *inhibit=g_find_program_in_path("systemd-inhibit");
-    if (inhibit==nullptr) {
-        std::cerr<<"Release upgrade refused because systemd-inhibit is unavailable.\n";
-        return 1;
-    }
-    g_free(inhibit);
     SourcePublication publication;
     if (!publish_target_sources(
             release,
@@ -507,16 +758,17 @@ int apply_command(int argc,char **argv)
         return 1;
     }
 
-    std::vector<std::string> command={"systemd-inhibit","--what=shutdown:sleep",
-        "--who=Infiltrator Software","--why=Upgrading Linux Mint release","--mode=block",
-        "/usr/libexec/infiltrator-software-update-helper","apply-plan"};
+    std::vector<std::string> command={
+        "/usr/libexec/infiltrator-software-update-helper",
+        "apply-plan"};
     command.insert(command.end(),approved.begin(),approved.end());
     if (!run_command(std::move(command),error)) {
         const std::string transaction_error = error;
         std::string rollback_error;
         if (!rollback_target_sources(
                 publication,
-                rollback_error)) {
+                rollback_error,
+                true)) {
             std::cerr
                 << transaction_error
                 << "\nRelease upgrade also failed to restore the previous "
@@ -531,13 +783,28 @@ int apply_command(int argc,char **argv)
         return 1;
     }
 
-    if (g_find_program_in_path("update-grub")!=nullptr) {
-        std::string ignored;
-        (void)run_command({"update-grub"},ignored);
+    std::vector<std::string> finalization_errors;
+    if (gchar *program = g_find_program_in_path("update-grub");
+        program != nullptr) {
+        g_free(program);
+        std::string command_error;
+        if (!run_command({"update-grub"}, command_error)) {
+            finalization_errors.emplace_back(
+                "update-grub failed: " + command_error);
+        }
     }
-    if (g_find_program_in_path("ubuntu-system-adjustments")!=nullptr) {
-        std::string ignored;
-        (void)run_command({"ubuntu-system-adjustments","adjust-grub-title"},ignored);
+    if (gchar *program =
+            g_find_program_in_path("ubuntu-system-adjustments");
+        program != nullptr) {
+        g_free(program);
+        std::string command_error;
+        if (!run_command(
+                {"ubuntu-system-adjustments", "adjust-grub-title"},
+                command_error)) {
+            finalization_errors.emplace_back(
+                "ubuntu-system-adjustments failed: " +
+                command_error);
+        }
     }
 
     const auto after=read_assignments("/etc/linuxmint/info");
@@ -546,7 +813,50 @@ int apply_command(int argc,char **argv)
         std::cerr<<"Packages were upgraded, but the target Mint release identity was not yet confirmed. Reboot and recheck Software.\n";
         return 3;
     }
+    if (!finalization_errors.empty()) {
+        std::cerr
+            << "Release packages were applied, but finalization was incomplete:\n";
+        for (const std::string &detail : finalization_errors) {
+            std::cerr << " - " << detail << "\n";
+        }
+        return 3;
+    }
     std::cout<<"Release upgrade complete: "<<release.target_name<<" ("<<release.target_codename<<").\n";
+    return 0;
+}
+
+int apply_command(int argc, char **argv)
+{
+    if (geteuid() != 0) {
+        std::cerr << "Release upgrade apply must run as root.\n";
+        return 1;
+    }
+
+    gchar *inhibit = g_find_program_in_path("systemd-inhibit");
+    if (inhibit == nullptr) {
+        std::cerr
+            << "Release upgrade refused because systemd-inhibit is unavailable.\n";
+        return 1;
+    }
+    g_free(inhibit);
+
+    std::vector<std::string> command{
+        "systemd-inhibit",
+        "--what=shutdown:sleep",
+        "--who=Infiltrator Software",
+        "--why=Upgrading Linux Mint release",
+        "--mode=block",
+        "/usr/bin/infiltrator-software-release-upgrade",
+        "apply-inhibited"};
+    for (int index = 2; index < argc; ++index) {
+        command.emplace_back(argv[index]);
+    }
+
+    std::string error;
+    if (!run_command(std::move(command), error)) {
+        std::cerr << error << "\n";
+        return 1;
+    }
     return 0;
 }
 }
@@ -555,6 +865,8 @@ int main(int argc,char **argv)
 {
     if (argc==2 && std::string_view(argv[1])=="plan") return plan_command();
     if (argc>=3 && std::string_view(argv[1])=="apply") return apply_command(argc,argv);
+    if (argc>=3 && std::string_view(argv[1])=="apply-inhibited")
+        return apply_inhibited_command(argc,argv);
     std::cerr<<"Usage: infiltrator-software-release-upgrade plan | apply SPEC...\n";
     return 64;
 }

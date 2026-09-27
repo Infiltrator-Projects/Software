@@ -249,6 +249,32 @@ bool read_schema_version(
     return true;
 }
 
+bool has_unversioned_user_schema(
+    sqlite3 *database,
+    bool &present,
+    std::string &error)
+{
+    present = false;
+    Statement statement;
+    if (!prepare(
+            database,
+            "SELECT COUNT(*)"
+            " FROM sqlite_master"
+            " WHERE type='table'"
+            " AND name NOT LIKE 'sqlite_%';",
+            statement,
+            error)) {
+        return false;
+    }
+    if (sqlite3_step(statement.handle) != SQLITE_ROW) {
+        error = sqlite_error(database);
+        return false;
+    }
+    present =
+        sqlite3_column_int64(statement.handle, 0) > 0;
+    return true;
+}
+
 
 class SqliteTransaction final {
 public:
@@ -312,6 +338,22 @@ bool ensure_schema(
             "Unsupported package-state schema version " +
             std::to_string(version) + ".";
         return false;
+    }
+
+    if (version == 0) {
+        bool existing_schema = false;
+        if (!has_unversioned_user_schema(
+                database,
+                existing_schema,
+                error)) {
+            return false;
+        }
+        if (existing_schema) {
+            error =
+                "Refusing to stamp an existing unversioned package-state "
+                "database as the current schema.";
+            return false;
+        }
     }
 
     SqliteTransaction migration(database);

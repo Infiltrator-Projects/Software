@@ -21,6 +21,43 @@
 
 namespace {
 
+bool write_full(
+    const int fd,
+    const std::string_view content)
+{
+    std::size_t offset = 0U;
+    while (offset < content.size()) {
+        const ssize_t written =
+            write(
+                fd,
+                content.data() + offset,
+                content.size() - offset);
+        if (written > 0) {
+            offset += static_cast<std::size_t>(written);
+            continue;
+        }
+        if (written < 0 && errno == EINTR) {
+            continue;
+        }
+        return false;
+    }
+    return true;
+}
+
+bool sync_directory(const char *directory)
+{
+    const int fd =
+        open(
+            directory,
+            O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+    if (fd < 0) {
+        return false;
+    }
+    const bool synced = fsync(fd) == 0;
+    const bool closed = close(fd) == 0;
+    return synced && closed;
+}
+
 bool valid_automation_setting(const std::string_view key, const std::string_view value)
 {
     if (value.empty() || value.size() > 512U ||
@@ -82,32 +119,62 @@ int configure_automation(const int argc, char **argv)
         return 1;
     }
 
-    const std::string temporary =
-        std::string(kPath) + ".tmp." +
-        std::to_string(static_cast<unsigned long long>(getpid()));
-    {
-        std::ofstream output(temporary, std::ios::out | std::ios::trunc);
-        if (!output) {
-            std::fprintf(stderr, "Unable to create automatic-update configuration.\n");
-            return 1;
-        }
-        output << "# Managed by Infiltrator Software\n";
-        for (const std::string &value : values) {
-            output << value << '\n';
-        }
-        output.close();
-        if (!output) {
-            std::filesystem::remove(temporary, ec);
-            std::fprintf(stderr, "Unable to finish automatic-update configuration.\n");
-            return 1;
-        }
+    std::string content =
+        "# Managed by Infiltrator Software\n";
+    for (const std::string &value : values) {
+        content += value;
+        content += '\n';
     }
 
-    (void)chmod(temporary.c_str(), 0600);
-    std::filesystem::rename(temporary, kPath, ec);
-    if (ec) {
+    std::string pattern =
+        std::string(kDirectory) +
+        "/.automatic-updates.conf-XXXXXX";
+    std::vector<char> writable(
+        pattern.begin(),
+        pattern.end());
+    writable.push_back('\0');
+
+    const int fd = mkstemp(writable.data());
+    if (fd < 0) {
+        std::fprintf(
+            stderr,
+            "Unable to create automatic-update configuration: %s\n",
+            std::strerror(errno));
+        return 1;
+    }
+
+    const std::string temporary(writable.data());
+    bool ok =
+        fchmod(fd, 0600) == 0 &&
+        write_full(fd, content) &&
+        fsync(fd) == 0;
+    if (close(fd) != 0) {
+        ok = false;
+    }
+    if (!ok) {
+        const int saved_errno = errno;
         std::filesystem::remove(temporary, ec);
-        std::fprintf(stderr, "Unable to publish automatic-update configuration: %s\n", ec.message().c_str());
+        std::fprintf(
+            stderr,
+            "Unable to durably write automatic-update configuration: %s\n",
+            std::strerror(saved_errno));
+        return 1;
+    }
+
+    if (rename(temporary.c_str(), kPath) != 0) {
+        const int saved_errno = errno;
+        std::filesystem::remove(temporary, ec);
+        std::fprintf(
+            stderr,
+            "Unable to publish automatic-update configuration: %s\n",
+            std::strerror(saved_errno));
+        return 1;
+    }
+    if (!sync_directory(kDirectory)) {
+        std::fprintf(
+            stderr,
+            "Automatic-update configuration was renamed, but the directory "
+            "could not be durably synchronized.\n");
         return 1;
     }
     return 0;

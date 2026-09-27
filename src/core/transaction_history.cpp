@@ -130,11 +130,23 @@ std::string action_text(const TransactionAction action)
     return "install";
 }
 
-TransactionAction parse_action(const std::string_view value)
+bool parse_action(
+    const std::string_view value,
+    TransactionAction &action)
 {
-    if (value == "upgrade") return TransactionAction::upgrade;
-    if (value == "remove") return TransactionAction::remove;
-    return TransactionAction::install;
+    if (value == "install") {
+        action = TransactionAction::install;
+        return true;
+    }
+    if (value == "upgrade") {
+        action = TransactionAction::upgrade;
+        return true;
+    }
+    if (value == "remove") {
+        action = TransactionAction::remove;
+        return true;
+    }
+    return false;
 }
 
 bool bind_text(
@@ -348,8 +360,13 @@ TransactionHistoryStore::load_recent(
             sqlite3_column_int64(statement.handle, 0);
         entry.completed_at_unix =
             sqlite3_column_int64(statement.handle, 1);
-        entry.action =
-            parse_action(column_text(statement.handle, 6));
+        if (!parse_action(
+                column_text(statement.handle, 6),
+                entry.action)) {
+            error =
+                "Transaction history contains an unknown action.";
+            return {};
+        }
         entry.success =
             sqlite3_column_int(statement.handle, 3) != 0;
         entry.message = column_text(statement.handle, 4);

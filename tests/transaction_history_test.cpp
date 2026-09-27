@@ -3,6 +3,7 @@
 
 #include <cassert>
 #include <filesystem>
+#include <sqlite3.h>
 #include <string>
 
 int main()
@@ -61,6 +62,29 @@ int main()
     assert(newest.size() == 2U);
     assert(!newest[0].success);
     assert(newest[0].message == "Failed.");
+
+    sqlite3 *database = nullptr;
+    assert(sqlite3_open(path.c_str(), &database) == SQLITE_OK);
+    assert(database != nullptr);
+    char *sql_error = nullptr;
+    assert(
+        sqlite3_exec(
+            database,
+            "UPDATE transaction_items"
+            " SET action='future-action'"
+            " WHERE transaction_id=(SELECT MAX(id) FROM transactions);",
+            nullptr,
+            nullptr,
+            &sql_error) == SQLITE_OK);
+    sqlite3_free(sql_error);
+    sqlite3_close(database);
+
+    error.clear();
+    const auto rejected = store.load_recent(1U, error);
+    assert(rejected.empty());
+    assert(
+        error.find("unknown action") !=
+        std::string::npos);
 
     std::filesystem::remove(path, ec);
     return 0;

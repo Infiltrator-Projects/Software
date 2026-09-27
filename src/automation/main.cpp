@@ -5,12 +5,16 @@
 #include <glib.h>
 
 #include <algorithm>
+#include <cerrno>
 #include <chrono>
 #include <cstdint>
+#include <cstdio>
 #include <cstdlib>
 #include <filesystem>
+#include <fcntl.h>
 #include <fstream>
 #include <string>
+#include <sys/stat.h>
 #include <unistd.h>
 #include <vector>
 
@@ -37,12 +41,91 @@ std::int64_t read_stamp()
     return value;
 }
 
-void write_stamp()
+bool write_stamp(std::string &error)
 {
+    static constexpr const char *kDirectory =
+        "/var/lib/infiltrator/software";
+
     std::error_code ec;
-    std::filesystem::create_directories("/var/lib/infiltrator/software",ec);
-    std::ofstream output(kStamp,std::ios::out|std::ios::trunc);
-    if (output) output<<now_unix()<<'\n';
+    std::filesystem::create_directories(
+        kDirectory, ec);
+    if (ec) {
+        error =
+            "Unable to create automatic-update state directory: " +
+            ec.message();
+        return false;
+    }
+
+    std::string pattern =
+        std::string(kDirectory) +
+        "/.automatic-updates.last-XXXXXX";
+    std::vector<char> writable(
+        pattern.begin(),
+        pattern.end());
+    writable.push_back('\0');
+    const int fd = mkstemp(writable.data());
+    if (fd < 0) {
+        error =
+            "Unable to stage the automatic-update timestamp.";
+        return false;
+    }
+
+    const std::string value =
+        std::to_string(now_unix()) + "\n";
+    std::size_t offset = 0U;
+    bool ok = fchmod(fd, 0644) == 0;
+    while (ok && offset < value.size()) {
+        const ssize_t written =
+            write(
+                fd,
+                value.data() + offset,
+                value.size() - offset);
+        if (written > 0) {
+            offset += static_cast<std::size_t>(written);
+            continue;
+        }
+        if (written < 0 && errno == EINTR) {
+            continue;
+        }
+        ok = false;
+    }
+    if (ok && fsync(fd) != 0) {
+        ok = false;
+    }
+    if (close(fd) != 0) {
+        ok = false;
+    }
+
+    const std::filesystem::path temporary(
+        writable.data());
+    if (!ok ||
+        rename(temporary.c_str(), kStamp) != 0) {
+        std::filesystem::remove(temporary, ec);
+        error =
+            "Unable to durably publish the automatic-update timestamp.";
+        return false;
+    }
+
+    const int directory_fd =
+        open(
+            kDirectory,
+            O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+    if (directory_fd < 0) {
+        error =
+            "Unable to verify automatic-update timestamp durability.";
+        return false;
+    }
+    const bool synced =
+        fsync(directory_fd) == 0;
+    const bool closed =
+        close(directory_fd) == 0;
+    if (!synced || !closed) {
+        error =
+            "Unable to durably publish the automatic-update timestamp.";
+        return false;
+    }
+    error.clear();
+    return true;
 }
 
 bool due(const SoftwarePreferences &prefs)
@@ -156,7 +239,13 @@ int main()
     std::vector<PackageRecord> updates=core.updates();
     updates.erase(std::remove_if(updates.begin(),updates.end(),
         [&](const PackageRecord &p){return update_is_ignored(p,prefs);}),updates.end());
-    if (updates.empty()) { write_stamp(); return 0; }
+    if (updates.empty()) {
+        if (!write_stamp(error)) {
+            g_printerr("%s\n", error.c_str());
+            return 1;
+        }
+        return 0;
+    }
 
     TransactionRequest request;
     request.action=TransactionAction::upgrade;
@@ -198,8 +287,16 @@ int main()
         return 1;
     }
 
-    std::string ignored;
-    (void)core.refresh_installed(ignored);
-    write_stamp();
+    if (!core.refresh_installed(error)) {
+        g_printerr(
+            "Packages were applied, but the resulting installed state "
+            "could not be verified: %s\n",
+            error.c_str());
+        return 1;
+    }
+    if (!write_stamp(error)) {
+        g_printerr("%s\n", error.c_str());
+        return 1;
+    }
     return 0;
 }

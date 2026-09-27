@@ -135,7 +135,9 @@ std::vector<std::string_view> split_tabs(const std::string_view line)
     }
 }
 
-bool run_flatpak_remote_ls(std::string &output)
+bool run_flatpak_remote_ls(
+    const bool user,
+    std::string &output)
 {
     output.clear();
 
@@ -168,6 +170,7 @@ bool run_flatpak_remote_ls(std::string &output)
             "flatpak",
             "flatpak",
             "remote-ls",
+            user ? "--user" : "--system",
             "--app",
             "--columns=application,name,description,branch,origin",
             static_cast<char *>(nullptr));
@@ -209,16 +212,12 @@ bool run_flatpak_remote_ls(std::string &output)
     return WIFEXITED(status) && WEXITSTATUS(status) == 0;
 }
 
-std::vector<PackageRecord> flatpak_remote_records()
+void append_flatpak_remote_records(
+    const std::string &output,
+    const std::string_view installation,
+    const std::unordered_set<std::string> &installed,
+    std::vector<PackageRecord> &result)
 {
-    std::vector<PackageRecord> result;
-    std::string output;
-    if (!run_flatpak_remote_ls(output) || output.empty()) {
-        return result;
-    }
-
-    const auto installed = flatpak_installed_ids();
-
     std::size_t start = 0U;
     while (start < output.size()) {
         const std::size_t end = output.find('\n', start);
@@ -237,9 +236,12 @@ std::vector<PackageRecord> flatpak_remote_records()
             record.description.assign(fields[2]);
             record.summary = record.description;
             record.available_version.assign(fields[3]);
-            record.source = fields[4].empty()
-                ? "Flatpak"
-                : "Flatpak · " + std::string(fields[4]);
+            record.source =
+                "Flatpak " + std::string(installation);
+            if (!fields[4].empty()) {
+                record.source +=
+                    " · " + std::string(fields[4]);
+            }
             record.category = "Flatpak";
             record.kind = PackageKind::application;
             record.channel = Channel::stable;
@@ -262,7 +264,52 @@ std::vector<PackageRecord> flatpak_remote_records()
         }
         start = end + 1U;
     }
+}
 
+std::vector<PackageRecord> flatpak_remote_records()
+{
+    std::vector<PackageRecord> result;
+    if (access("/usr/bin/flatpak", X_OK) != 0 &&
+        access("/bin/flatpak", X_OK) != 0) {
+        return result;
+    }
+
+    const auto installed = flatpak_installed_ids();
+    std::string system_output;
+    std::string user_output;
+    const bool system_ok =
+        run_flatpak_remote_ls(false, system_output);
+    const bool user_ok =
+        run_flatpak_remote_ls(true, user_output);
+
+    if (system_ok) {
+        append_flatpak_remote_records(
+            system_output,
+            "System",
+            installed,
+            result);
+    }
+    if (user_ok) {
+        append_flatpak_remote_records(
+            user_output,
+            "User",
+            installed,
+            result);
+    }
+
+    /*
+     * A ref can be exposed by both installations. Keep the first (system)
+     * record for duplicates while retaining user-only remotes/applications.
+     */
+    std::unordered_set<std::string> seen;
+    result.erase(
+        std::remove_if(
+            result.begin(),
+            result.end(),
+            [&](const PackageRecord &record) {
+                return !seen.insert(record.id).second;
+            }),
+        result.end());
     return result;
 }
 

@@ -5,26 +5,49 @@
 #include <glib.h>
 
 #include <algorithm>
+#include <cerrno>
 #include <chrono>
+#include <cstring>
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 #include <filesystem>
+#include <fcntl.h>
 #include <fstream>
 #include <string>
+#include <unistd.h>
+#include <vector>
 
 namespace {
 
 using namespace infiltrator::software;
 
-std::filesystem::path session_stamp_path()
+std::filesystem::path session_stamp_path(
+    const char *name)
 {
     const char *state = g_get_user_state_dir();
-    if (state == nullptr || *state == '\0') {
+    if (state == nullptr || *state == '\0' ||
+        name == nullptr || *name == '\0') {
         return {};
     }
     return std::filesystem::path(state) /
         "infiltrator-software" /
-        "session-updates.last";
+        name;
 }
+
+std::filesystem::path success_stamp_path()
+{
+    return session_stamp_path(
+        "session-updates.last");
+}
+
+std::filesystem::path attempt_stamp_path()
+{
+    return session_stamp_path(
+        "session-updates.attempt");
+}
+
+std::int64_t last_attempt_memory = 0;
 
 std::int64_t now_unix()
 {
@@ -35,9 +58,10 @@ std::int64_t now_unix()
             .count());
 }
 
-std::int64_t read_stamp()
+std::int64_t read_stamp(
+    const std::filesystem::path &path)
 {
-    std::ifstream input(session_stamp_path());
+    std::ifstream input(path);
     std::int64_t value = 0;
     if (input) {
         input >> value;
@@ -45,25 +69,87 @@ std::int64_t read_stamp()
     return value;
 }
 
-void write_stamp()
+bool write_stamp(
+    const std::filesystem::path &path,
+    const std::int64_t value)
 {
-    const std::filesystem::path path =
-        session_stamp_path();
     if (path.empty()) {
-        return;
+        return false;
     }
+
     std::error_code ec;
     std::filesystem::create_directories(
         path.parent_path(), ec);
     if (ec) {
-        return;
+        return false;
     }
-    std::ofstream output(
-        path,
-        std::ios::out | std::ios::trunc);
-    if (output) {
-        output << now_unix() << '\n';
+
+    std::string pattern =
+        (path.parent_path() /
+         (".session-stamp-" +
+          std::to_string(
+              static_cast<unsigned long long>(getpid())) +
+          "-XXXXXX")).string();
+    std::vector<char> writable(
+        pattern.begin(),
+        pattern.end());
+    writable.push_back('\0');
+
+    const int fd = mkstemp(writable.data());
+    if (fd < 0) {
+        return false;
     }
+
+    const std::string text =
+        std::to_string(value) + "\n";
+    std::size_t offset = 0U;
+    bool ok = true;
+    while (offset < text.size()) {
+        const ssize_t written =
+            write(
+                fd,
+                text.data() + offset,
+                text.size() - offset);
+        if (written > 0) {
+            offset += static_cast<std::size_t>(written);
+            continue;
+        }
+        if (written < 0 && errno == EINTR) {
+            continue;
+        }
+        ok = false;
+        break;
+    }
+
+    if (ok && fsync(fd) != 0) {
+        ok = false;
+    }
+    if (close(fd) != 0) {
+        ok = false;
+    }
+
+    const std::filesystem::path temporary(
+        writable.data());
+    if (!ok ||
+        rename(
+            temporary.c_str(),
+            path.c_str()) != 0) {
+        std::filesystem::remove(temporary, ec);
+        return false;
+    }
+
+    const int directory_fd =
+        open(
+            path.parent_path().c_str(),
+            O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+    if (directory_fd < 0) {
+        return false;
+    }
+    const bool synced =
+        fsync(directory_fd) == 0;
+    const bool closed =
+        close(directory_fd) == 0;
+    return synced && closed;
 }
 
 bool run_updates()
@@ -87,6 +173,15 @@ bool run_updates()
         g_message(
             "Automatic Software session updates deferred while on battery power.");
         return true;
+    }
+
+    last_attempt_memory = now_unix();
+    if (!write_stamp(
+            attempt_stamp_path(),
+            last_attempt_memory)) {
+        g_warning(
+            "Unable to persist the automatic session-update attempt timestamp; "
+            "in-process retry backoff remains active.");
     }
 
     bool success = true;
@@ -114,8 +209,13 @@ bool run_updates()
         }
     }
 
-    if (success) {
-        write_stamp();
+    if (success &&
+        !write_stamp(
+            success_stamp_path(),
+            now_unix())) {
+        g_warning(
+            "Automatic session updates completed, but the success timestamp "
+            "could not be durably persisted.");
     }
     return success;
 }
@@ -137,7 +237,11 @@ gboolean check_due(gpointer user_data)
         return G_SOURCE_CONTINUE;
     }
 
-    const std::int64_t last = read_stamp();
+    const std::int64_t last =
+        std::max(
+            {read_stamp(success_stamp_path()),
+             read_stamp(attempt_stamp_path()),
+             last_attempt_memory});
     const std::int64_t now = now_unix();
     if (last <= 0) {
         const gint64 elapsed =

@@ -273,6 +273,24 @@ int main()
     assert(!table_has_column(
         broken_migration_path, "policy_provider"));
 
+    /*
+     * Version zero is valid only for a genuinely new database. An existing
+     * unversioned schema must never be relabelled as the current format.
+     */
+    const std::filesystem::path unversioned_path =
+        directory / "unversioned.db";
+    assert(execute_sql(
+        unversioned_path,
+        "CREATE TABLE mystery(value TEXT);"));
+    assert(database_user_version(unversioned_path) == 0);
+
+    PackageStateStore unversioned_store(
+        unversioned_path.string());
+    error.clear();
+    assert(!unversioned_store.initialise(error));
+    assert(!error.empty());
+    assert(database_user_version(unversioned_path) == 0);
+
     std::filesystem::remove_all(directory);
     return 0;
 }
