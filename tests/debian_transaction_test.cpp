@@ -378,5 +378,49 @@ int main()
     assert(mintupdate_item->from_version == "7.1.4");
     assert(!mintupdate_item->requested);
 
+    DebianPackageVersion recommended_app =
+        available(
+            "recommended-app",
+            "1.0",
+            20U,
+            200U);
+    recommended_app.recommends =
+        "recommended-addon";
+    DebianPackageVersion recommended_addon =
+        available(
+            "recommended-addon",
+            "1.0",
+            5U,
+            50U);
+
+    TransactionRequest recommends_request;
+    recommends_request.action =
+        TransactionAction::install;
+    recommends_request.package_ids =
+        {"recommended-app"};
+    recommends_request.install_recommends = true;
+
+    error.clear();
+    const auto recommends_plan =
+        DebianTransactionPlanner::plan(
+            recommends_request,
+            {},
+            {recommended_app, recommended_addon},
+            "amd64",
+            16U,
+            "snapshot-16",
+            policy,
+            error);
+    assert(recommends_plan.has_value());
+    assert(error.empty());
+    assert(
+        find_item(
+            *recommends_plan,
+            "recommended-app") != nullptr);
+    assert(
+        find_item(
+            *recommends_plan,
+            "recommended-addon") != nullptr);
+
     return 0;
 }
