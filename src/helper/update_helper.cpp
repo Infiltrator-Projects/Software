@@ -31,6 +31,7 @@ bool valid_automation_setting(const std::string_view key, const std::string_view
 
     const bool boolean_key =
         key == "auto-update-packages" ||
+        key == "auto-remove-obsolete" ||
         key == "install-recommends" ||
         key == "keep-configuration" ||
         key == "snapshot-before-system-updates";
