@@ -12394,9 +12394,30 @@ GtkWidget *preference_spin_row(
     return row;
 }
 
-bool sync_system_automation_preferences(
-    const SoftwarePreferences &preferences,
-    std::string &error)
+struct PreferencesSaveOperation {
+    GtkWindow *preferences_window{};
+    GtkWindow *main_window{};
+    SoftwarePreferences previous;
+    SoftwarePreferences next;
+};
+
+void destroy_preferences_save_operation(
+    PreferencesSaveOperation *operation)
+{
+    if (operation == nullptr) {
+        return;
+    }
+    if (operation->preferences_window != nullptr) {
+        g_object_unref(operation->preferences_window);
+    }
+    if (operation->main_window != nullptr) {
+        g_object_unref(operation->main_window);
+    }
+    delete operation;
+}
+
+std::vector<std::string> automation_preferences_arguments(
+    const SoftwarePreferences &preferences)
 {
     std::vector<std::string> arguments{
         "pkexec",
@@ -12421,7 +12442,125 @@ bool sync_system_automation_preferences(
          preferences.ignored_packages) {
         arguments.push_back("ignore=" + rule);
     }
+    return arguments;
+}
 
+void preferences_automation_sync_complete(
+    GObject *source_object,
+    GAsyncResult *async_result,
+    gpointer user_data)
+{
+    auto *operation =
+        static_cast<PreferencesSaveOperation *>(
+            user_data);
+    auto *process = G_SUBPROCESS(source_object);
+
+    GError *gerror = nullptr;
+    gchar *out = nullptr;
+    gchar *err = nullptr;
+    const gboolean communicated =
+        g_subprocess_communicate_utf8_finish(
+            process,
+            async_result,
+            &out,
+            &err,
+            &gerror);
+    const bool success =
+        communicated != FALSE &&
+        g_subprocess_get_successful(process);
+
+    auto *context =
+        operation == nullptr ||
+        operation->preferences_window == nullptr
+            ? nullptr
+            : static_cast<PreferencesDialogContext *>(
+                  g_object_get_data(
+                      G_OBJECT(operation->preferences_window),
+                      "software-preferences-context"));
+    auto *state =
+        operation == nullptr ||
+        operation->main_window == nullptr
+            ? nullptr
+            : static_cast<WindowState *>(
+                  g_object_get_data(
+                      G_OBJECT(operation->main_window),
+                      "infiltrator-window-state"));
+
+    if (success) {
+        if (state != nullptr) {
+            state->preferences =
+                operation->next;
+        }
+        if (operation != nullptr &&
+            operation->preferences_window != nullptr) {
+            gtk_window_destroy(
+                operation->preferences_window);
+        }
+        if (state != nullptr) {
+            refresh_updates(state, false);
+        }
+    } else {
+        std::string message;
+        if (err != nullptr && *err != '\0') {
+            message = one_line(err);
+        } else if (
+            gerror != nullptr &&
+            gerror->message != nullptr) {
+            message = gerror->message;
+        } else {
+            message =
+                "Automatic system-update settings were not applied.";
+        }
+
+        std::string rollback_error;
+        const bool rolled_back =
+            operation != nullptr &&
+            save_software_preferences(
+                operation->previous,
+                rollback_error);
+        if (!rolled_back) {
+            message +=
+                " The previous user preferences could not be restored: " +
+                rollback_error;
+        }
+
+        if (context != nullptr &&
+            context->status != nullptr) {
+            gtk_label_set_text(
+                GTK_LABEL(context->status),
+                message.c_str());
+        }
+        if (operation != nullptr &&
+            operation->preferences_window != nullptr) {
+            gtk_widget_set_sensitive(
+                GTK_WIDGET(operation->preferences_window),
+                true);
+        }
+    }
+
+    g_free(out);
+    g_free(err);
+    g_clear_error(&gerror);
+    destroy_preferences_save_operation(operation);
+}
+
+bool start_preferences_automation_sync(
+    PreferencesDialogContext *context,
+    const SoftwarePreferences &previous,
+    const SoftwarePreferences &next,
+    std::string &error)
+{
+    if (context == nullptr ||
+        context->window == nullptr ||
+        context->state == nullptr ||
+        context->state->window == nullptr) {
+        error =
+            "Software Preferences window state is unavailable.";
+        return false;
+    }
+
+    std::vector<std::string> arguments =
+        automation_preferences_arguments(next);
     std::vector<const gchar *> argv;
     argv.reserve(arguments.size() + 1U);
     for (const std::string &argument : arguments) {
@@ -12439,46 +12578,38 @@ bool sync_system_automation_preferences(
             &gerror);
     if (process == nullptr) {
         error =
-            gerror != nullptr && gerror->message != nullptr
+            gerror != nullptr &&
+            gerror->message != nullptr
                 ? gerror->message
                 : "Unable to start the automatic-update configuration helper.";
         g_clear_error(&gerror);
         return false;
     }
 
-    gchar *out = nullptr;
-    gchar *err = nullptr;
-    const gboolean communicated =
-        g_subprocess_communicate_utf8(
-            process,
-            nullptr,
-            nullptr,
-            &out,
-            &err,
-            &gerror);
-    const bool success =
-        communicated &&
-        g_subprocess_get_successful(process);
-    if (!success) {
-        if (err != nullptr && *err != '\0') {
-            error = one_line(err);
-        } else if (
-            gerror != nullptr &&
-            gerror->message != nullptr) {
-            error = gerror->message;
-        } else {
-            error =
-                "Automatic system-update settings were not applied.";
-        }
-    } else {
-        error.clear();
+    auto *operation =
+        new PreferencesSaveOperation{
+            GTK_WINDOW(g_object_ref(context->window)),
+            GTK_WINDOW(g_object_ref(context->state->window)),
+            previous,
+            next};
+
+    gtk_widget_set_sensitive(
+        GTK_WIDGET(context->window), false);
+    if (context->status != nullptr) {
+        gtk_label_set_text(
+            GTK_LABEL(context->status),
+            "Applying automatic-update settings…");
     }
 
-    g_free(out);
-    g_free(err);
-    g_clear_error(&gerror);
+    g_subprocess_communicate_utf8_async(
+        process,
+        nullptr,
+        nullptr,
+        preferences_automation_sync_complete,
+        operation);
     g_object_unref(process);
-    return success;
+    error.clear();
+    return true;
 }
 
 void preferences_save(GtkButton *, gpointer user_data)
@@ -12618,9 +12749,10 @@ void preferences_save(GtkButton *, gpointer user_data)
         preferences.ignored_packages !=
             context->state->preferences.ignored_packages;
 
+    const SoftwarePreferences previous =
+        context->state->preferences;
     std::string error;
-    if (automation_changed &&
-        !sync_system_automation_preferences(
+    if (!save_software_preferences(
             preferences, error)) {
         gtk_label_set_text(
             GTK_LABEL(context->status),
@@ -12628,11 +12760,27 @@ void preferences_save(GtkButton *, gpointer user_data)
         return;
     }
 
-    if (!save_software_preferences(
-            preferences, error)) {
-        gtk_label_set_text(
-            GTK_LABEL(context->status),
-            error.c_str());
+    if (automation_changed) {
+        if (!start_preferences_automation_sync(
+                context,
+                previous,
+                preferences,
+                error)) {
+            std::string rollback_error;
+            const bool rolled_back =
+                save_software_preferences(
+                    previous,
+                    rollback_error);
+            std::string message = error;
+            if (!rolled_back) {
+                message +=
+                    " The previous user preferences could not be restored: " +
+                    rollback_error;
+            }
+            gtk_label_set_text(
+                GTK_LABEL(context->status),
+                message.c_str());
+        }
         return;
     }
 
@@ -12652,9 +12800,14 @@ void settings_clicked(GtkButton *, gpointer user_data)
     }
 
     std::string preference_error;
-    (void)load_software_preferences(
-        state->preferences,
-        preference_error);
+    SoftwarePreferences loaded_preferences =
+        state->preferences;
+    if (load_software_preferences(
+            loaded_preferences,
+            preference_error)) {
+        state->preferences =
+            std::move(loaded_preferences);
+    }
 
     GtkWidget *window = gtk_window_new();
     gtk_window_set_title(
