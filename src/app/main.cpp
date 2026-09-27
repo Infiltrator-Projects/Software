@@ -13,6 +13,7 @@
 #include "sources/source_inventory.hpp"
 
 #include <gtk/gtk.h>
+#include <curl/curl.h>
 #include <infiltratr/core.h>
 
 #include <algorithm>
@@ -5245,6 +5246,323 @@ void select_security_updates(GtkButton *, gpointer user_data)
     update_selection_controls(state);
 }
 
+struct ChangelogTaskData {
+    PackageRecord package;
+};
+
+struct ChangelogResult {
+    std::string text;
+    std::string source;
+    std::string error;
+};
+
+std::size_t changelog_write(
+    char *data,
+    const std::size_t size,
+    const std::size_t count,
+    void *user_data)
+{
+    auto *text =
+        static_cast<std::string *>(user_data);
+    const std::size_t bytes = size * count;
+    if (text == nullptr ||
+        bytes > 2U * 1024U * 1024U ||
+        text->size() >
+            2U * 1024U * 1024U - bytes) {
+        return 0U;
+    }
+    text->append(data, bytes);
+    return bytes;
+}
+
+bool fetch_changelog_url(
+    const std::string &url,
+    std::string &text)
+{
+    CURL *curl = curl_easy_init();
+    if (curl == nullptr) {
+        return false;
+    }
+
+    text.clear();
+    curl_easy_setopt(
+        curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(
+        curl, CURLOPT_FOLLOWLOCATION, 1L);
+    curl_easy_setopt(
+        curl, CURLOPT_CONNECTTIMEOUT, 8L);
+    curl_easy_setopt(
+        curl, CURLOPT_TIMEOUT, 15L);
+    curl_easy_setopt(
+        curl, CURLOPT_USERAGENT,
+        "Infiltrator-Software/" INFILTRATOR_SOFTWARE_VERSION);
+    curl_easy_setopt(
+        curl, CURLOPT_WRITEFUNCTION,
+        changelog_write);
+    curl_easy_setopt(
+        curl, CURLOPT_WRITEDATA, &text);
+
+    const CURLcode result =
+        curl_easy_perform(curl);
+    long response = 0;
+    (void)curl_easy_getinfo(
+        curl,
+        CURLINFO_RESPONSE_CODE,
+        &response);
+    curl_easy_cleanup(curl);
+
+    return result == CURLE_OK &&
+           response >= 200L &&
+           response < 300L &&
+           !text.empty();
+}
+
+std::vector<std::string> changelog_urls(
+    const PackageRecord &package)
+{
+    std::string source =
+        package.source_package.empty()
+            ? package.package_name
+            : package.source_package;
+    if (source.empty() ||
+        package.available_version.empty()) {
+        return {};
+    }
+
+    std::string version =
+        package.available_version;
+    const std::size_t epoch = version.find(':');
+    if (epoch != std::string::npos) {
+        version.erase(0U, epoch + 1U);
+    }
+
+    const std::string prefix =
+        source.rfind("lib", 0U) == 0U &&
+        source.size() >= 4U
+            ? source.substr(0U, 4U)
+            : source.substr(0U, 1U);
+
+    std::string origin =
+        package.repository_origin;
+    std::transform(
+        origin.begin(),
+        origin.end(),
+        origin.begin(),
+        [](const unsigned char ch) {
+            return static_cast<char>(
+                std::tolower(ch));
+        });
+
+    std::vector<std::string> urls;
+    if (origin.find("ubuntu") !=
+        std::string::npos) {
+        if (source == "linux" ||
+            source.rfind("linux-", 0U) == 0U) {
+            const std::string kernel =
+                version.substr(
+                    0U,
+                    version.find('~'));
+            urls.push_back(
+                "https://changelogs.ubuntu.com/changelogs/pool/main/l/linux/linux_" +
+                kernel + "/changelog");
+        } else {
+            for (const char *component :
+                 {"main", "universe",
+                  "multiverse", "restricted"}) {
+                urls.push_back(
+                    "https://changelogs.ubuntu.com/changelogs/pool/" +
+                    std::string(component) + "/" +
+                    prefix + "/" + source + "/" +
+                    source + "_" + version +
+                    "/changelog");
+            }
+        }
+    } else if (
+        origin.find("debian") !=
+        std::string::npos) {
+        for (const char *component :
+             {"main", "contrib",
+              "non-free", "non-free-firmware"}) {
+            urls.push_back(
+                "https://metadata.ftp-master.debian.org/changelogs/" +
+                std::string(component) + "/" +
+                prefix + "/" + source + "/" +
+                source + "_" + version +
+                "_changelog");
+        }
+    } else if (
+        origin.find("linuxmint") !=
+        std::string::npos) {
+        urls.push_back(
+            "https://packages.linuxmint.com/dev/" +
+            source + "_" + version +
+            "_amd64.changes");
+        urls.push_back(
+            "https://packages.linuxmint.com/dev/" +
+            source + "_" + version +
+            "_i386.changes");
+    }
+    return urls;
+}
+
+void changelog_worker(
+    GTask *task,
+    gpointer,
+    gpointer task_data,
+    GCancellable *)
+{
+    auto *data =
+        static_cast<ChangelogTaskData *>(
+            task_data);
+    auto *result = new ChangelogResult{};
+    if (data == nullptr) {
+        result->error =
+            "Update metadata is unavailable.";
+    } else {
+        for (const std::string &url :
+             changelog_urls(data->package)) {
+            if (fetch_changelog_url(
+                    url, result->text)) {
+                result->source = url;
+                break;
+            }
+        }
+        if (result->text.empty()) {
+            result->error =
+                "No published changelog could be retrieved for this update.";
+        }
+    }
+
+    g_task_return_pointer(
+        task,
+        result,
+        [](gpointer pointer) {
+            delete static_cast<ChangelogResult *>(
+                pointer);
+        });
+}
+
+void changelog_complete(
+    GObject *source_object,
+    GAsyncResult *async_result,
+    gpointer)
+{
+    GtkWidget *view =
+        GTK_WIDGET(source_object);
+    auto *result =
+        static_cast<ChangelogResult *>(
+            g_task_propagate_pointer(
+                G_TASK(async_result),
+                nullptr));
+    if (view == nullptr ||
+        result == nullptr) {
+        delete result;
+        return;
+    }
+
+    GtkTextBuffer *buffer =
+        gtk_text_view_get_buffer(
+            GTK_TEXT_VIEW(view));
+    const std::string text =
+        result->error.empty()
+            ? result->text
+            : result->error;
+    gtk_text_buffer_set_text(
+        buffer,
+        text.c_str(),
+        -1);
+    if (!result->source.empty()) {
+        gtk_widget_set_tooltip_text(
+            view,
+            result->source.c_str());
+    }
+    delete result;
+}
+
+void update_changelog_clicked(
+    GtkButton *button,
+    gpointer user_data)
+{
+    auto *state =
+        static_cast<WindowState *>(user_data);
+    auto *package =
+        static_cast<PackageRecord *>(
+            g_object_get_data(
+                G_OBJECT(button),
+                "update-package"));
+    if (state == nullptr ||
+        state->window == nullptr ||
+        package == nullptr) {
+        return;
+    }
+
+    GtkWidget *window =
+        gtk_window_new();
+    gtk_window_set_title(
+        GTK_WINDOW(window),
+        "Update changelog");
+    gtk_window_set_transient_for(
+        GTK_WINDOW(window),
+        state->window);
+    gtk_window_set_destroy_with_parent(
+        GTK_WINDOW(window),
+        true);
+    gtk_window_set_default_size(
+        GTK_WINDOW(window),
+        760, 620);
+
+    GtkWidget *scroll =
+        gtk_scrolled_window_new();
+    gtk_scrolled_window_set_policy(
+        GTK_SCROLLED_WINDOW(scroll),
+        GTK_POLICY_AUTOMATIC,
+        GTK_POLICY_AUTOMATIC);
+    GtkWidget *view =
+        gtk_text_view_new();
+    gtk_text_view_set_editable(
+        GTK_TEXT_VIEW(view),
+        false);
+    gtk_text_view_set_cursor_visible(
+        GTK_TEXT_VIEW(view),
+        false);
+    gtk_text_view_set_wrap_mode(
+        GTK_TEXT_VIEW(view),
+        GTK_WRAP_WORD_CHAR);
+    gtk_text_buffer_set_text(
+        gtk_text_view_get_buffer(
+            GTK_TEXT_VIEW(view)),
+        "Downloading changelog…",
+        -1);
+    gtk_scrolled_window_set_child(
+        GTK_SCROLLED_WINDOW(scroll),
+        view);
+    gtk_window_set_child(
+        GTK_WINDOW(window),
+        scroll);
+    gtk_window_present(
+        GTK_WINDOW(window));
+
+    auto *data =
+        new ChangelogTaskData{*package};
+    GTask *task =
+        g_task_new(
+            G_OBJECT(view),
+            nullptr,
+            changelog_complete,
+            nullptr);
+    g_task_set_task_data(
+        task,
+        data,
+        [](gpointer pointer) {
+            delete static_cast<ChangelogTaskData *>(
+                pointer);
+        });
+    g_task_run_in_thread(
+        task,
+        changelog_worker);
+    g_object_unref(task);
+}
+
 struct UpdateDetailsContext {
     WindowState *state{};
     PackageRecord package;
@@ -5435,6 +5753,24 @@ void update_details_clicked(GtkButton *button, gpointer user_data)
 
     auto *context = new UpdateDetailsContext{
         state, *package, nullptr};
+
+    GtkWidget *changelog =
+        gtk_button_new_with_label(
+            "Changelog");
+    gtk_widget_set_halign(
+        changelog, GTK_ALIGN_START);
+    g_object_set_data_full(
+        G_OBJECT(changelog),
+        "update-package",
+        new PackageRecord(*package),
+        package_record_destroy);
+    g_signal_connect(
+        changelog,
+        "clicked",
+        G_CALLBACK(update_changelog_clicked),
+        state);
+    gtk_box_append(
+        GTK_BOX(box), changelog);
 
     GtkWidget *ignore =
         gtk_button_new_with_label(
