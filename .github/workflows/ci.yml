@@ -126,8 +126,15 @@ jobs:
           assert "discover_flatpak_updates" in app
           assert "discover_cinnamon_updates" in app
           assert "apply_flatpak_updates" in app
-          assert "apply_cinnamon_updates" in app
-          assert '"cinnamon-spice-updater"' in external_updates
+          assert "apply_cinnamon_updates_selected" in app
+          assert "selected_cinnamon_refs" in app
+          cinnamon_native = Path("src/external/cinnamon_spices.cpp").read_text()
+          assert "discover_native_cinnamon_updates" in cinnamon_native
+          assert '"/json/actions.json"' in cinnamon_native
+          assert "apply_native_cinnamon_updates_selected" in cinnamon_native
+          assert "extract_zip_safely" in cinnamon_native
+          assert "CURLOPT_XFERINFOFUNCTION" in cinnamon_native
+          assert '"cinnamon-spice-updater"' not in external_updates
           assert '"flatpak", "uninstall"' in external_updates
           assert '"--unused"' in external_updates
           assert '"org.gtk.Gtk3theme."' in external_updates
