@@ -192,11 +192,13 @@ target_include_directories(software-sources PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/src")
 
 add_library(software-external STATIC
-    src/external/external_updates.cpp)
+    src/external/external_updates.cpp
+    src/external/cinnamon_spices.cpp)
 target_include_directories(software-external PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_link_libraries(software-external PUBLIC
-    software-core PkgConfig::GIO)
+    software-core PkgConfig::GIO
+    PkgConfig::CURL PkgConfig::JSON_GLIB PkgConfig::ZLIB)
 
 add_library(software-apt-plan-guard STATIC
     src/helper/apt_plan_guard.cpp)
@@ -223,7 +225,8 @@ target_compile_definitions(infiltrator-software-engine PRIVATE
 add_executable(infiltrator-software-tray
     src/tray/main.cpp)
 target_link_libraries(infiltrator-software-tray PRIVATE
-    software-client software-history PkgConfig::GTK3 PkgConfig::XAPP)
+    software-client software-history software-external
+    PkgConfig::GTK3 PkgConfig::XAPP)
 
 add_executable(infiltrator-software-session-updater
     src/session/main.cpp)
