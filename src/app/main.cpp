@@ -5767,6 +5767,99 @@ bool fetch_changelog_url(
            !text.empty();
 }
 
+std::optional<std::string> ppa_pool_base(
+    const std::string &origin)
+{
+    if (origin.rfind("LP-PPA-", 0U) != 0U) {
+        return std::nullopt;
+    }
+
+    std::vector<std::filesystem::path> files{
+        "/etc/apt/sources.list"};
+    std::error_code ec;
+    const std::filesystem::path directory{
+        "/etc/apt/sources.list.d"};
+    if (std::filesystem::is_directory(
+            directory, ec) &&
+        !ec) {
+        for (const auto &entry :
+             std::filesystem::directory_iterator(
+                 directory, ec)) {
+            if (ec) {
+                break;
+            }
+            if (entry.is_regular_file(ec) &&
+                !ec) {
+                files.push_back(
+                    entry.path());
+            }
+            ec.clear();
+        }
+    }
+
+    for (const auto &path : files) {
+        std::ifstream input(path);
+        std::string line;
+        while (std::getline(input, line)) {
+            const std::size_t host =
+                line.find(
+                    "ppa.launchpadcontent.net/");
+            const std::size_t legacy =
+                line.find(
+                    "ppa.launchpad.net/");
+            const std::size_t start =
+                host != std::string::npos
+                    ? host +
+                          std::strlen(
+                              "ppa.launchpadcontent.net/")
+                    : legacy != std::string::npos
+                        ? legacy +
+                              std::strlen(
+                                  "ppa.launchpad.net/")
+                        : std::string::npos;
+            if (start ==
+                std::string::npos) {
+                continue;
+            }
+
+            const std::size_t owner_end =
+                line.find('/', start);
+            if (owner_end ==
+                std::string::npos) {
+                continue;
+            }
+            const std::size_t name_end =
+                line.find(
+                    '/',
+                    owner_end + 1U);
+            if (name_end ==
+                std::string::npos) {
+                continue;
+            }
+            const std::string owner =
+                line.substr(
+                    start,
+                    owner_end - start);
+            const std::string name =
+                line.substr(
+                    owner_end + 1U,
+                    name_end -
+                        owner_end - 1U);
+            if ("LP-PPA-" + owner +
+                    "-" + name !=
+                origin) {
+                continue;
+            }
+
+            return
+                "https://ppa.launchpadcontent.net/" +
+                owner + "/" + name +
+                "/ubuntu/pool/main";
+        }
+    }
+    return std::nullopt;
+}
+
 std::vector<std::string> changelog_urls(
     const PackageRecord &package)
 {
@@ -5851,6 +5944,26 @@ std::vector<std::string> changelog_urls(
             "https://packages.linuxmint.com/dev/" +
             source + "_" + version +
             "_i386.changes");
+    } else if (
+        package.repository_origin.rfind(
+            "LP-PPA-", 0U) == 0U) {
+        const auto pool =
+            ppa_pool_base(
+                package.repository_origin);
+        if (pool.has_value()) {
+            urls.push_back(
+                *pool + "/" +
+                prefix + "/" + source +
+                "/" + source + "_" +
+                version +
+                "_source.changes");
+            urls.push_back(
+                *pool + "/" +
+                prefix + "/" + source +
+                "/" + source + "_" +
+                version +
+                "_amd64.changes");
+        }
     }
     return urls;
 }
