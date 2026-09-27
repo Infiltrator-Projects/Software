@@ -15,7 +15,8 @@ enum class ExternalUpdateKind {
     cinnamon_applet,
     cinnamon_desklet,
     cinnamon_extension,
-    cinnamon_theme
+    cinnamon_theme,
+    nemo_action
 };
 
 struct ExternalUpdate {
