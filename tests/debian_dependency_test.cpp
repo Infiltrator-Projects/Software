@@ -269,5 +269,37 @@ int main()
             {}, "amd64", {});
     assert(!unversioned_cannot_fake_version.complete());
 
+    DebianPackageVersion recommends_owner =
+        package("recommends-owner", "1.0");
+    recommends_owner.recommends = "recommended-helper";
+    const DebianPackageVersion recommended_helper =
+        package("recommended-helper", "1.0");
+
+    const DebianResolution without_recommends =
+        DebianDependencyResolver::resolve(
+            {recommends_owner},
+            {},
+            {recommended_helper},
+            "amd64",
+            {},
+            false);
+    assert(without_recommends.complete());
+    assert(!contains(
+        without_recommends.selected,
+        "recommended-helper"));
+
+    const DebianResolution with_recommends =
+        DebianDependencyResolver::resolve(
+            {recommends_owner},
+            {},
+            {recommended_helper},
+            "amd64",
+            {},
+            true);
+    assert(with_recommends.complete());
+    assert(contains(
+        with_recommends.selected,
+        "recommended-helper"));
+
     return 0;
 }
