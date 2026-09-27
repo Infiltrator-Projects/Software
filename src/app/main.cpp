@@ -7663,8 +7663,16 @@ void begin_apply_updates(WindowState *state)
         "apply-plan",
         "--progress-token=" +
             state->updates_progress_token};
-    arguments.reserve(specs.size() + 4U);
-    arguments.insert(arguments.end(), specs.begin(), specs.end());
+    if (state->preferences.keep_configuration) {
+        arguments.emplace_back(
+            "--force-confold");
+    }
+    arguments.reserve(
+        specs.size() + 5U);
+    arguments.insert(
+        arguments.end(),
+        specs.begin(),
+        specs.end());
 
     state->pending_update_plan.reset();
     start_update_process(
