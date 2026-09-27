@@ -9762,6 +9762,185 @@ void theme_clicked(GtkButton *, gpointer user_data)
     update_theme_button(state);
 }
 
+struct PreferencesDialogContext {
+    WindowState *state{};
+    GtkWindow *window{};
+    GtkWidget *refresh_enabled{};
+    GtkWidget *first_refresh{};
+    GtkWidget *recurring_refresh{};
+    GtkWidget *notifications{};
+    GtkWidget *security_notifications{};
+    GtkWidget *show_flatpak{};
+    GtkWidget *show_cinnamon{};
+    GtkWidget *auto_packages{};
+    GtkWidget *auto_flatpaks{};
+    GtkWidget *auto_cinnamon{};
+    GtkWidget *hide_after{};
+    GtkWidget *hide_tray{};
+    GtkWidget *install_recommends{};
+    GtkWidget *keep_configuration{};
+    GtkWidget *snapshot_before{};
+    GtkWidget *ignored{};
+    GtkWidget *status{};
+};
+
+void destroy_preferences_context(gpointer data)
+{
+    delete static_cast<PreferencesDialogContext *>(data);
+}
+
+GtkWidget *preference_check(
+    const char *label,
+    const bool active)
+{
+    GtkWidget *button =
+        gtk_check_button_new_with_label(label);
+    gtk_check_button_set_active(
+        GTK_CHECK_BUTTON(button), active);
+    return button;
+}
+
+GtkWidget *preference_spin_row(
+    const char *label,
+    const unsigned value,
+    GtkWidget **out)
+{
+    GtkWidget *row =
+        gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    GtkWidget *copy =
+        make_label(label, "preferences-copy");
+    gtk_widget_set_hexpand(copy, true);
+
+    GtkWidget *spin =
+        gtk_spin_button_new_with_range(
+            1.0, 10080.0, 1.0);
+    gtk_spin_button_set_value(
+        GTK_SPIN_BUTTON(spin),
+        static_cast<double>(value));
+    gtk_box_append(GTK_BOX(row), copy);
+    gtk_box_append(GTK_BOX(row), spin);
+
+    if (out != nullptr) {
+        *out = spin;
+    }
+    return row;
+}
+
+void preferences_save(GtkButton *, gpointer user_data)
+{
+    auto *context =
+        static_cast<PreferencesDialogContext *>(user_data);
+    if (context == nullptr ||
+        context->state == nullptr) {
+        return;
+    }
+
+    SoftwarePreferences preferences =
+        context->state->preferences;
+
+    preferences.refresh_schedule_enabled =
+        gtk_check_button_get_active(
+            GTK_CHECK_BUTTON(context->refresh_enabled));
+    preferences.first_refresh_minutes =
+        static_cast<unsigned>(
+            gtk_spin_button_get_value_as_int(
+                GTK_SPIN_BUTTON(context->first_refresh)));
+    preferences.recurring_refresh_minutes =
+        static_cast<unsigned>(
+            gtk_spin_button_get_value_as_int(
+                GTK_SPIN_BUTTON(context->recurring_refresh)));
+
+    preferences.notifications_enabled =
+        gtk_check_button_get_active(
+            GTK_CHECK_BUTTON(context->notifications));
+    preferences.notifications_security_only =
+        gtk_check_button_get_active(
+            GTK_CHECK_BUTTON(context->security_notifications));
+
+    preferences.show_flatpak_updates =
+        gtk_check_button_get_active(
+            GTK_CHECK_BUTTON(context->show_flatpak));
+    preferences.show_cinnamon_updates =
+        gtk_check_button_get_active(
+            GTK_CHECK_BUTTON(context->show_cinnamon));
+
+    preferences.auto_update_packages =
+        gtk_check_button_get_active(
+            GTK_CHECK_BUTTON(context->auto_packages));
+    preferences.auto_update_flatpaks =
+        gtk_check_button_get_active(
+            GTK_CHECK_BUTTON(context->auto_flatpaks));
+    preferences.auto_update_cinnamon_spices =
+        gtk_check_button_get_active(
+            GTK_CHECK_BUTTON(context->auto_cinnamon));
+
+    preferences.hide_window_after_update =
+        gtk_check_button_get_active(
+            GTK_CHECK_BUTTON(context->hide_after));
+    preferences.hide_tray =
+        gtk_check_button_get_active(
+            GTK_CHECK_BUTTON(context->hide_tray));
+    preferences.install_recommends =
+        gtk_check_button_get_active(
+            GTK_CHECK_BUTTON(context->install_recommends));
+    preferences.keep_configuration =
+        gtk_check_button_get_active(
+            GTK_CHECK_BUTTON(context->keep_configuration));
+    preferences.snapshot_before_system_updates =
+        gtk_check_button_get_active(
+            GTK_CHECK_BUTTON(context->snapshot_before));
+
+    preferences.ignored_packages.clear();
+    GtkTextBuffer *buffer =
+        gtk_text_view_get_buffer(
+            GTK_TEXT_VIEW(context->ignored));
+    GtkTextIter begin;
+    GtkTextIter finish;
+    gtk_text_buffer_get_bounds(
+        buffer, &begin, &finish);
+    gchar *ignored =
+        gtk_text_buffer_get_text(
+            buffer, &begin, &finish, false);
+    if (ignored != nullptr) {
+        std::istringstream input(ignored);
+        std::string line;
+        while (std::getline(input, line)) {
+            const auto first =
+                std::find_if(
+                    line.begin(),
+                    line.end(),
+                    [](const unsigned char ch) {
+                        return std::isspace(ch) == 0;
+                    });
+            line.erase(line.begin(), first);
+            while (!line.empty() &&
+                   std::isspace(
+                       static_cast<unsigned char>(
+                           line.back())) != 0) {
+                line.pop_back();
+            }
+            if (!line.empty()) {
+                preferences.ignored_packages.push_back(line);
+            }
+        }
+    }
+    g_free(ignored);
+
+    std::string error;
+    if (!save_software_preferences(
+            preferences, error)) {
+        gtk_label_set_text(
+            GTK_LABEL(context->status),
+            error.c_str());
+        return;
+    }
+
+    context->state->preferences =
+        std::move(preferences);
+    gtk_window_destroy(context->window);
+    refresh_updates(context->state, false);
+}
+
 void settings_clicked(GtkButton *, gpointer user_data)
 {
     auto *state =
@@ -9770,6 +9949,11 @@ void settings_clicked(GtkButton *, gpointer user_data)
         state->window == nullptr) {
         return;
     }
+
+    std::string preference_error;
+    (void)load_software_preferences(
+        state->preferences,
+        preference_error);
 
     GtkWidget *window = gtk_window_new();
     gtk_window_set_title(
@@ -9783,7 +9967,17 @@ void settings_clicked(GtkButton *, gpointer user_data)
     gtk_window_set_destroy_with_parent(
         GTK_WINDOW(window), true);
     gtk_window_set_default_size(
-        GTK_WINDOW(window), 380, 250);
+        GTK_WINDOW(window), 620, 720);
+
+    auto *context =
+        new PreferencesDialogContext{};
+    context->state = state;
+    context->window = GTK_WINDOW(window);
+    g_object_set_data_full(
+        G_OBJECT(window),
+        "software-preferences-context",
+        context,
+        destroy_preferences_context);
 
     GtkWidget *content =
         gtk_box_new(
@@ -9795,39 +9989,212 @@ void settings_clicked(GtkButton *, gpointer user_data)
     gtk_widget_set_margin_start(content, 18);
     gtk_widget_set_margin_end(content, 18);
 
-    GtkWidget *title =
-        make_label(
-            "Software Preferences",
-            "preferences-title");
-    GtkWidget *copy =
-        make_label(
-            "Choose how Infiltrator Software follows your desktop appearance.",
-            "preferences-copy");
-    gtk_label_set_wrap(
-        GTK_LABEL(copy), true);
-
-    gtk_box_append(
-        GTK_BOX(content), title);
-    gtk_box_append(
-        GTK_BOX(content), copy);
     gtk_box_append(
         GTK_BOX(content),
+        make_label(
+            "Software Preferences",
+            "preferences-title"));
+    GtkWidget *intro =
+        make_label(
+            "Update scheduling, notifications, automation, compatibility policy and ignored updates.",
+            "preferences-copy");
+    gtk_label_set_wrap(GTK_LABEL(intro), true);
+    gtk_box_append(GTK_BOX(content), intro);
+
+    GtkWidget *scroll =
+        gtk_scrolled_window_new();
+    gtk_widget_set_vexpand(scroll, true);
+    GtkWidget *options =
+        gtk_box_new(
+            GTK_ORIENTATION_VERTICAL, 10);
+    gtk_scrolled_window_set_child(
+        GTK_SCROLLED_WINDOW(scroll),
+        options);
+
+    gtk_box_append(
+        GTK_BOX(options),
+        make_label("Appearance", "card-title"));
+    gtk_box_append(
+        GTK_BOX(options),
         state->theme.create_selector());
+
+    gtk_box_append(
+        GTK_BOX(options),
+        make_label("Refresh schedule", "card-title"));
+    context->refresh_enabled =
+        preference_check(
+            "Enable scheduled repository refresh",
+            state->preferences.refresh_schedule_enabled);
+    gtk_box_append(
+        GTK_BOX(options),
+        context->refresh_enabled);
+    gtk_box_append(
+        GTK_BOX(options),
+        preference_spin_row(
+            "First refresh after startup (minutes)",
+            state->preferences.first_refresh_minutes,
+            &context->first_refresh));
+    gtk_box_append(
+        GTK_BOX(options),
+        preference_spin_row(
+            "Recurring refresh interval (minutes)",
+            state->preferences.recurring_refresh_minutes,
+            &context->recurring_refresh));
+
+    gtk_box_append(
+        GTK_BOX(options),
+        make_label("Notifications", "card-title"));
+    context->notifications =
+        preference_check(
+            "Notify when updates remain outstanding",
+            state->preferences.notifications_enabled);
+    context->security_notifications =
+        preference_check(
+            "Age notifications from security and kernel updates only",
+            state->preferences.notifications_security_only);
+    gtk_box_append(
+        GTK_BOX(options),
+        context->notifications);
+    gtk_box_append(
+        GTK_BOX(options),
+        context->security_notifications);
+
+    gtk_box_append(
+        GTK_BOX(options),
+        make_label("Update sources", "card-title"));
+    context->show_flatpak =
+        preference_check(
+            "Show Flatpak updates",
+            state->preferences.show_flatpak_updates);
+    context->show_cinnamon =
+        preference_check(
+            "Show Cinnamon Spice updates",
+            state->preferences.show_cinnamon_updates);
+    gtk_box_append(GTK_BOX(options), context->show_flatpak);
+    gtk_box_append(GTK_BOX(options), context->show_cinnamon);
+
+    gtk_box_append(
+        GTK_BOX(options),
+        make_label("Automatic updates", "card-title"));
+    context->auto_packages =
+        preference_check(
+            "Automatically install system package updates",
+            state->preferences.auto_update_packages);
+    context->auto_flatpaks =
+        preference_check(
+            "Automatically update Flatpaks",
+            state->preferences.auto_update_flatpaks);
+    context->auto_cinnamon =
+        preference_check(
+            "Automatically update Cinnamon Spices",
+            state->preferences.auto_update_cinnamon_spices);
+    gtk_box_append(GTK_BOX(options), context->auto_packages);
+    gtk_box_append(GTK_BOX(options), context->auto_flatpaks);
+    gtk_box_append(GTK_BOX(options), context->auto_cinnamon);
+
+    gtk_box_append(
+        GTK_BOX(options),
+        make_label("Behaviour", "card-title"));
+    context->hide_after =
+        preference_check(
+            "Hide Software after a successful update",
+            state->preferences.hide_window_after_update);
+    context->hide_tray =
+        preference_check(
+            "Hide the update indicator when up to date",
+            state->preferences.hide_tray);
+    context->install_recommends =
+        preference_check(
+            "Install recommended packages when requested",
+            state->preferences.install_recommends);
+    context->keep_configuration =
+        preference_check(
+            "Keep locally modified configuration files",
+            state->preferences.keep_configuration);
+    context->snapshot_before =
+        preference_check(
+            "Offer a snapshot before system-critical updates",
+            state->preferences.snapshot_before_system_updates);
+    gtk_box_append(GTK_BOX(options), context->hide_after);
+    gtk_box_append(GTK_BOX(options), context->hide_tray);
+    gtk_box_append(GTK_BOX(options), context->install_recommends);
+    gtk_box_append(GTK_BOX(options), context->keep_configuration);
+    gtk_box_append(GTK_BOX(options), context->snapshot_before);
+
+    gtk_box_append(
+        GTK_BOX(options),
+        make_label("Ignored updates", "card-title"));
+    GtkWidget *ignored_help =
+        make_label(
+            "One source-package pattern per line. Wildcards are supported. Use package=VERSION to ignore only one version.",
+            "preferences-copy");
+    gtk_label_set_wrap(
+        GTK_LABEL(ignored_help), true);
+    gtk_box_append(
+        GTK_BOX(options), ignored_help);
+
+    context->ignored =
+        gtk_text_view_new();
+    gtk_widget_set_size_request(
+        context->ignored, -1, 120);
+    GtkTextBuffer *ignored_buffer =
+        gtk_text_view_get_buffer(
+            GTK_TEXT_VIEW(context->ignored));
+    std::string ignored_text;
+    for (const std::string &rule :
+         state->preferences.ignored_packages) {
+        ignored_text += rule;
+        ignored_text += '\n';
+    }
+    gtk_text_buffer_set_text(
+        ignored_buffer,
+        ignored_text.c_str(),
+        -1);
+    gtk_box_append(
+        GTK_BOX(options),
+        context->ignored);
+
+    gtk_box_append(
+        GTK_BOX(content), scroll);
+
+    context->status =
+        make_label(
+            preference_error.c_str(),
+            "preferences-copy");
+    gtk_box_append(
+        GTK_BOX(content), context->status);
+
+    GtkWidget *actions =
+        gtk_box_new(
+            GTK_ORIENTATION_HORIZONTAL, 8);
+    gtk_widget_set_halign(
+        actions, GTK_ALIGN_END);
 
     GtkWidget *about =
         gtk_button_new_with_label(
             "About Software");
-    gtk_widget_add_css_class(
-        about, "preferences-about");
-    gtk_widget_set_halign(
-        about, GTK_ALIGN_START);
     g_signal_connect(
         about,
         "clicked",
         G_CALLBACK(about_clicked),
         state);
     gtk_box_append(
-        GTK_BOX(content), about);
+        GTK_BOX(actions), about);
+
+    GtkWidget *save =
+        gtk_button_new_with_label("Save");
+    gtk_widget_add_css_class(
+        save, "suggested-action");
+    g_signal_connect(
+        save,
+        "clicked",
+        G_CALLBACK(preferences_save),
+        context);
+    gtk_box_append(
+        GTK_BOX(actions), save);
+
+    gtk_box_append(
+        GTK_BOX(content), actions);
 
     gtk_window_set_child(
         GTK_WINDOW(window), content);
