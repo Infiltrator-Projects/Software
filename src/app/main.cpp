@@ -68,6 +68,7 @@ using infiltrator::software::discover_flatpak_updates;
 using infiltrator::software::discover_cinnamon_updates;
 using infiltrator::software::apply_flatpak_updates;
 using infiltrator::software::apply_cinnamon_updates;
+using infiltrator::software::apply_cinnamon_updates_selected;
 using infiltrator::software::source_kind_name;
 using infiltrator::software::update_metadata_refresh_due;
 
@@ -6998,6 +6999,7 @@ struct ExternalApplyTaskData {
 struct ExternalApplyResult {
     bool flatpak{false};
     bool success{false};
+    std::vector<ExternalUpdate> selected;
     std::string error;
 };
 
@@ -7047,6 +7049,7 @@ void external_apply_worker(
         result->error =
             "External update task state is unavailable.";
     } else if (data->flatpak) {
+        result->selected = data->selected;
         result->success =
             apply_flatpak_updates_selected(
                 data->selected,
@@ -7055,6 +7058,7 @@ void external_apply_worker(
                     publish_external_progress(task, message);
                 });
     } else {
+        result->selected = data->selected;
         result->success =
             apply_cinnamon_updates_selected(
                 data->selected,
@@ -7106,6 +7110,30 @@ void external_apply_complete(
     }
 
     if (result->success) {
+        TransactionPlan history_plan;
+        for (const ExternalUpdate &update : result->selected) {
+            TransactionItem item;
+            item.package_id =
+                update.backend + ":" + update.id;
+            item.action = TransactionAction::upgrade;
+            item.to_version = update.version;
+            item.download_bytes = update.download_bytes;
+            item.source = update.backend;
+            item.requested = true;
+            history_plan.download_bytes +=
+                update.download_bytes;
+            history_plan.items.emplace_back(
+                std::move(item));
+        }
+        if (!history_plan.items.empty()) {
+            record_transaction_history(
+                history_plan,
+                true,
+                result->flatpak
+                    ? "Selected Flatpak updates completed successfully."
+                    : "Selected Cinnamon and Nemo updates completed successfully.");
+        }
+
         if (state->external_updates_status != nullptr) {
             gtk_label_set_text(
                 GTK_LABEL(
