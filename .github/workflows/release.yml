@@ -197,12 +197,13 @@ jobs:
             exit 0
           fi
 
-          # Scheduled GitHub Actions are explicitly asynchronous. When no
-          # immediate dispatch was accepted, publication remains the central
-          # repository's responsibility and is not a synchronous release gate.
+          # Publication is part of the release contract even when the optional
+          # cross-repository dispatch token is unavailable. In that case the
+          # central five-minute publisher is the trigger, but this job still
+          # waits for and verifies the exact released version instead of
+          # reporting a false-success before APT can see it.
           if [[ "$dispatched" != true ]]; then
-            echo "APT verification deferred to the central repository workflow."
-            exit 0
+            echo "Immediate APT dispatch unavailable; waiting for central repository publication."
           fi
 
           for attempt in $(seq 1 120); do
@@ -214,5 +215,5 @@ jobs:
             sleep 10
           done
 
-          echo "::error::Immediate APT dispatch was accepted, but the central repository did not advertise Software $VERSION within 20 minutes."
+          echo "::error::Central APT repository did not advertise Software $VERSION within 20 minutes."
           exit 1
