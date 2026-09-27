@@ -287,6 +287,17 @@ int plan_command()
     }
 
     std::cout<<"TARGET\t"<<release.target_name<<"\t"<<release.target_codename<<"\n";
+    for (const TransactionItem &item : plan.items) {
+        std::cout
+            <<"ITEM\t"
+            <<transaction_action_name(item.action)
+            <<"\t"<<item.package_id
+            <<"\t"<<item.from_version
+            <<"\t"<<item.to_version
+            <<"\t"<<item.download_bytes
+            <<"\t"<<(item.system_critical ? "1" : "0")
+            <<"\n";
+    }
     for (const std::string &spec:specs_for(plan)) std::cout<<"SPEC\t"<<spec<<"\n";
     std::cout<<"SUMMARY\t"<<plan.items.size()<<"\t"<<plan.download_bytes<<"\n";
     return 0;
