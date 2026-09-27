@@ -133,6 +133,7 @@ struct WindowState {
     GtkWidget *external_cinnamon_apply{};
     std::vector<ExternalUpdate> external_update_records;
     std::unordered_set<std::string> selected_flatpak_refs;
+    std::unordered_set<std::string> selected_cinnamon_refs;
     GtkWidget *updates_transaction_panel{};
     GtkWidget *updates_transaction_phase{};
     GtkWidget *updates_transaction_detail{};
@@ -6769,70 +6770,105 @@ std::string flatpak_selection_key(const ExternalUpdate &update)
         update.ref;
 }
 
+std::string cinnamon_selection_key(const ExternalUpdate &update)
+{
+    return std::string(
+               external_update_kind_name(update.kind)) +
+        ":" + update.id;
+}
+
 GtkWidget *make_external_update_row(
     WindowState *state,
     const ExternalUpdate &update)
 {
     GtkWidget *row =
-        gtk_box_new(
-            GTK_ORIENTATION_HORIZONTAL, 12);
-    gtk_widget_add_css_class(
-        row, "package-row");
-    gtk_widget_add_css_class(
-        row, "external-update-row");
+        gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
+    gtk_widget_add_css_class(row, "package-row");
+    gtk_widget_add_css_class(row, "external-update-row");
 
-    if (update.backend == "Flatpak") {
-        GtkWidget *check = gtk_check_button_new();
-        const std::string key=flatpak_selection_key(update);
-        gtk_check_button_set_active(GTK_CHECK_BUTTON(check),
-            state->selected_flatpak_refs.count(key) != 0U);
-        g_object_set_data_full(G_OBJECT(check), "flatpak-selection-key",
-            new std::string(key), +[](gpointer pointer) {
-                delete static_cast<std::string *>(pointer);
-            });
-        g_signal_connect(check, "toggled",
-            G_CALLBACK(+[](GtkCheckButton *button, gpointer user_data) {
-                auto *state = static_cast<WindowState *>(user_data);
-                const auto *key = static_cast<const std::string *>(
-                    g_object_get_data(G_OBJECT(button), "flatpak-selection-key"));
-                if (state == nullptr || key == nullptr) return;
-                if (gtk_check_button_get_active(button))
-                    state->selected_flatpak_refs.insert(*key);
-                else state->selected_flatpak_refs.erase(*key);
-                if (state->external_flatpak_apply != nullptr)
-                    gtk_widget_set_sensitive(state->external_flatpak_apply,
-                        !state->selected_flatpak_refs.empty() &&
+    const bool flatpak = update.backend == "Flatpak";
+    const std::string key =
+        flatpak
+            ? flatpak_selection_key(update)
+            : cinnamon_selection_key(update);
+    GtkWidget *check = gtk_check_button_new();
+    gtk_check_button_set_active(
+        GTK_CHECK_BUTTON(check),
+        flatpak
+            ? state->selected_flatpak_refs.count(key) != 0U
+            : state->selected_cinnamon_refs.count(key) != 0U);
+    g_object_set_data_full(
+        G_OBJECT(check),
+        "external-selection-key",
+        new std::string(key),
+        +[](gpointer pointer) {
+            delete static_cast<std::string *>(pointer);
+        });
+    g_object_set_data(
+        G_OBJECT(check),
+        "external-selection-flatpak",
+        GINT_TO_POINTER(flatpak));
+    g_signal_connect(
+        check,
+        "toggled",
+        G_CALLBACK(+[](GtkCheckButton *button, gpointer user_data) {
+            auto *state =
+                static_cast<WindowState *>(user_data);
+            const auto *key =
+                static_cast<const std::string *>(
+                    g_object_get_data(
+                        G_OBJECT(button),
+                        "external-selection-key"));
+            if (state == nullptr || key == nullptr) return;
+
+            const bool is_flatpak =
+                GPOINTER_TO_INT(
+                    g_object_get_data(
+                        G_OBJECT(button),
+                        "external-selection-flatpak")) != 0;
+            auto &selection =
+                is_flatpak
+                    ? state->selected_flatpak_refs
+                    : state->selected_cinnamon_refs;
+            if (gtk_check_button_get_active(button)) {
+                selection.insert(*key);
+            } else {
+                selection.erase(*key);
+            }
+
+            GtkWidget *apply =
+                is_flatpak
+                    ? state->external_flatpak_apply
+                    : state->external_cinnamon_apply;
+            if (apply != nullptr) {
+                gtk_widget_set_sensitive(
+                    apply,
+                    !selection.empty() &&
                         !state->updates_busy);
-            }), state);
-        gtk_widget_set_sensitive(check, !state->updates_busy);
-        gtk_box_append(GTK_BOX(row), check);
-    }
+            }
+        }),
+        state);
+    gtk_widget_set_sensitive(check, !state->updates_busy);
+    gtk_box_append(GTK_BOX(row), check);
 
     const char *icon_name =
-        update.backend == "Flatpak"
+        flatpak
             ? "application-x-executable-symbolic"
-            : "preferences-desktop-symbolic";
+            : update.kind == ExternalUpdateKind::nemo_action
+                ? "system-file-manager-symbolic"
+                : "preferences-desktop-symbolic";
     GtkWidget *icon_well =
-        gtk_box_new(
-            GTK_ORIENTATION_VERTICAL, 0);
-    gtk_widget_add_css_class(
-        icon_well, "update-icon-well");
-    gtk_widget_set_size_request(
-        icon_well, 46, 46);
-    GtkWidget *icon =
-        make_icon(icon_name, 24);
-    gtk_widget_set_halign(
-        icon, GTK_ALIGN_CENTER);
-    gtk_widget_set_valign(
-        icon, GTK_ALIGN_CENTER);
-    gtk_box_append(
-        GTK_BOX(icon_well), icon);
-    gtk_box_append(
-        GTK_BOX(row), icon_well);
+        gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    gtk_widget_add_css_class(icon_well, "update-icon-well");
+    gtk_widget_set_size_request(icon_well, 46, 46);
+    GtkWidget *icon = make_icon(icon_name, 24);
+    gtk_widget_set_halign(icon, GTK_ALIGN_CENTER);
+    gtk_widget_set_valign(icon, GTK_ALIGN_CENTER);
+    gtk_box_append(GTK_BOX(icon_well), icon);
+    gtk_box_append(GTK_BOX(row), icon_well);
 
     GtkWidget *copy =
-        gtk_box_new(
-            GTK_ORIENTATION_VERTICAL, 3);
+        gtk_box_new(GTK_ORIENTATION_VERTICAL, 3);
     gtk_widget_set_hexpand(copy, true);
 
     GtkWidget *title =
@@ -6844,40 +6880,34 @@ GtkWidget *make_external_update_row(
     gtk_label_set_ellipsize(
         GTK_LABEL(title),
         PANGO_ELLIPSIZE_END);
-    gtk_box_append(
-        GTK_BOX(copy), title);
+    gtk_box_append(GTK_BOX(copy), title);
 
     std::string detail =
-        std::string(
-            external_update_kind_name(
-                update.kind));
+        std::string(external_update_kind_name(update.kind));
     if (!update.version.empty()) {
         detail += " • " + update.version;
+    }
+    if (update.download_bytes > 0U) {
+        detail += " • " +
+            display_size(update.download_bytes);
     }
     if (!update.detail.empty()) {
         detail += " • " + update.detail;
     }
     GtkWidget *detail_label =
-        make_label(
-            detail.c_str(),
-            "update-source");
+        make_label(detail.c_str(), "update-source");
     gtk_label_set_ellipsize(
         GTK_LABEL(detail_label),
         PANGO_ELLIPSIZE_END);
-    gtk_box_append(
-        GTK_BOX(copy),
-        detail_label);
-    gtk_box_append(
-        GTK_BOX(row), copy);
+    gtk_box_append(GTK_BOX(copy), detail_label);
+    gtk_box_append(GTK_BOX(row), copy);
 
     GtkWidget *backend =
         make_label(
             update.backend.c_str(),
             "update-kind-chip");
-    gtk_widget_set_valign(
-        backend, GTK_ALIGN_CENTER);
-    gtk_box_append(
-        GTK_BOX(row), backend);
+    gtk_widget_set_valign(backend, GTK_ALIGN_CENTER);
+    gtk_box_append(GTK_BOX(row), backend);
     return row;
 }
 
@@ -6955,6 +6985,7 @@ void rebuild_external_updates(
         gtk_widget_set_sensitive(
             state->external_cinnamon_apply,
             cinnamon_count > 0U &&
+                !state->selected_cinnamon_refs.empty() &&
                 !state->updates_busy);
     }
 }
@@ -7025,7 +7056,8 @@ void external_apply_worker(
                 });
     } else {
         result->success =
-            apply_cinnamon_updates(
+            apply_cinnamon_updates_selected(
+                data->selected,
                 result->error,
                 [task](std::string_view message) {
                     publish_external_progress(task, message);
@@ -7114,44 +7146,49 @@ void begin_external_apply(WindowState *state, const bool flatpak)
     }
 
     std::vector<ExternalUpdate> selected;
-    if (flatpak) {
-        for (const ExternalUpdate &update : state->external_update_records)
-            if (update.backend == "Flatpak" &&
-                state->selected_flatpak_refs.count(
-                    flatpak_selection_key(update)) != 0U)
-                selected.push_back(update);
-        if (selected.empty()) return;
+    for (const ExternalUpdate &update :
+         state->external_update_records) {
+        if (flatpak &&
+            update.backend == "Flatpak" &&
+            state->selected_flatpak_refs.count(
+                flatpak_selection_key(update)) != 0U) {
+            selected.push_back(update);
+        } else if (!flatpak &&
+                   update.backend == "Cinnamon" &&
+                   state->selected_cinnamon_refs.count(
+                       cinnamon_selection_key(update)) != 0U) {
+            selected.push_back(update);
+        }
     }
+    if (selected.empty()) return;
 
     state->updates_busy = true;
     state->external_updates_active = true;
     update_nav_updates_badge(state);
     rebuild_external_updates(state);
     if (state->external_updates_spinner != nullptr) {
-        gtk_widget_set_visible(state->external_updates_spinner, true);
-        gtk_spinner_start(GTK_SPINNER(state->external_updates_spinner));
+        gtk_widget_set_visible(
+            state->external_updates_spinner, true);
+        gtk_spinner_start(
+            GTK_SPINNER(state->external_updates_spinner));
     }
     if (state->external_flatpak_apply != nullptr) {
         gtk_widget_set_sensitive(
-            state->external_flatpak_apply,
-            false);
+            state->external_flatpak_apply, false);
     }
     if (state->external_cinnamon_apply != nullptr) {
         gtk_widget_set_sensitive(
-            state->external_cinnamon_apply,
-            false);
+            state->external_cinnamon_apply, false);
     }
     if (state->external_updates_status != nullptr) {
         gtk_label_set_text(
-            GTK_LABEL(
-                state->external_updates_status),
+            GTK_LABEL(state->external_updates_status),
             flatpak
                 ? "Updating selected Flatpaks…"
-                : "Updating Cinnamon Spices…");
+                : "Updating selected Cinnamon items…");
     }
 
-    auto *data =
-        new ExternalApplyTaskData{};
+    auto *data = new ExternalApplyTaskData{};
     data->flatpak = flatpak;
     data->selected = std::move(selected);
 
@@ -7165,84 +7202,132 @@ void begin_external_apply(WindowState *state, const bool flatpak)
         task,
         data,
         [](gpointer value) {
-            delete static_cast<
-                ExternalApplyTaskData *>(value);
+            delete static_cast<ExternalApplyTaskData *>(value);
         });
-    g_task_run_in_thread(
-        task,
-        external_apply_worker);
+    g_task_run_in_thread(task, external_apply_worker);
     g_object_unref(task);
 }
 
 void external_apply_clicked(GtkButton *button, gpointer user_data)
 {
-    auto *state=static_cast<WindowState *>(user_data);
-    if (state==nullptr || state->window==nullptr || state->updates_busy)
+    auto *state = static_cast<WindowState *>(user_data);
+    if (state == nullptr ||
+        state->window == nullptr ||
+        state->updates_busy) {
         return;
-    const bool flatpak=button==GTK_BUTTON(state->external_flatpak_apply);
+    }
+    const bool flatpak =
+        button == GTK_BUTTON(state->external_flatpak_apply);
+
     std::ostringstream review;
-    std::size_t count=0U;
-    for (const ExternalUpdate &update:state->external_update_records) {
+    std::size_t count = 0U;
+    for (const ExternalUpdate &update :
+         state->external_update_records) {
         if (flatpak) {
-            if (update.backend!="Flatpak" ||
+            if (update.backend != "Flatpak" ||
                 state->selected_flatpak_refs.count(
-                    flatpak_selection_key(update))==0U) continue;
-            review<<(update.user_installation?"User":"System")
-                <<" • "<<update.ref;
-            if (!update.version.empty()) review<<" → "<<update.version;
+                    flatpak_selection_key(update)) == 0U) {
+                continue;
+            }
+            review
+                << (update.user_installation ? "User" : "System")
+                << " • " << update.ref;
         } else {
-            if (update.backend!="Cinnamon") continue;
-            review<<external_update_kind_name(update.kind)
-                <<" • "<<update.id;
+            if (update.backend != "Cinnamon" ||
+                state->selected_cinnamon_refs.count(
+                    cinnamon_selection_key(update)) == 0U) {
+                continue;
+            }
+            review
+                << external_update_kind_name(update.kind)
+                << " • "
+                << (update.name.empty() ? update.id : update.name)
+                << " [" << update.id << "]";
         }
-        review<<'\n';
+        if (!update.version.empty()) {
+            review << " → " << update.version;
+        }
+        review << '\n';
         ++count;
     }
-    if (count==0U) return;
-    GtkWidget *dialog=gtk_dialog_new_with_buttons(
-        flatpak?"Review selected Flatpak updates":"Review Cinnamon updates",
-        state->window,
-        static_cast<GtkDialogFlags>(
-            GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT),
-        "Cancel",GTK_RESPONSE_CANCEL,
-        flatpak?"Update selected":"Update all Spices",GTK_RESPONSE_ACCEPT,
-        nullptr);
-    gtk_window_set_default_size(GTK_WINDOW(dialog),560,380);
-    GtkWidget *content=gtk_dialog_get_content_area(GTK_DIALOG(dialog));
-    gtk_box_set_spacing(GTK_BOX(content),12);
-    gtk_widget_set_margin_start(content,16);
-    gtk_widget_set_margin_end(content,16);
-    gtk_widget_set_margin_top(content,16);
-    gtk_widget_set_margin_bottom(content,16);
-    GtkWidget *summary=make_label(flatpak
-        ? "Only the selected Flatpak refs will be requested. Dependencies may also change."
-        : "Cinnamon's updater applies all available Spices; individual Spice selection is not yet supported.",
-        "card-copy");
-    gtk_label_set_wrap(GTK_LABEL(summary),true);
-    gtk_box_append(GTK_BOX(content),summary);
-    GtkWidget *scroller=gtk_scrolled_window_new();
-    gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scroller),
-        GTK_POLICY_NEVER,GTK_POLICY_AUTOMATIC);
-    gtk_widget_set_vexpand(scroller,true);
-    GtkWidget *list=make_label(review.str().c_str(),"card-copy");
-    gtk_label_set_wrap(GTK_LABEL(list),true);
-    gtk_label_set_selectable(GTK_LABEL(list),true);
-    gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(scroller),list);
-    gtk_box_append(GTK_BOX(content),scroller);
-    g_object_set_data(G_OBJECT(dialog),"external-flatpak",
+    if (count == 0U) return;
+
+    GtkWidget *dialog =
+        gtk_dialog_new_with_buttons(
+            flatpak
+                ? "Review selected Flatpak updates"
+                : "Review selected Cinnamon updates",
+            state->window,
+            static_cast<GtkDialogFlags>(
+                GTK_DIALOG_MODAL |
+                GTK_DIALOG_DESTROY_WITH_PARENT),
+            "Cancel", GTK_RESPONSE_CANCEL,
+            "Update selected", GTK_RESPONSE_ACCEPT,
+            nullptr);
+    gtk_window_set_default_size(
+        GTK_WINDOW(dialog), 560, 380);
+    GtkWidget *content =
+        gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+    gtk_box_set_spacing(GTK_BOX(content), 12);
+    gtk_widget_set_margin_start(content, 16);
+    gtk_widget_set_margin_end(content, 16);
+    gtk_widget_set_margin_top(content, 16);
+    gtk_widget_set_margin_bottom(content, 16);
+
+    GtkWidget *summary =
+        make_label(
+            flatpak
+                ? "Only the selected Flatpak refs will be requested. Dependencies may also change."
+                : "Only the selected Cinnamon applets, desklets, extensions, themes and Nemo actions will be updated.",
+            "card-copy");
+    gtk_label_set_wrap(GTK_LABEL(summary), true);
+    gtk_box_append(GTK_BOX(content), summary);
+
+    GtkWidget *scroller = gtk_scrolled_window_new();
+    gtk_scrolled_window_set_policy(
+        GTK_SCROLLED_WINDOW(scroller),
+        GTK_POLICY_NEVER,
+        GTK_POLICY_AUTOMATIC);
+    gtk_widget_set_vexpand(scroller, true);
+    GtkWidget *list =
+        make_label(review.str().c_str(), "card-copy");
+    gtk_label_set_wrap(GTK_LABEL(list), true);
+    gtk_label_set_selectable(GTK_LABEL(list), true);
+    gtk_scrolled_window_set_child(
+        GTK_SCROLLED_WINDOW(scroller), list);
+    gtk_box_append(GTK_BOX(content), scroller);
+
+    g_object_set_data(
+        G_OBJECT(dialog),
+        "external-flatpak",
         GINT_TO_POINTER(flatpak));
-    g_signal_connect_data(dialog,"response",
-        G_CALLBACK(+[](GtkDialog *dialog,gint response,gpointer user_data) {
-            auto *window=GTK_WINDOW(user_data);
-            const bool flatpak=GPOINTER_TO_INT(g_object_get_data(
-                G_OBJECT(dialog),"external-flatpak"))!=0;
+    g_signal_connect_data(
+        dialog,
+        "response",
+        G_CALLBACK(+[](GtkDialog *dialog,
+                       gint response,
+                       gpointer user_data) {
+            auto *window = GTK_WINDOW(user_data);
+            const bool flatpak =
+                GPOINTER_TO_INT(
+                    g_object_get_data(
+                        G_OBJECT(dialog),
+                        "external-flatpak")) != 0;
             gtk_window_destroy(GTK_WINDOW(dialog));
-            auto *state=static_cast<WindowState *>(g_object_get_data(
-                G_OBJECT(window),"infiltrator-window-state"));
-            if (response==GTK_RESPONSE_ACCEPT && state!=nullptr)
-                begin_external_apply(state,flatpak);
-        }),g_object_ref(state->window),
-        +[](gpointer data,GClosure *) {g_object_unref(data);},
+            auto *state =
+                static_cast<WindowState *>(
+                    g_object_get_data(
+                        G_OBJECT(window),
+                        "infiltrator-window-state"));
+            if (response == GTK_RESPONSE_ACCEPT &&
+                state != nullptr) {
+                begin_external_apply(state, flatpak);
+            }
+        }),
+        g_object_ref(state->window),
+        +[](gpointer data, GClosure *) {
+            g_object_unref(data);
+        },
         GConnectFlags(0));
     gtk_window_present(GTK_WINDOW(dialog));
 }
@@ -7443,10 +7528,16 @@ void updates_complete(
     state->external_update_records =
         std::move(result->external_records);
     state->selected_flatpak_refs.clear();
-    for (const ExternalUpdate &update : state->external_update_records)
-        if (update.backend == "Flatpak")
+    state->selected_cinnamon_refs.clear();
+    for (const ExternalUpdate &update : state->external_update_records) {
+        if (update.backend == "Flatpak") {
             state->selected_flatpak_refs.insert(
                 flatpak_selection_key(update));
+        } else if (update.backend == "Cinnamon") {
+            state->selected_cinnamon_refs.insert(
+                cinnamon_selection_key(update));
+        }
+    }
     const std::string external_error =
         result->external_error;
     rebuild_external_updates(state);
@@ -8757,7 +8848,7 @@ GtkWidget *make_updates_page(WindowState *state)
 
     state->external_cinnamon_apply =
         gtk_button_new_with_label(
-            "Update Cinnamon");
+            "Update selected Cinnamon");
     gtk_widget_add_css_class(
         state->external_cinnamon_apply,
         "discover-details");
