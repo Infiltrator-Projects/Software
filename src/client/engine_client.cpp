@@ -25,7 +25,7 @@ constexpr const char *kInterfaceName =
 constexpr int kInventoryCallTimeoutMs = 750;
 constexpr int kControlCallTimeoutMs = 5000;
 constexpr int kRefreshCallTimeoutMs = 125000;
-constexpr guint32 kRequiredApiVersion = 2U;
+constexpr guint32 kRequiredApiVersion = 3U;
 constexpr const char *kRequiredEngineVersion =
     INFILTRATOR_SOFTWARE_VERSION;
 constexpr guint kEngineRestartAttempts = 200U;
@@ -512,6 +512,107 @@ bool parse_packages_reply(
     return true;
 }
 
+
+std::vector<std::string> lookup_string_array(
+    GVariant *dictionary,
+    const char *key)
+{
+    std::vector<std::string> result;
+    if (dictionary == nullptr) return result;
+    GVariant *value =
+        g_variant_lookup_value(
+            dictionary,
+            key,
+            G_VARIANT_TYPE("as"));
+    if (value == nullptr) return result;
+
+    GVariantIter iterator;
+    g_variant_iter_init(&iterator, value);
+    const gchar *text = nullptr;
+    while (g_variant_iter_next(&iterator, "&s", &text)) {
+        if (text != nullptr && *text != '\0') {
+            result.emplace_back(text);
+        }
+    }
+    g_variant_unref(value);
+    return result;
+}
+
+KernelRecord parse_kernel(GVariant *dictionary)
+{
+    KernelRecord kernel;
+    kernel.version = lookup_string(dictionary, "version");
+    kernel.package_version =
+        lookup_string(dictionary, "package-version");
+    kernel.kernel_type =
+        lookup_string(dictionary, "kernel-type");
+    kernel.series = lookup_string(dictionary, "series");
+    kernel.image_package =
+        lookup_string(dictionary, "image-package");
+    kernel.origin = lookup_string(dictionary, "origin");
+    kernel.archive = lookup_string(dictionary, "archive");
+    kernel.support_status =
+        lookup_string(dictionary, "support-status");
+    kernel.support_end =
+        lookup_string(dictionary, "support-end");
+    kernel.installed = lookup_bool(dictionary, "installed");
+    kernel.active = lookup_bool(dictionary, "active");
+    kernel.installable = lookup_bool(dictionary, "installable");
+    kernel.supported = lookup_bool(dictionary, "supported");
+    kernel.superseded = lookup_bool(dictionary, "superseded");
+    kernel.end_of_life =
+        lookup_bool(dictionary, "end-of-life");
+    kernel.safe_to_remove =
+        lookup_bool(dictionary, "safe-to-remove");
+    kernel.install_package_ids =
+        lookup_string_array(dictionary, "install-package-ids");
+    kernel.remove_package_ids =
+        lookup_string_array(dictionary, "remove-package-ids");
+    return kernel;
+}
+
+bool parse_kernels_reply(
+    GVariant *reply,
+    std::vector<KernelRecord> &kernels,
+    std::string &error)
+{
+    kernels.clear();
+    if (reply == nullptr) {
+        error = "Package engine returned no kernel inventory reply.";
+        return false;
+    }
+
+    GVariant *array = nullptr;
+    g_variant_get(reply, "(@aa{sv})", &array);
+    g_variant_unref(reply);
+    if (array == nullptr) {
+        error = "Package engine returned an invalid kernel inventory.";
+        return false;
+    }
+
+    GVariantIter iterator;
+    g_variant_iter_init(&iterator, array);
+    GVariant *dictionary = nullptr;
+    while ((dictionary =
+                g_variant_iter_next_value(&iterator)) != nullptr) {
+        KernelRecord kernel = parse_kernel(dictionary);
+        g_variant_unref(dictionary);
+        if (kernel.version.empty() ||
+            kernel.kernel_type.empty() ||
+            kernel.series.empty()) {
+            g_variant_unref(array);
+            kernels.clear();
+            error =
+                "Package engine returned an invalid kernel record.";
+            return false;
+        }
+        kernels.emplace_back(std::move(kernel));
+    }
+    g_variant_unref(array);
+    error.clear();
+    return true;
+}
+
 TransactionItem parse_item(GVariant *dictionary)
 {
     TransactionItem item;
@@ -594,6 +695,38 @@ bool EngineClient::list_updates(
     return reply != nullptr &&
            parse_packages_reply(
                reply, packages, error);
+}
+
+
+bool EngineClient::list_kernels(
+    const std::string_view kernel_type,
+    std::vector<KernelRecord> &kernels,
+    std::string &error) const
+{
+    if (!ensure_engine_identity(error)) {
+        kernels.clear();
+        return false;
+    }
+
+    const std::string type =
+        kernel_type.empty()
+            ? KernelInventory::default_kernel_type()
+            : std::string(kernel_type);
+    if (!KernelInventory::supported_kernel_type(type)) {
+        kernels.clear();
+        error = "Unsupported Linux kernel type.";
+        return false;
+    }
+
+    GVariant *reply =
+        call_engine(
+            "ListKernels",
+            g_variant_new("(s)", type.c_str()),
+            G_VARIANT_TYPE("(aa{sv})"),
+            kInventoryCallTimeoutMs,
+            error);
+    return reply != nullptr &&
+           parse_kernels_reply(reply, kernels, error);
 }
 
 std::optional<TransactionPlan> EngineClient::plan(
