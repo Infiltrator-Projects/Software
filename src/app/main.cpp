@@ -10320,6 +10320,91 @@ GtkWidget *preference_spin_row(
     return row;
 }
 
+bool sync_system_automation_preferences(
+    const SoftwarePreferences &preferences,
+    std::string &error)
+{
+    std::vector<std::string> arguments{
+        "pkexec",
+        "/usr/libexec/infiltrator-software-update-helper",
+        "configure-automation",
+        std::string("auto-update-packages=") +
+            (preferences.auto_update_packages ? "true" : "false"),
+        "first-refresh-minutes=" +
+            std::to_string(preferences.first_refresh_minutes),
+        "recurring-refresh-minutes=" +
+            std::to_string(preferences.recurring_refresh_minutes),
+        std::string("install-recommends=") +
+            (preferences.install_recommends ? "true" : "false"),
+        std::string("keep-configuration=") +
+            (preferences.keep_configuration ? "true" : "false"),
+        std::string("snapshot-before-system-updates=") +
+            (preferences.snapshot_before_system_updates ? "true" : "false")
+    };
+    for (const std::string &rule :
+         preferences.ignored_packages) {
+        arguments.push_back("ignore=" + rule);
+    }
+
+    std::vector<const gchar *> argv;
+    argv.reserve(arguments.size() + 1U);
+    for (const std::string &argument : arguments) {
+        argv.push_back(argument.c_str());
+    }
+    argv.push_back(nullptr);
+
+    GError *gerror = nullptr;
+    GSubprocess *process =
+        g_subprocess_newv(
+            argv.data(),
+            static_cast<GSubprocessFlags>(
+                G_SUBPROCESS_FLAGS_STDOUT_PIPE |
+                G_SUBPROCESS_FLAGS_STDERR_PIPE),
+            &gerror);
+    if (process == nullptr) {
+        error =
+            gerror != nullptr && gerror->message != nullptr
+                ? gerror->message
+                : "Unable to start the automatic-update configuration helper.";
+        g_clear_error(&gerror);
+        return false;
+    }
+
+    gchar *out = nullptr;
+    gchar *err = nullptr;
+    const gboolean communicated =
+        g_subprocess_communicate_utf8(
+            process,
+            nullptr,
+            nullptr,
+            &out,
+            &err,
+            &gerror);
+    const bool success =
+        communicated &&
+        g_subprocess_get_successful(process);
+    if (!success) {
+        if (err != nullptr && *err != '\0') {
+            error = one_line(err);
+        } else if (
+            gerror != nullptr &&
+            gerror->message != nullptr) {
+            error = gerror->message;
+        } else {
+            error =
+                "Automatic system-update settings were not applied.";
+        }
+    } else {
+        error.clear();
+    }
+
+    g_free(out);
+    g_free(err);
+    g_clear_error(&gerror);
+    g_object_unref(process);
+    return success;
+}
+
 void preferences_save(GtkButton *, gpointer user_data)
 {
     auto *context =
@@ -10420,7 +10505,32 @@ void preferences_save(GtkButton *, gpointer user_data)
     }
     g_free(ignored);
 
+    const bool automation_changed =
+        preferences.auto_update_packages !=
+            context->state->preferences.auto_update_packages ||
+        preferences.first_refresh_minutes !=
+            context->state->preferences.first_refresh_minutes ||
+        preferences.recurring_refresh_minutes !=
+            context->state->preferences.recurring_refresh_minutes ||
+        preferences.install_recommends !=
+            context->state->preferences.install_recommends ||
+        preferences.keep_configuration !=
+            context->state->preferences.keep_configuration ||
+        preferences.snapshot_before_system_updates !=
+            context->state->preferences.snapshot_before_system_updates ||
+        preferences.ignored_packages !=
+            context->state->preferences.ignored_packages;
+
     std::string error;
+    if (automation_changed &&
+        !sync_system_automation_preferences(
+            preferences, error)) {
+        gtk_label_set_text(
+            GTK_LABEL(context->status),
+            error.c_str());
+        return;
+    }
+
     if (!save_software_preferences(
             preferences, error)) {
         gtk_label_set_text(
