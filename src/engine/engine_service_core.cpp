@@ -257,6 +257,18 @@ std::vector<PackageRecord> EngineServiceCore::updates() const
     return updates_;
 }
 
+std::vector<KernelRecord> EngineServiceCore::kernels(
+    const std::string_view selected_kernel_type) const
+{
+    if (!snapshot_.has_value()) {
+        return {};
+    }
+    return KernelInventory::build_host(
+        snapshot_->installed,
+        snapshot_->available,
+        selected_kernel_type);
+}
+
 const std::string &EngineServiceCore::database_path() const noexcept
 {
     return store_.path();
