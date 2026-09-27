@@ -74,7 +74,7 @@ void checksum_field(GChecksum *checksum, const std::string_view value)
     g_checksum_update(
         checksum,
         reinterpret_cast<const guchar *>(value.data()),
-        value.size());
+        static_cast<gssize>(value.size()));
     static constexpr guchar separator = 0U;
     g_checksum_update(checksum, &separator, 1U);
 }

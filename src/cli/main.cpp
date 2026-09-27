@@ -57,13 +57,17 @@ bool parse_options(int argc, char **argv, int start, Options &options, std::stri
         else if (v=="--ignore" || v=="-i") {
             if (i+1>=argc) { error="--ignore requires a pattern."; return false; }
             std::string values(argv[++i]);
-            std::size_t start=0U;
+            std::size_t cursor=0U;
             for (;;) {
-                const std::size_t comma=values.find(',',start);
-                const std::string rule=values.substr(start,comma==std::string::npos?std::string::npos:comma-start);
+                const std::size_t comma=values.find(',',cursor);
+                const std::string rule=values.substr(
+                    cursor,
+                    comma==std::string::npos
+                        ? std::string::npos
+                        : comma-cursor);
                 if (!rule.empty()) options.ignores.push_back(rule);
                 if (comma==std::string::npos) break;
-                start=comma+1U;
+                cursor=comma+1U;
             }
         } else { error="Unknown option: "+std::string(v); return false; }
     }

@@ -240,7 +240,7 @@ std::string sha256_hex(const std::string_view content)
     g_checksum_update(
         checksum,
         reinterpret_cast<const guchar *>(content.data()),
-        content.size());
+        static_cast<gssize>(content.size()));
     const char *digest = g_checksum_get_string(checksum);
     const std::string result = digest == nullptr ? "" : digest;
     g_checksum_free(checksum);
@@ -363,7 +363,9 @@ bool create_temporary_file(
 std::uint32_t crc24(const std::string_view content)
 {
     std::uint32_t crc = 0xB704CEU;
-    for (const unsigned char byte : content) {
+    for (const char raw : content) {
+        const unsigned char byte =
+            static_cast<unsigned char>(raw);
         crc ^= static_cast<std::uint32_t>(byte) << 16U;
         for (unsigned int bit = 0U; bit < 8U; ++bit) {
             crc <<= 1U;
@@ -380,7 +382,9 @@ bool valid_base64_line(const std::string_view line)
     if (line.empty()) {
         return false;
     }
-    for (const unsigned char ch : line) {
+    for (const char raw : line) {
+        const unsigned char ch =
+            static_cast<unsigned char>(raw);
         if ((ch >= 'A' && ch <= 'Z') ||
             (ch >= 'a' && ch <= 'z') ||
             (ch >= '0' && ch <= '9') ||

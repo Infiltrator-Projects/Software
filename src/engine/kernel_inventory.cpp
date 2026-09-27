@@ -99,7 +99,9 @@ std::vector<int> numeric_version(const std::string_view value)
     std::vector<int> result;
     int current = 0;
     bool in_number = false;
-    for (const unsigned char ch : value) {
+    for (const char raw : value) {
+        const unsigned char ch =
+            static_cast<unsigned char>(raw);
         if (std::isdigit(ch) != 0) {
             in_number = true;
             current = current * 10 + static_cast<int>(ch - '0');

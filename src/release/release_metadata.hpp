@@ -25,7 +25,9 @@ inline bool supported_edition(std::string_view configured,std::string_view editi
     // Mint's upgrade-info editions are lower case; /etc/linuxmint/info may
     // spell EDITION with capitals. Accept comma or whitespace separators.
     std::string token;
-    for (const unsigned char c:configured) {
+    for (const char raw:configured) {
+        const unsigned char c =
+            static_cast<unsigned char>(raw);
         if (c==',' || std::isspace(c)) {
             if (!token.empty() && normalize_edition(token)==edition) return true;
             token.clear();
@@ -37,8 +39,11 @@ inline bool supported_edition(std::string_view configured,std::string_view editi
 inline std::string meta_package(std::string_view edition)
 {
     if (edition.empty()) return {};
-    for (const unsigned char c:edition)
+    for (const char raw:edition) {
+        const unsigned char c =
+            static_cast<unsigned char>(raw);
         if (!std::islower(c) && !std::isdigit(c) && c!='-') return {};
+    }
     return "mint-meta-"+std::string(edition);
 }
 }

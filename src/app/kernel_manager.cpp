@@ -1022,6 +1022,11 @@ std::vector<std::string> exact_specs(
     return specs;
 }
 
+/*
+ * GtkDialog is retained for the supported GTK 4.6 baseline. Scope the
+ * deprecation suppression to this compatibility dialog only.
+ */
+G_GNUC_BEGIN_IGNORE_DEPRECATIONS
 GtkWidget *transaction_dialog(
     GtkWindow *parent,
     const TransactionPlan &plan)
@@ -1091,6 +1096,7 @@ GtkWidget *transaction_dialog(
     gtk_box_append(GTK_BOX(content), scroll);
     return dialog;
 }
+G_GNUC_END_IGNORE_DEPRECATIONS
 
 void destroy_apply(ApplyOperation *operation)
 {

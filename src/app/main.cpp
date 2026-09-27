@@ -644,6 +644,12 @@ std::string transaction_item_text(
     return text.str();
 }
 
+/*
+ * GtkDialog remains part of the GTK 4.6 compatibility baseline. Newer GTK
+ * marks these constructors deprecated, so keep the warning local until the
+ * minimum GTK version can move to the replacement API.
+ */
+G_GNUC_BEGIN_IGNORE_DEPRECATIONS
 GtkWidget *make_transaction_confirmation_dialog(
     GtkWindow *parent,
     const char *title,
@@ -664,6 +670,7 @@ GtkWidget *make_transaction_confirmation_dialog(
 
     GtkWidget *content =
         gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+    G_GNUC_END_IGNORE_DEPRECATIONS
     gtk_box_set_spacing(GTK_BOX(content), 12);
     gtk_widget_set_margin_start(content, 18);
     gtk_widget_set_margin_end(content, 18);
@@ -733,6 +740,7 @@ GtkWidget *make_transaction_confirmation_dialog(
     gtk_box_append(GTK_BOX(content), scroller);
     return dialog;
 }
+G_GNUC_END_IGNORE_DEPRECATIONS
 
 void discover_details_clicked(GtkButton *button, gpointer user_data)
 {
@@ -4495,6 +4503,7 @@ void release_upgrade_plan_complete(
             "Upgrade release",
             result->plan,
             true);
+    G_GNUC_BEGIN_IGNORE_DEPRECATIONS
     GtkWidget *content =
         gtk_dialog_get_content_area(GTK_DIALOG(dialog));
     const std::string notes_uri =
@@ -4511,6 +4520,7 @@ void release_upgrade_plan_complete(
     GtkWidget *accept = gtk_dialog_get_widget_for_response(
         GTK_DIALOG(dialog), GTK_RESPONSE_ACCEPT);
     gtk_widget_set_sensitive(accept, false);
+    G_GNUC_END_IGNORE_DEPRECATIONS
     g_signal_connect(acknowledge, "toggled",
         G_CALLBACK(+[](GtkCheckButton *button, gpointer widget) {
             gtk_widget_set_sensitive(GTK_WIDGET(widget),
@@ -6981,14 +6991,17 @@ GtkWidget *make_external_update_row(
         check,
         "toggled",
         G_CALLBACK(+[](GtkCheckButton *button, gpointer user_data) {
-            auto *state =
+            auto *window_state =
                 static_cast<WindowState *>(user_data);
-            const auto *key =
+            const auto *selection_key =
                 static_cast<const std::string *>(
                     g_object_get_data(
                         G_OBJECT(button),
                         "external-selection-key"));
-            if (state == nullptr || key == nullptr) return;
+            if (window_state == nullptr ||
+                selection_key == nullptr) {
+                return;
+            }
 
             const bool is_flatpak =
                 GPOINTER_TO_INT(
@@ -6997,18 +7010,18 @@ GtkWidget *make_external_update_row(
                         "external-selection-flatpak")) != 0;
             auto &selection =
                 is_flatpak
-                    ? state->selected_flatpak_refs
-                    : state->selected_cinnamon_refs;
+                    ? window_state->selected_flatpak_refs
+                    : window_state->selected_cinnamon_refs;
             if (gtk_check_button_get_active(button)) {
-                selection.insert(*key);
+                selection.insert(*selection_key);
             } else {
-                selection.erase(*key);
+                selection.erase(*selection_key);
             }
 
             GtkWidget *apply =
                 is_flatpak
-                    ? state->external_flatpak_apply
-                    : state->external_cinnamon_apply;
+                    ? window_state->external_flatpak_apply
+                    : window_state->external_cinnamon_apply;
             if (apply != nullptr) {
                 gtk_widget_set_sensitive(
                     apply,
@@ -7178,25 +7191,27 @@ struct ExternalProgressNotice {
 
 void publish_external_progress(GTask *task, std::string_view message)
 {
-    auto *notice = new ExternalProgressNotice{
+    auto *queued_notice = new ExternalProgressNotice{
         GTK_WINDOW(g_object_ref(g_task_get_source_object(task))),
         std::string(message)};
     g_idle_add_full(G_PRIORITY_DEFAULT, +[](gpointer data) -> gboolean {
-        auto *notice = static_cast<ExternalProgressNotice *>(data);
+        auto *progress_notice =
+            static_cast<ExternalProgressNotice *>(data);
         auto *state = static_cast<WindowState *>(g_object_get_data(
-            G_OBJECT(notice->window), "infiltrator-window-state"));
+            G_OBJECT(progress_notice->window),
+            "infiltrator-window-state"));
         if (state != nullptr && state->external_updates_active) {
             if (state->external_updates_status != nullptr)
                 gtk_label_set_text(GTK_LABEL(state->external_updates_status),
-                    notice->message.c_str());
+                    progress_notice->message.c_str());
             if (state->updates_status != nullptr)
                 gtk_label_set_text(GTK_LABEL(state->updates_status),
-                    notice->message.c_str());
+                    progress_notice->message.c_str());
         }
-        g_object_unref(notice->window);
-        delete notice;
+        g_object_unref(progress_notice->window);
+        delete progress_notice;
         return G_SOURCE_REMOVE;
-    }, notice, nullptr);
+    }, queued_notice, nullptr);
 }
 
 void external_apply_worker(
@@ -7448,6 +7463,7 @@ void external_apply_clicked(GtkButton *button, gpointer user_data)
     }
     if (count == 0U) return;
 
+    G_GNUC_BEGIN_IGNORE_DEPRECATIONS
     GtkWidget *dialog =
         gtk_dialog_new_with_buttons(
             flatpak
@@ -7500,24 +7516,28 @@ void external_apply_clicked(GtkButton *button, gpointer user_data)
     g_signal_connect_data(
         dialog,
         "response",
-        G_CALLBACK(+[](GtkDialog *dialog,
+        G_CALLBACK(+[](GtkDialog *response_dialog,
                        gint response,
-                       gpointer user_data) {
-            auto *window = GTK_WINDOW(user_data);
-            const bool flatpak =
+                       gpointer response_data) {
+            auto *response_window =
+                GTK_WINDOW(response_data);
+            const bool apply_flatpak =
                 GPOINTER_TO_INT(
                     g_object_get_data(
-                        G_OBJECT(dialog),
+                        G_OBJECT(response_dialog),
                         "external-flatpak")) != 0;
-            gtk_window_destroy(GTK_WINDOW(dialog));
-            auto *state =
+            gtk_window_destroy(
+                GTK_WINDOW(response_dialog));
+            auto *window_state =
                 static_cast<WindowState *>(
                     g_object_get_data(
-                        G_OBJECT(window),
+                        G_OBJECT(response_window),
                         "infiltrator-window-state"));
             if (response == GTK_RESPONSE_ACCEPT &&
-                state != nullptr) {
-                begin_external_apply(state, flatpak);
+                window_state != nullptr) {
+                begin_external_apply(
+                    window_state,
+                    apply_flatpak);
             }
         }),
         g_object_ref(state->window),
@@ -12336,17 +12356,6 @@ void global_search_changed(
     }
 }
 
-void theme_clicked(GtkButton *, gpointer user_data)
-{
-    auto *state = static_cast<WindowState *>(user_data);
-    if (state == nullptr) {
-        return;
-    }
-
-    state->theme.cycle_mode();
-    update_theme_button(state);
-}
-
 struct PreferencesDialogContext {
     WindowState *state{};
     GtkWindow *window{};
@@ -13116,36 +13125,6 @@ void settings_clicked(GtkButton *, gpointer user_data)
         GTK_WINDOW(window));
 }
 
-void refresh_clicked(GtkButton *, gpointer user_data)
-{
-    auto *state = static_cast<WindowState *>(user_data);
-    if (state == nullptr || state->stack == nullptr) {
-        return;
-    }
-
-    const char *page =
-        gtk_stack_get_visible_child_name(state->stack);
-    if (page == nullptr) {
-        return;
-    }
-
-    if (std::strcmp(page, "discover") == 0) {
-        refresh_discover(state, true);
-    } else if (std::strcmp(page, "installed") == 0) {
-        refresh_installed(state);
-    } else if (std::strcmp(page, "updates") == 0) {
-        refresh_updates(state, true);
-    } else if (std::strcmp(page, "system") == 0) {
-        refresh_system(state, true);
-    } else if (std::strcmp(page, "repositories") == 0) {
-        refresh_repositories(state);
-    } else if (std::strcmp(page, "history") == 0) {
-        refresh_history(state);
-    } else if (std::strcmp(page, "repair") == 0) {
-        refresh_repair(state, false);
-    }
-}
-
 void about_clicked(GtkButton *, gpointer user_data)
 {
     auto *state = static_cast<WindowState *>(user_data);
@@ -13731,19 +13710,20 @@ void activate(GtkApplication *application, gpointer)
     g_idle_add_full(
         G_PRIORITY_DEFAULT_IDLE,
         [](gpointer data) -> gboolean {
-            auto *window = GTK_WINDOW(data);
-            auto *state =
+            auto *idle_window = GTK_WINDOW(data);
+            auto *idle_state =
                 static_cast<WindowState *>(
                     g_object_get_data(
-                        G_OBJECT(window),
+                        G_OBJECT(idle_window),
                         "infiltrator-window-state"));
-            if (state != nullptr && state->navigation_list != nullptr) {
+            if (idle_state != nullptr &&
+                idle_state->navigation_list != nullptr) {
                 GtkListBoxRow *selected =
                     gtk_list_box_get_selected_row(
-                        state->navigation_list);
+                        idle_state->navigation_list);
                 if (selected != nullptr) {
                     refresh_page_if_needed(
-                        state,
+                        idle_state,
                         gtk_list_box_row_get_index(selected));
                 }
             }
