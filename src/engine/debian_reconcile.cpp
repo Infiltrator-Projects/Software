@@ -108,6 +108,8 @@ std::string build_fingerprint(
         checksum_field(checksum, package.policy_provider);
         checksum_field(checksum, package.policy_reason);
         checksum_field(checksum, package.release_origin);
+        checksum_field(checksum, package.release_archive);
+        checksum_field(checksum, package.supported);
         checksum_field(checksum, package.site);
     }
 
