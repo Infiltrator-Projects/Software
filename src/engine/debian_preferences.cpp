@@ -400,7 +400,9 @@ bool preference_filename(
         return false;
     }
 
-    for (const unsigned char ch : name) {
+    for (const char raw : name) {
+        const unsigned char ch =
+            static_cast<unsigned char>(raw);
         if (std::isalnum(ch) != 0 ||
             ch == '-' || ch == '_' || ch == '.') {
             continue;
