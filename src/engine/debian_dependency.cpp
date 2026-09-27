@@ -459,7 +459,8 @@ const DebianPackageVersion *best_available(
     const DebianDependencyAlternative &dependency,
     const std::vector<DebianPackageVersion> &available,
     const std::string_view target_architecture,
-    const DebianCandidatePolicy &policy)
+    const DebianCandidatePolicy &policy,
+    const bool include_recommends)
 {
     const DebianPackageVersion *best = nullptr;
     int best_priority = 0;
@@ -880,23 +881,30 @@ DebianResolution DebianDependencyResolver::resolve(
         }
         const DebianPackageVersion owner = found_owner->second;
 
-        const std::string hard_dependencies =
+        std::string dependencies_text =
             owner.pre_depends.empty()
                 ? owner.depends
                 : owner.depends.empty()
                     ? owner.pre_depends
                     : owner.pre_depends + ", " + owner.depends;
-        if (hard_dependencies.empty()) {
+        if (include_recommends &&
+            !owner.recommends.empty()) {
+            if (!dependencies_text.empty()) {
+                dependencies_text += ", ";
+            }
+            dependencies_text += owner.recommends;
+        }
+        if (dependencies_text.empty()) {
             continue;
         }
 
         std::string parse_error;
         const auto dependencies =
-            parse(hard_dependencies, parse_error);
+            parse(dependencies_text, parse_error);
         if (!dependencies.has_value()) {
             result.problems.push_back({
                 owner.package,
-                hard_dependencies,
+                dependencies_text,
                 "Invalid dependency expression: " + parse_error});
             continue;
         }
