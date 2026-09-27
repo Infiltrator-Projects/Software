@@ -1,12 +1,15 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "apt_plan_guard.hpp"
 
+#include <algorithm>
 #include <cctype>
 #include <cerrno>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <fcntl.h>
+#include <filesystem>
+#include <fstream>
 #include <string>
 #include <string_view>
 #include <sys/stat.h>
@@ -17,6 +20,97 @@
 #include <vector>
 
 namespace {
+
+bool valid_automation_setting(const std::string_view key, const std::string_view value)
+{
+    if (value.empty() || value.size() > 512U ||
+        value.find('\n') != std::string_view::npos ||
+        value.find('\r') != std::string_view::npos) {
+        return false;
+    }
+
+    const bool boolean_key =
+        key == "auto-update-packages" ||
+        key == "install-recommends" ||
+        key == "keep-configuration" ||
+        key == "snapshot-before-system-updates";
+    if (boolean_key) {
+        return value == "true" || value == "false";
+    }
+
+    const bool integer_key =
+        key == "first-refresh-minutes" ||
+        key == "recurring-refresh-minutes";
+    if (integer_key) {
+        return std::all_of(
+            value.begin(),
+            value.end(),
+            [](const unsigned char ch) {
+                return std::isdigit(ch) != 0;
+            });
+    }
+
+    return key == "ignore";
+}
+
+int configure_automation(const int argc, char **argv)
+{
+    static constexpr const char *kDirectory =
+        "/etc/infiltrator-software";
+    static constexpr const char *kPath =
+        "/etc/infiltrator-software/automatic-updates.conf";
+
+    std::vector<std::string> values;
+    for (int index = 2; index < argc; ++index) {
+        const std::string setting(argv[index]);
+        const std::size_t equals = setting.find('=');
+        if (equals == std::string::npos || equals == 0U ||
+            !valid_automation_setting(
+                std::string_view(setting).substr(0U, equals),
+                std::string_view(setting).substr(equals + 1U))) {
+            std::fprintf(stderr, "Invalid automatic-update setting: %s\n", argv[index]);
+            return 64;
+        }
+        values.push_back(setting);
+    }
+
+    std::error_code ec;
+    std::filesystem::create_directories(kDirectory, ec);
+    if (ec) {
+        std::fprintf(stderr, "Unable to create %s: %s\n", kDirectory, ec.message().c_str());
+        return 1;
+    }
+
+    const std::string temporary =
+        std::string(kPath) + ".tmp." +
+        std::to_string(static_cast<unsigned long long>(getpid()));
+    {
+        std::ofstream output(temporary, std::ios::out | std::ios::trunc);
+        if (!output) {
+            std::fprintf(stderr, "Unable to create automatic-update configuration.\n");
+            return 1;
+        }
+        output << "# Managed by Infiltrator Software\n";
+        for (const std::string &value : values) {
+            output << value << '\n';
+        }
+        output.close();
+        if (!output) {
+            std::filesystem::remove(temporary, ec);
+            std::fprintf(stderr, "Unable to finish automatic-update configuration.\n");
+            return 1;
+        }
+    }
+
+    (void)chmod(temporary.c_str(), 0600);
+    std::filesystem::rename(temporary, kPath, ec);
+    if (ec) {
+        std::filesystem::remove(temporary, ec);
+        std::fprintf(stderr, "Unable to publish automatic-update configuration: %s\n", ec.message().c_str());
+        return 1;
+    }
+    return 0;
+}
 
 bool safe_package_spec(const std::string_view value)
 {
@@ -661,6 +755,11 @@ int main(int argc, char **argv)
         return 1;
     }
 
+    if (argc >= 2 &&
+        std::strcmp(argv[1], "configure-automation") == 0) {
+        return configure_automation(argc, argv);
+    }
+
     if (argc == 2 &&
         std::strcmp(argv[1], "repair-configure") == 0) {
         /*
@@ -936,6 +1035,7 @@ int main(int argc, char **argv)
         stderr,
         "Usage: infiltrator-software-update-helper "
         "apply-plan [--progress-token=TOKEN] [--force-confold|--force-confnew] "
-        "[remove:]PACKAGE=VERSION... | repair-configure\n");
+        "[remove:]PACKAGE=VERSION... | repair-configure | "
+        "configure-automation key=value...\n");
     return 64;
 }
