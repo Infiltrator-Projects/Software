@@ -6728,6 +6728,23 @@ GtkWidget *make_updates_page(WindowState *state)
         G_CALLBACK(updates_select_all_clicked), state);
     gtk_box_append(GTK_BOX(controls), select_all);
 
+    state->updates_security =
+        gtk_button_new_with_label("Security only");
+    gtk_widget_add_css_class(
+        state->updates_security,
+        "discover-details");
+    gtk_widget_set_tooltip_text(
+        state->updates_security,
+        "Select only updates classified as security fixes.");
+    g_signal_connect(
+        state->updates_security,
+        "clicked",
+        G_CALLBACK(select_security_updates),
+        state);
+    gtk_box_append(
+        GTK_BOX(controls),
+        state->updates_security);
+
     GtkWidget *clear_selection =
         gtk_button_new_with_label("Clear selection");
     gtk_widget_add_css_class(clear_selection, "discover-details");
@@ -6875,6 +6892,38 @@ GtkWidget *make_updates_page(WindowState *state)
     gtk_box_append(
         GTK_BOX(page),
         state->updates_transaction_panel);
+
+    state->updates_reboot_banner =
+        gtk_box_new(
+            GTK_ORIENTATION_HORIZONTAL, 12);
+    gtk_widget_add_css_class(
+        state->updates_reboot_banner,
+        "reboot-required-banner");
+    GtkWidget *reboot_icon =
+        make_icon(
+            "system-reboot-symbolic", 22);
+    gtk_box_append(
+        GTK_BOX(state->updates_reboot_banner),
+        reboot_icon);
+    state->updates_reboot_detail =
+        make_label(
+            "A restart is required to finish applying system updates.",
+            "reboot-required-copy");
+    gtk_label_set_wrap(
+        GTK_LABEL(state->updates_reboot_detail),
+        true);
+    gtk_widget_set_hexpand(
+        state->updates_reboot_detail,
+        true);
+    gtk_box_append(
+        GTK_BOX(state->updates_reboot_banner),
+        state->updates_reboot_detail);
+    gtk_widget_set_visible(
+        state->updates_reboot_banner,
+        reboot_required());
+    gtk_box_append(
+        GTK_BOX(page),
+        state->updates_reboot_banner);
 
     GtkWidget *card =
         gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
