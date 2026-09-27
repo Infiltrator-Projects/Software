@@ -565,23 +565,6 @@ bool install_matching_theme(
     return true;
 }
 
-ExternalUpdateKind cinnamon_kind(
-    const std::string_view type)
-{
-    if (type == "desklet") {
-        return ExternalUpdateKind::cinnamon_desklet;
-    }
-    if (type == "extension") {
-        return ExternalUpdateKind::cinnamon_extension;
-    }
-    if (type == "theme") {
-        return ExternalUpdateKind::cinnamon_theme;
-    }
-    if (type == "action") {
-        return ExternalUpdateKind::nemo_action;
-    }
-    return ExternalUpdateKind::cinnamon_applet;
-}
 
 } // namespace
 
