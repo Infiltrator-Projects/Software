@@ -1,11 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "client/engine_client.hpp"
 #include "core/update_policy.hpp"
+#include "core/update_tracker.hpp"
+#include "core/transaction_history.hpp"
 
 #include <gtk/gtk.h>
 #include <libxapp/xapp-status-icon.h>
 
 #include <algorithm>
+#include <ctime>
 #include <filesystem>
 #include <fstream>
 #include <fcntl.h>
@@ -24,6 +27,10 @@ using infiltrator::software::PackageRecord;
 using infiltrator::software::SoftwarePreferences;
 using infiltrator::software::load_software_preferences;
 using infiltrator::software::update_is_ignored;
+using infiltrator::software::UpdateNotificationResult;
+using infiltrator::software::evaluate_update_notification;
+using infiltrator::software::update_tracker_path;
+using infiltrator::software::TransactionHistoryStore;
 
 struct CheckResult {
     std::vector<PackageRecord> updates;
@@ -109,6 +116,161 @@ std::string read_override()
         value.pop_back();
     }
     return value;
+}
+
+std::filesystem::path transaction_history_path()
+{
+    const char *data = g_get_user_data_dir();
+    if (data == nullptr || *data == '\0') {
+        return {};
+    }
+    return std::filesystem::path(data) /
+           "infiltrator-software" /
+           "history.sqlite3";
+}
+
+std::int64_t last_successful_update()
+{
+    const std::filesystem::path path =
+        transaction_history_path();
+    if (path.empty() ||
+        !std::filesystem::exists(path)) {
+        return 0;
+    }
+
+    TransactionHistoryStore store(path.string());
+    std::string error;
+    const auto items =
+        store.load_recent(100U, error);
+    std::int64_t latest = 0;
+    for (const auto &item : items) {
+        if (item.success) {
+            latest =
+                std::max(
+                    latest,
+                    item.completed_at_unix);
+        }
+    }
+    return latest;
+}
+
+void send_update_notification(
+    const std::size_t count,
+    const std::size_t relevant_count,
+    const unsigned oldest_days)
+{
+    GError *error = nullptr;
+    GDBusConnection *connection =
+        g_bus_get_sync(
+            G_BUS_TYPE_SESSION,
+            nullptr,
+            &error);
+    if (connection == nullptr) {
+        g_clear_error(&error);
+        return;
+    }
+
+    const std::string summary =
+        count == 1U
+            ? "Software update available"
+            : std::to_string(count) +
+                  " software updates available";
+    std::string body;
+    if (relevant_count > 0U) {
+        body =
+            std::to_string(relevant_count) +
+            (relevant_count == 1U
+                 ? " security/kernel update has"
+                 : " security/kernel updates have") +
+            " remained outstanding";
+        if (oldest_days > 0U) {
+            body +=
+                " for up to " +
+                std::to_string(oldest_days) +
+                (oldest_days == 1U
+                     ? " day."
+                     : " days.");
+        } else {
+            body += ".";
+        }
+    } else {
+        body =
+            "Open Software to review and install the available updates.";
+    }
+
+    const gchar *actions[] = {
+        nullptr
+    };
+    GVariantBuilder hints;
+    g_variant_builder_init(
+        &hints,
+        G_VARIANT_TYPE("a{sv}"));
+    g_variant_builder_add(
+        &hints,
+        "{sv}",
+        "desktop-entry",
+        g_variant_new_string(
+            "net.ssmith.infiltrator.software"));
+
+    g_dbus_connection_call(
+        connection,
+        "org.freedesktop.Notifications",
+        "/org/freedesktop/Notifications",
+        "org.freedesktop.Notifications",
+        "Notify",
+        g_variant_new(
+            "(susss^as@a{sv}i)",
+            "Software",
+            0U,
+            "infiltrator-software-updates-available-symbolic",
+            summary.c_str(),
+            body.c_str(),
+            actions,
+            g_variant_builder_end(&hints),
+            -1),
+        G_VARIANT_TYPE("(u)"),
+        G_DBUS_CALL_FLAGS_NONE,
+        5000,
+        nullptr,
+        nullptr,
+        nullptr);
+    g_object_unref(connection);
+}
+
+void evaluate_notification(
+    TrayState *state,
+    const std::vector<PackageRecord> &updates)
+{
+    if (state == nullptr ||
+        !state->last_error.empty()) {
+        return;
+    }
+
+    UpdateNotificationResult result;
+    std::string error;
+    if (!evaluate_update_notification(
+            updates,
+            state->preferences,
+            static_cast<std::int64_t>(
+                std::time(nullptr)),
+            last_successful_update(),
+            update_tracker_path(),
+            result,
+            error)) {
+        if (!error.empty()) {
+            g_debug(
+                "Unable to evaluate Software update notification: %s",
+                error.c_str());
+        }
+        return;
+    }
+
+    if (result.notify) {
+        send_update_notification(
+            updates.size(),
+            result.relevant_updates,
+            result.oldest_age_days);
+    }
 }
 
 void render(TrayState *state)
@@ -264,6 +426,11 @@ void check_complete(
     if (result != nullptr) {
         state->update_count = result->updates.size();
         state->last_error = result->error;
+        if (state->last_error.empty()) {
+            evaluate_notification(
+                state,
+                result->updates);
+        }
         delete result;
     } else {
         state->last_error = "Unable to check for software updates";
