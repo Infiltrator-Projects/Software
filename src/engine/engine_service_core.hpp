@@ -4,6 +4,7 @@
 
 #include "core/model.hpp"
 #include "engine/debian_candidate.hpp"
+#include "engine/kernel_inventory.hpp"
 #include "engine/package_state_store.hpp"
 
 #include <cstddef>
@@ -39,6 +40,8 @@ public:
     [[nodiscard]] EngineServiceStatus status() const;
     [[nodiscard]] std::vector<PackageRecord> installed() const;
     [[nodiscard]] std::vector<PackageRecord> updates() const;
+    [[nodiscard]] std::vector<KernelRecord> kernels(
+        std::string_view selected_kernel_type) const;
     [[nodiscard]] const std::string &database_path() const noexcept;
 
     std::optional<TransactionPlan> plan(
