@@ -138,6 +138,9 @@ GVariant *package_variant(const PackageRecord &package)
         &builder, "{sv}", "package-name",
         g_variant_new_string(package.package_name.c_str()));
     g_variant_builder_add(
+        &builder, "{sv}", "source-package",
+        g_variant_new_string(package.source_package.c_str()));
+    g_variant_builder_add(
         &builder, "{sv}", "architecture",
         g_variant_new_string(package.architecture.c_str()));
     g_variant_builder_add(
@@ -149,6 +152,9 @@ GVariant *package_variant(const PackageRecord &package)
     g_variant_builder_add(
         &builder, "{sv}", "source",
         g_variant_new_string(package.source.c_str()));
+    g_variant_builder_add(
+        &builder, "{sv}", "description",
+        g_variant_new_string(package.description.c_str()));
     g_variant_builder_add(
         &builder, "{sv}", "repository-origin",
         g_variant_new_string(package.repository_origin.c_str()));
@@ -182,6 +188,9 @@ GVariant *package_variant(const PackageRecord &package)
     g_variant_builder_add(
         &builder, "{sv}", "system-critical",
         g_variant_new_boolean(package.system_critical));
+    g_variant_builder_add(
+        &builder, "{sv}", "security-update",
+        g_variant_new_boolean(package.security_update));
     g_variant_builder_add(
         &builder, "{sv}", "kind",
         g_variant_new_string(
