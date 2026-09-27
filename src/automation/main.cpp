@@ -160,6 +160,8 @@ int main()
 
     TransactionRequest request;
     request.action=TransactionAction::upgrade;
+    request.install_recommends =
+        prefs.install_recommends;
     for (const PackageRecord &p:updates)
         request.package_ids.push_back(p.package_name.empty()?p.id:p.package_name);
 
