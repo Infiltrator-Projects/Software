@@ -9,7 +9,8 @@ infiltrator-software (0.3.52) unstable; urgency=high
   * Add regression coverage for the exact Software/mintupdate replacement case.
   * Bootstrap safely from installed Software 0.3.49 by keeping Provides and
     Replaces for mintupdate but omitting Conflicts in this transition release;
-    this lets 0.3.49 install the fixed resolver before mintupdate is removed.
+    this lets 0.3.49 install the fixed resolver before the following replacement
+    transaction restores the conflict and removes mintupdate explicitly.
 
  -- Shannon Smith <infiltratr@yandex.com>  Sun, 27 Sep 2026 21:58:00 +1000
 
