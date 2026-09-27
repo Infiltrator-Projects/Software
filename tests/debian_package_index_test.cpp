@@ -29,6 +29,7 @@ int main()
         "Size: 2048\n"
         "Installed-Size: 12\n"
         "SHA256: 0123456789abcdef\n"
+        "Supported: 5y\n"
         "Description: Alpha package\n"
         " continued details\n"
         "\n"
@@ -75,6 +76,7 @@ int main()
     assert(alpha.size_bytes == 2048U);
     assert(alpha.installed_size_bytes == 12U * 1024U);
     assert(alpha.sha256 == "0123456789abcdef");
+    assert(alpha.supported == "5y");
     assert(alpha.description == "Alpha package\ncontinued details");
 
     const auto &data = packages[1];
