@@ -67,7 +67,8 @@ public:
         const std::vector<PackageRecord> &installed,
         const std::vector<DebianPackageVersion> &available,
         std::string_view target_architecture,
-        const DebianCandidatePolicy &policy = {});
+        const DebianCandidatePolicy &policy = {},
+        bool include_recommends = false);
 };
 
 } // namespace infiltrator::software
