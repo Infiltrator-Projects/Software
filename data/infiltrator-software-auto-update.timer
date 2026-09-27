@@ -3,7 +3,7 @@ Description=Check Infiltrator Software automatic package updates
 
 [Timer]
 OnBootSec=10min
-OnUnitActiveSec=1h
+OnUnitActiveSec=5min
 AccuracySec=5min
 Persistent=true
 
