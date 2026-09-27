@@ -63,8 +63,10 @@ infiltrator::software::DebianPackageVersion available(
     package.pin_priority = 700;
     package.policy_provider = "host-apt-preferences";
     package.policy_reason = "Matched host APT generic preference.";
-    package.release_origin = "linuxmint";
-    package.site = "packages.linuxmint.com";
+    package.release_origin = "Ubuntu";
+    package.release_archive = "noble-updates";
+    package.supported = "5y";
+    package.site = "archive.ubuntu.com";
     package.depends = "libc6 (>= 2.38)";
     package.size_bytes = 1024U;
     package.installed_size_bytes = 2048U;
@@ -180,8 +182,10 @@ int main()
            "host-apt-preferences");
     assert(first->available[0].policy_reason ==
            "Matched host APT generic preference.");
-    assert(first->available[0].release_origin == "linuxmint");
-    assert(first->available[0].site == "packages.linuxmint.com");
+    assert(first->available[0].release_origin == "Ubuntu");
+    assert(first->available[0].release_archive == "noble-updates");
+    assert(first->available[0].supported == "5y");
+    assert(first->available[0].site == "archive.ubuntu.com");
     assert(first->installed[0].depends == "libcore (>= 1.0)");
     assert(first->installed[0].pre_depends == "init-base");
     assert(first->installed[0].provides == "virtual-alpha (= 1.0)");
