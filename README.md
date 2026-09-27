@@ -36,6 +36,8 @@ The 0.4 architecture replaces those APT command invocations with a native Infilt
 
 Software 0.3.49 completes the required Linux Mint Update Manager replacement gate against upstream `linuxmint/mintupdate` master at commit `a6a9f5767905b8fc94923d0b4ca0538a93309a90` (Update Manager 7.1.5 line). Required APT/Debian, Flatpak, Cinnamon Spice/Nemo action, unattended update, notification, reboot, changelog, repository/mirror, snapshot, release-upgrade, tray and CLI behaviours are implemented or deliberately superseded by a stricter reviewed-transaction mechanism. CI rejects a release if any Required row in `docs/MINTUPDATE_PARITY.md` returns to Missing or Partial.
 
+Self-updates complete without exposing package-engine version plumbing to the desktop: older running clients may finish against a newer compatible engine, the GUI then replaces itself with the newly installed executable, and the new client recycles any older resident engine.
+
 ## User experience
 
 Software is graphical first and graphical throughout. Ordinary workflows must not require a terminal.
