@@ -476,12 +476,13 @@ bool valid_flatpak_component(
                });
 }
 
-void install_matching_theme(
-    const bool user)
+bool install_matching_theme(
+    const bool user,
+    std::string &error)
 {
     const std::string theme = current_gtk_theme();
     if (!valid_flatpak_component(theme)) {
-        return;
+        return true;
     }
 
     const std::string ref =
@@ -507,7 +508,10 @@ void install_matching_theme(
             remotes_command,
             remotes,
             ignored_error)) {
-        return;
+        error =
+            "Unable to inspect Flatpak remotes while matching the host theme: " +
+            ignored_error;
+        return false;
     }
 
     for (const std::string_view line :
@@ -547,12 +551,18 @@ void install_matching_theme(
         }
         install.push_back(remote);
         install.push_back(ref);
-        (void)run_command(
-            install,
-            output,
-            ignored_error);
-        return;
+        if (!run_command(
+                install,
+                output,
+                ignored_error)) {
+            error =
+                "Unable to install matching Flatpak theme " +
+                ref + ": " + ignored_error;
+            return false;
+        }
+        return true;
     }
+    return true;
 }
 
 ExternalUpdateKind cinnamon_kind(
@@ -675,8 +685,10 @@ bool apply_flatpak_updates(
 
     if (match_host_theme) {
         if (progress) progress("Checking desktop theme runtimes");
-        install_matching_theme(false);
-        install_matching_theme(true);
+        if (!install_matching_theme(false, error) ||
+            !install_matching_theme(true, error)) {
+            return false;
+        }
     }
 
     for (const bool user : {false, true}) {
