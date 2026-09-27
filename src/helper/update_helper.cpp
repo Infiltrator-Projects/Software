@@ -132,7 +132,9 @@ bool safe_package_spec(const std::string_view value)
         return false;
     }
 
-    for (const unsigned char ch : package) {
+    for (const char raw : package) {
+        const unsigned char ch =
+            static_cast<unsigned char>(raw);
         if (std::isalnum(ch) != 0 ||
             ch == '+' || ch == '-' || ch == '.' || ch == ':') {
             continue;
@@ -144,7 +146,9 @@ bool safe_package_spec(const std::string_view value)
         if (version.empty()) {
             return false;
         }
-        for (const unsigned char ch : version) {
+        for (const char raw : version) {
+            const unsigned char ch =
+                static_cast<unsigned char>(raw);
             if (std::isalnum(ch) != 0 ||
                 ch == '+' || ch == '-' || ch == '.' ||
                 ch == ':' || ch == '~') {
@@ -337,7 +341,9 @@ bool safe_progress_token(const std::string_view token)
     if (token.empty() || token.size() > 96U) {
         return false;
     }
-    for (const unsigned char ch : token) {
+    for (const char raw : token) {
+        const unsigned char ch =
+            static_cast<unsigned char>(raw);
         if (std::isalnum(ch) != 0 || ch == '-' || ch == '_') {
             continue;
         }
@@ -352,7 +358,9 @@ std::string privileged_progress_path()
     if (uid == nullptr || *uid == '\0') {
         return {};
     }
-    for (const unsigned char ch : std::string_view(uid)) {
+    for (const char raw : std::string_view(uid)) {
+        const unsigned char ch =
+            static_cast<unsigned char>(raw);
         if (std::isdigit(ch) == 0) {
             return {};
         }
