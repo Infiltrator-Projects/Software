@@ -20,6 +20,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <optional>
 #include <set>
 #include <sstream>
@@ -5832,6 +5833,331 @@ void rebuild_updates(WindowState *state)
             GTK_LABEL(state->updates_critical),
             critical.c_str());
     }
+}
+
+GtkWidget *make_external_update_row(
+    const ExternalUpdate &update)
+{
+    GtkWidget *row =
+        gtk_box_new(
+            GTK_ORIENTATION_HORIZONTAL, 12);
+    gtk_widget_add_css_class(
+        row, "package-row");
+    gtk_widget_add_css_class(
+        row, "external-update-row");
+
+    const char *icon_name =
+        update.backend == "Flatpak"
+            ? "application-x-executable-symbolic"
+            : "preferences-desktop-symbolic";
+    GtkWidget *icon_well =
+        gtk_box_new(
+            GTK_ORIENTATION_VERTICAL, 0);
+    gtk_widget_add_css_class(
+        icon_well, "update-icon-well");
+    gtk_widget_set_size_request(
+        icon_well, 46, 46);
+    GtkWidget *icon =
+        make_icon(icon_name, 24);
+    gtk_widget_set_halign(
+        icon, GTK_ALIGN_CENTER);
+    gtk_widget_set_valign(
+        icon, GTK_ALIGN_CENTER);
+    gtk_box_append(
+        GTK_BOX(icon_well), icon);
+    gtk_box_append(
+        GTK_BOX(row), icon_well);
+
+    GtkWidget *copy =
+        gtk_box_new(
+            GTK_ORIENTATION_VERTICAL, 3);
+    gtk_widget_set_hexpand(copy, true);
+
+    GtkWidget *title =
+        make_label(
+            update.name.empty()
+                ? update.id.c_str()
+                : update.name.c_str(),
+            "update-name");
+    gtk_label_set_ellipsize(
+        GTK_LABEL(title),
+        PANGO_ELLIPSIZE_END);
+    gtk_box_append(
+        GTK_BOX(copy), title);
+
+    std::string detail =
+        std::string(
+            external_update_kind_name(
+                update.kind));
+    if (!update.version.empty()) {
+        detail += " • " + update.version;
+    }
+    if (!update.detail.empty()) {
+        detail += " • " + update.detail;
+    }
+    GtkWidget *detail_label =
+        make_label(
+            detail.c_str(),
+            "update-source");
+    gtk_label_set_ellipsize(
+        GTK_LABEL(detail_label),
+        PANGO_ELLIPSIZE_END);
+    gtk_box_append(
+        GTK_BOX(copy),
+        detail_label);
+    gtk_box_append(
+        GTK_BOX(row), copy);
+
+    GtkWidget *backend =
+        make_label(
+            update.backend.c_str(),
+            "update-kind-chip");
+    gtk_widget_set_valign(
+        backend, GTK_ALIGN_CENTER);
+    gtk_box_append(
+        GTK_BOX(row), backend);
+    return row;
+}
+
+void rebuild_external_updates(
+    WindowState *state)
+{
+    if (state == nullptr ||
+        state->external_updates_list == nullptr) {
+        return;
+    }
+
+    GtkWidget *child =
+        gtk_widget_get_first_child(
+            GTK_WIDGET(
+                state->external_updates_list));
+    while (child != nullptr) {
+        GtkWidget *next =
+            gtk_widget_get_next_sibling(child);
+        gtk_list_box_remove(
+            state->external_updates_list,
+            child);
+        child = next;
+    }
+
+    std::size_t flatpak_count = 0U;
+    std::size_t cinnamon_count = 0U;
+    for (const ExternalUpdate &update :
+         state->external_update_records) {
+        if (update.backend == "Flatpak") {
+            ++flatpak_count;
+        } else if (update.backend == "Cinnamon") {
+            ++cinnamon_count;
+        }
+
+        GtkWidget *row =
+            gtk_list_box_row_new();
+        gtk_list_box_row_set_activatable(
+            GTK_LIST_BOX_ROW(row), false);
+        gtk_list_box_row_set_selectable(
+            GTK_LIST_BOX_ROW(row), false);
+        gtk_list_box_row_set_child(
+            GTK_LIST_BOX_ROW(row),
+            make_external_update_row(update));
+        gtk_list_box_append(
+            state->external_updates_list,
+            row);
+    }
+
+    if (state->external_updates_status != nullptr) {
+        std::string status;
+        if (state->external_update_records.empty()) {
+            status =
+                "Flatpak and Cinnamon sources are up to date.";
+        } else {
+            status =
+                std::to_string(flatpak_count) +
+                " Flatpak • " +
+                std::to_string(cinnamon_count) +
+                " Cinnamon";
+        }
+        gtk_label_set_text(
+            GTK_LABEL(
+                state->external_updates_status),
+            status.c_str());
+    }
+
+    if (state->external_flatpak_apply != nullptr) {
+        gtk_widget_set_sensitive(
+            state->external_flatpak_apply,
+            flatpak_count > 0U &&
+                !state->updates_busy);
+    }
+    if (state->external_cinnamon_apply != nullptr) {
+        gtk_widget_set_sensitive(
+            state->external_cinnamon_apply,
+            cinnamon_count > 0U &&
+                !state->updates_busy);
+    }
+}
+
+struct ExternalApplyTaskData {
+    bool flatpak{false};
+};
+
+struct ExternalApplyResult {
+    bool flatpak{false};
+    bool success{false};
+    std::string error;
+};
+
+void external_apply_worker(
+    GTask *task,
+    gpointer,
+    gpointer task_data,
+    GCancellable *)
+{
+    auto *data =
+        static_cast<ExternalApplyTaskData *>(
+            task_data);
+    auto *result =
+        new ExternalApplyResult{};
+    result->flatpak =
+        data != nullptr && data->flatpak;
+
+    if (data == nullptr) {
+        result->error =
+            "External update task state is unavailable.";
+    } else if (data->flatpak) {
+        result->success =
+            apply_flatpak_updates(
+                true,
+                true,
+                result->error);
+    } else {
+        result->success =
+            apply_cinnamon_updates(
+                result->error);
+    }
+
+    g_task_return_pointer(
+        task,
+        result,
+        [](gpointer value) {
+            delete static_cast<
+                ExternalApplyResult *>(value);
+        });
+}
+
+void external_apply_complete(
+    GObject *source_object,
+    GAsyncResult *async_result,
+    gpointer)
+{
+    auto *window =
+        GTK_WINDOW(source_object);
+    auto *state =
+        window == nullptr
+            ? nullptr
+            : static_cast<WindowState *>(
+                  g_object_get_data(
+                      G_OBJECT(window),
+                      "infiltrator-window-state"));
+    auto *result =
+        static_cast<ExternalApplyResult *>(
+            g_task_propagate_pointer(
+                G_TASK(async_result),
+                nullptr));
+
+    if (state == nullptr ||
+        result == nullptr) {
+        delete result;
+        return;
+    }
+
+    if (result->success) {
+        if (state->external_updates_status != nullptr) {
+            gtk_label_set_text(
+                GTK_LABEL(
+                    state->external_updates_status),
+                result->flatpak
+                    ? "Flatpak updates complete. Rechecking…"
+                    : "Cinnamon Spice updates complete. Rechecking…");
+        }
+        state->updates_busy = false;
+        delete result;
+        refresh_updates(state, false);
+        return;
+    }
+
+    state->updates_busy = false;
+    if (state->external_updates_status != nullptr) {
+        const std::string message =
+            result->error.empty()
+                ? "External update failed."
+                : result->error;
+        gtk_label_set_text(
+            GTK_LABEL(
+                state->external_updates_status),
+            message.c_str());
+    }
+    delete result;
+    rebuild_external_updates(state);
+}
+
+void external_apply_clicked(
+    GtkButton *button,
+    gpointer user_data)
+{
+    auto *state =
+        static_cast<WindowState *>(user_data);
+    if (state == nullptr ||
+        state->window == nullptr ||
+        state->updates_busy) {
+        return;
+    }
+
+    const bool flatpak =
+        button ==
+        GTK_BUTTON(
+            state->external_flatpak_apply);
+
+    state->updates_busy = true;
+    if (state->external_flatpak_apply != nullptr) {
+        gtk_widget_set_sensitive(
+            state->external_flatpak_apply,
+            false);
+    }
+    if (state->external_cinnamon_apply != nullptr) {
+        gtk_widget_set_sensitive(
+            state->external_cinnamon_apply,
+            false);
+    }
+    if (state->external_updates_status != nullptr) {
+        gtk_label_set_text(
+            GTK_LABEL(
+                state->external_updates_status),
+            flatpak
+                ? "Updating Flatpaks and cleaning unused runtimes…"
+                : "Updating Cinnamon Spices…");
+    }
+
+    auto *data =
+        new ExternalApplyTaskData{};
+    data->flatpak = flatpak;
+
+    GTask *task =
+        g_task_new(
+            G_OBJECT(state->window),
+            nullptr,
+            external_apply_complete,
+            nullptr);
+    g_task_set_task_data(
+        task,
+        data,
+        [](gpointer value) {
+            delete static_cast<
+                ExternalApplyTaskData *>(value);
+        });
+    g_task_run_in_thread(
+        task,
+        external_apply_worker);
+    g_object_unref(task);
 }
 
 void updates_worker(
