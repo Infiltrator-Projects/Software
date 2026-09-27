@@ -9227,12 +9227,130 @@ GtkWidget *make_source_card(
 struct RepositoryResult {
     unsigned int generation{0U};
     std::vector<SourceRecord> sources;
+    std::string mirror_status;
     std::string error;
 };
 
 struct RepositoryTaskData {
     unsigned int generation{0U};
 };
+
+std::optional<curl_off_t> url_file_time(
+    const std::string &url)
+{
+    CURL *curl = curl_easy_init();
+    if (curl == nullptr) {
+        return std::nullopt;
+    }
+    curl_easy_setopt(
+        curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(
+        curl, CURLOPT_NOBODY, 1L);
+    curl_easy_setopt(
+        curl, CURLOPT_FILETIME, 1L);
+    curl_easy_setopt(
+        curl, CURLOPT_FOLLOWLOCATION, 1L);
+    curl_easy_setopt(
+        curl, CURLOPT_CONNECTTIMEOUT, 6L);
+    curl_easy_setopt(
+        curl, CURLOPT_TIMEOUT, 12L);
+    curl_easy_setopt(
+        curl, CURLOPT_USERAGENT,
+        "Infiltrator-Software/" INFILTRATOR_SOFTWARE_VERSION);
+    const CURLcode code =
+        curl_easy_perform(curl);
+    long response = 0;
+    curl_off_t file_time = -1;
+    (void)curl_easy_getinfo(
+        curl,
+        CURLINFO_RESPONSE_CODE,
+        &response);
+    (void)curl_easy_getinfo(
+        curl,
+        CURLINFO_FILETIME_T,
+        &file_time);
+    curl_easy_cleanup(curl);
+    if (code != CURLE_OK ||
+        response < 200L ||
+        response >= 400L ||
+        file_time < 0) {
+        return std::nullopt;
+    }
+    return file_time;
+}
+
+std::string mint_mirror_status()
+{
+    const std::filesystem::path sources{
+        "/etc/apt/sources.list.d/official-package-repositories.list"};
+    std::ifstream input(sources);
+    if (!input) {
+        return {};
+    }
+
+    std::string mirror;
+    std::string line;
+    while (std::getline(input, line)) {
+        const std::string clean =
+            one_line(line);
+        if (clean.rfind("deb ", 0U) != 0U ||
+            clean.find(
+                "main upstream import") ==
+                std::string::npos) {
+            continue;
+        }
+        std::istringstream words(clean);
+        std::string deb;
+        words >> deb >> mirror;
+        break;
+    }
+    while (!mirror.empty() &&
+           mirror.back() == '/') {
+        mirror.pop_back();
+    }
+    if (mirror.empty()) {
+        return {};
+    }
+
+    if (mirror ==
+            "http://packages.linuxmint.com" ||
+        mirror ==
+            "https://packages.linuxmint.com") {
+        return "The default Linux Mint repository is in use. A local mirror may be faster; use Mint mirrors… to choose one.";
+    }
+
+    const auto reference =
+        url_file_time(
+            "https://packages.linuxmint.com/db/version");
+    const auto selected =
+        url_file_time(
+            mirror + "/db/version");
+
+    if (reference.has_value() &&
+        !selected.has_value()) {
+        return mirror +
+            " is unreachable. Use Mint mirrors… to choose another mirror.";
+    }
+    if (reference.has_value() &&
+        selected.has_value()) {
+        static constexpr curl_off_t day =
+            24 * 60 * 60;
+        if (*reference - *selected >
+            2 * day) {
+            const curl_off_t days =
+                (*reference - *selected) /
+                day;
+            return mirror +
+                " is about " +
+                std::to_string(
+                    static_cast<long long>(
+                        days)) +
+                " days behind the Linux Mint reference repository. Use Mint mirrors… to switch.";
+        }
+        return "Linux Mint mirror is reachable and current.";
+    }
+    return {};
+}
 
 void repositories_worker(
     GTask *task,
@@ -9246,6 +9364,10 @@ void repositories_worker(
 
     SourceInventory inventory;
     result->sources = inventory.list(result->error);
+    if (result->error.empty()) {
+        result->mirror_status =
+            mint_mirror_status();
+    }
 
     g_task_return_pointer(
         task,
@@ -9326,6 +9448,9 @@ void repositories_complete(
             status << enabled << " enabled source"
                    << (enabled == 1U ? "" : "s")
                    << " detected. APT sources and Flatpak remotes feed Discover.";
+            if (!result->mirror_status.empty()) {
+                status << "  " << result->mirror_status;
+            }
             gtk_label_set_text(
                 GTK_LABEL(state->repository_status),
                 status.str().c_str());
