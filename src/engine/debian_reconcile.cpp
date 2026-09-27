@@ -23,6 +23,39 @@
 namespace infiltrator::software {
 namespace {
 
+bool security_candidate(
+    const DebianPackageVersion &package)
+{
+    auto lower = [](std::string value) {
+        std::transform(
+            value.begin(), value.end(), value.begin(),
+            [](const unsigned char ch) {
+                return static_cast<char>(std::tolower(ch));
+            });
+        return value;
+    };
+
+    const std::string origin = lower(package.release_origin);
+    const std::string label = lower(package.release_label);
+    const std::string archive = lower(package.release_archive);
+    const std::string source = lower(package.source_package);
+
+    if (origin == "ubuntu" &&
+        archive.find("-security") != std::string::npos) {
+        return true;
+    }
+    if (origin == "debian" &&
+        label.find("security") != std::string::npos) {
+        return true;
+    }
+
+    // Match Mint Update Manager's long-standing browser-source rule.
+    return source == "firefox" ||
+           source == "thunderbird" ||
+           source == "chromium" ||
+           source == "chromium-browser";
+}
+
 bool architecture_enabled(
     const DebianRepositorySource &source,
     const std::string_view architecture)
@@ -159,6 +192,8 @@ bool DebianReconciler::reconcile(
             return false;
         }
         for (DebianPackageVersion &package : snapshot.packages) {
+            package.security_update =
+                security_candidate(package);
             const DebianPolicyDecision decision =
                 policy.evaluate(package);
             package.pin_priority = decision.priority;
