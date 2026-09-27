@@ -229,6 +229,11 @@ add_executable(infiltrator-software-session-updater
 target_link_libraries(infiltrator-software-session-updater PRIVATE
     software-core software-external PkgConfig::GLIB)
 
+add_executable(infiltrator-software-cli
+    src/cli/main.cpp)
+target_link_libraries(infiltrator-software-cli PRIVATE
+    software-core software-client PkgConfig::GLIB)
+
 add_executable(infiltrator-software
     src/app/main.cpp
     src/app/theme.cpp)
@@ -246,6 +251,7 @@ install(TARGETS
     infiltrator-software
     infiltrator-software-tray
     infiltrator-software-session-updater
+    infiltrator-software-cli
     RUNTIME DESTINATION bin)
 install(TARGETS
     infiltrator-software-helper
@@ -278,7 +284,7 @@ foreach(target IN ITEMS
         software-apt-plan-guard
         infiltrator-software-helper infiltrator-software-update-helper
         infiltrator-software-engine infiltrator-software-tray
-        infiltrator-software-session-updater infiltrator-software)
+        infiltrator-software-session-updater infiltrator-software-cli infiltrator-software)
     if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
         target_compile_options(${target} PRIVATE
             -Wall -Wextra -Wpedantic -Wshadow -Wconversion -Wsign-conversion)
