@@ -679,19 +679,45 @@ int main(int argc, char **argv)
     if (legacy_upgrade || resolved_plan) {
         int specification_start = 2;
         std::string progress_token;
-        if (argc > specification_start &&
-            std::string_view(argv[specification_start]).rfind(
-                "--progress-token=", 0U) == 0U) {
-            progress_token =
-                std::string(argv[specification_start]).substr(17U);
-            if (!safe_progress_token(progress_token)) {
-                std::fprintf(
-                    stderr,
-                    "Invalid update progress token.\n");
-                return 64;
+        enum class ConffilePolicy {
+            defaults,
+            keep_local,
+            take_maintainer
+        };
+        ConffilePolicy conffile_policy =
+            ConffilePolicy::defaults;
+
+        while (specification_start < argc) {
+            const std::string_view option(
+                argv[specification_start]);
+            if (option.rfind(
+                    "--progress-token=", 0U) == 0U) {
+                progress_token =
+                    std::string(option.substr(17U));
+                if (!safe_progress_token(progress_token)) {
+                    std::fprintf(
+                        stderr,
+                        "Invalid update progress token.\n");
+                    return 64;
+                }
+                ++specification_start;
+                continue;
             }
-            ++specification_start;
+            if (option == "--force-confold") {
+                conffile_policy =
+                    ConffilePolicy::keep_local;
+                ++specification_start;
+                continue;
+            }
+            if (option == "--force-confnew") {
+                conffile_policy =
+                    ConffilePolicy::take_maintainer;
+                ++specification_start;
+                continue;
+            }
+            break;
         }
+
         if (argc <= specification_start) {
             std::fprintf(
                 stderr,
@@ -705,9 +731,25 @@ int main(int argc, char **argv)
         std::vector<std::string> arguments{
             "-y",
             "--no-install-recommends",
-            "--no-install-suggests",
-            "install"};
-        arguments.reserve(static_cast<std::size_t>(argc) + 5U);
+            "--no-install-suggests"};
+        if (conffile_policy ==
+            ConffilePolicy::keep_local) {
+            arguments.emplace_back("-o");
+            arguments.emplace_back(
+                "Dpkg::Options::=--force-confold");
+        } else if (
+            conffile_policy ==
+            ConffilePolicy::take_maintainer) {
+            arguments.emplace_back("-o");
+            arguments.emplace_back(
+                "Dpkg::Options::=--force-confnew");
+        } else {
+            arguments.emplace_back("-o");
+            arguments.emplace_back(
+                "Dpkg::Options::=--force-confdef");
+        }
+        arguments.emplace_back("install");
+        arguments.reserve(static_cast<std::size_t>(argc) + 9U);
 
         bool has_removal = false;
         std::vector<std::string> approved_specs;
@@ -893,6 +935,7 @@ int main(int argc, char **argv)
     std::fprintf(
         stderr,
         "Usage: infiltrator-software-update-helper "
-        "apply-plan [remove:]PACKAGE=VERSION... | repair-configure\n");
+        "apply-plan [--progress-token=TOKEN] [--force-confold|--force-confnew] "
+        "[remove:]PACKAGE=VERSION... | repair-configure\n");
     return 64;
 }
