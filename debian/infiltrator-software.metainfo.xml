@@ -34,6 +34,11 @@
   <url type="homepage">https://github.com/Infiltrator-Projects/Software</url>
 
   <releases>
+    <release version="0.3.51" date="2026-09-27">
+      <description>
+        <p>Completes Linux Mint Update Manager replacement parity with native exact Cinnamon and Nemo updates, visible external-update progress, tray/history integration and package-level mintupdate replacement semantics.</p>
+      </description>
+    </release>
     <release version="0.3.26" date="2026-09-24">
       <description>
         <p>Fixes the Repositories navigation and page accents becoming nearly black under dark/system themes by using the readable information accent and full symbolic-icon opacity.</p>

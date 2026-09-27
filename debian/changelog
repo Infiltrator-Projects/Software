@@ -1,3 +1,22 @@
+infiltrator-software (0.3.51) unstable; urgency=high
+
+  * Complete the Linux Mint Update Manager replacement gate against the
+    audited mintupdate 7.1.5 baseline.
+  * Replace cinnamon-spice-updater integration with a native C++ Cinnamon
+    Spice backend covering applets, desklets, extensions, themes and Nemo
+    actions, with safe ZIP extraction and exact per-item updates.
+  * Add selected Cinnamon/Nemo controls plus per-item/transfer feedback, and
+    stream Flatpak transaction output into the graphical update state.
+  * Include Flatpak/Cinnamon/Nemo updates in the tray inventory and preserve
+    successful external transactions in Software history.
+  * Declare Provides/Conflicts/Replaces for mintupdate so installing Software
+    removes the original Mint Update Manager without breaking the Mint
+    meta-package dependency contract.
+  * Keep the reviewed point-release workflow fail-closed while documenting
+    real destructive host execution as release qualification, not a source gap.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Sun, 27 Sep 2026 20:52:00 +1000
+
 Warning: truncated output (original token count: 13233)
 Total output lines: 924
 

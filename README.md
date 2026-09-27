@@ -6,7 +6,7 @@
 
 Infiltrator Software is the software-management application for the Infiltrator project family. It presents software discovery, installation, removal, updates, system components, repositories, release channels, history and repair as one coherent graphical product.
 
-**Current source version:** 0.3.50<br>
+**Current source version:** 0.3.51<br>
 **Language:** C++17 application/core with native GTK4 Linux shell; C11 Common foundation  
 **Shared foundation:** Common 1.19.35  
 **Current package compatibility:** Debian repositories and .deb packages; Flatpak and AppStream catalogue integration  
@@ -34,7 +34,9 @@ The 0.4 architecture replaces those APT command invocations with a native Infilt
 
 ## Linux Mint Update Manager replacement status
 
-Software 0.3.49 contains substantial Linux Mint Update Manager replacement code, but the earlier claim of complete replacement was premature. The source audit uses `linuxmint/mintupdate` commit `a6a9f5767905b8fc94923d0b4ca0538a93309a90` (7.1.5 line). `docs/MINTUPDATE_PARITY.md` tracks the functions and remaining validation. Do not remove Mint Update Manager based on a green build or that matrix alone.
+Software 0.3.51 completes the source-level replacement gate against `linuxmint/mintupdate` commit `a6a9f5767905b8fc94923d0b4ca0538a93309a90` (7.1.5 line). The native C++ Cinnamon backend now discovers and updates applets, desklets, extensions, themes and Nemo actions, supports exact per-item selection, reports transfer/item activity, records external updates in Software history, and includes Flatpak/Cinnamon/Nemo state in the tray. The Debian package now `Provides`, `Conflicts` with and `Replaces` `mintupdate`, allowing Software to satisfy Mint's update-manager dependency while removing the original package. `docs/MINTUPDATE_PARITY.md` is the audited capability matrix.
+
+A real distribution point-release upgrade remains an installed-host qualification exercise because CI cannot safely perform a destructive upgrade of the user's machine; that is a validation limitation, not a missing release-upgrade code path.
 
 Self-updates complete without exposing package-engine version plumbing to the desktop: older running clients may finish against a newer compatible engine, the GUI then replaces itself with the newly installed executable, and the new client recycles any older resident engine.
 

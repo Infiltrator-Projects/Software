@@ -85,6 +85,10 @@ jobs:
           test "$(dpkg-deb -f "$DEB" Architecture)" = "amd64"
           dpkg-deb -f "$DEB" Depends | grep -Eq 'libxapp'
           dpkg-deb -f "$DEB" Depends | grep -Eq '(^|, )gpgv([, ]|$)'
+          dpkg-deb -f "$DEB" Depends | grep -Eq '(^|, )gettext([, ]|$)'
+          dpkg-deb -f "$DEB" Provides | grep -Eq '(^|, )mintupdate([, ]|$)'
+          dpkg-deb -f "$DEB" Conflicts | grep -Eq '(^|, )mintupdate([, ]|$)'
+          dpkg-deb -f "$DEB" Replaces | grep -Eq '(^|, )mintupdate([, ]|$)'
           dpkg-deb --fsys-tarfile "$DEB" | tar -tf - > package-files.txt
           grep -qx './usr/bin/infiltrator-software' package-files.txt
           grep -qx './usr/bin/infiltrator-software-tray' package-files.txt

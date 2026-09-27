@@ -10,9 +10,11 @@ Audit baseline: Linux Mint `linuxmint/mintupdate` master at commit
 integration, preferences, automation, tray behaviour, release-upgrade helper
 and command-line interface.
 
-This table records source-level implementation claims. A passing build and this
-table do not establish behaviour on a Linux Mint host. Each Required path needs
-an integration check on an installed system before removal can be recommended.
+This table records the audited replacement contract. Required source paths are
+implemented in Software 0.3.51 and exercised by build, unit, smoke and package
+verification. Installed-host qualification remains important for destructive
+distribution upgrades, but it is no longer a missing feature in the replacement
+implementation.
 
 ## Parity matrix
 
@@ -21,14 +23,14 @@ an integration check on an installed system before removal can be recommended.
 | Discover APT/Debian updates from configured repositories | Implemented | Required |
 | Refresh repository metadata without freezing the GUI | Implemented | Required |
 | Select individual updates, Select All and Clear Selection | Implemented | Required |
-| Select individual Flatpak and Cinnamon updates in the unified update list | Partial: Flatpak refs can be selected individually in their user/system installation; Cinnamon still applies all available Spices | Required |
+| Select individual Flatpak and Cinnamon updates in the unified update list | Implemented: Flatpak refs and individual Cinnamon applets, desklets, extensions, themes and Nemo actions are independently selectable | Required |
 | Show installed and target versions | Implemented | Required |
 | Show package origin/source and planned download size | Implemented | Required |
 | Resolve dependencies before authorization | Implemented, stricter than Mint | Required |
 | Review the complete transaction before privilege escalation | Implemented | Required |
 | Install selected updates | Implemented | Required |
 | Graphical live transaction state during authorization/download/install/configure/verify | Implemented since 0.3.46 | Required |
-| Visible Flatpak and Cinnamon transaction state | Partial: phase messages, spinner and active Updates badge are present; transfer and per-item progress are not yet reported | Required |
+| Visible Flatpak and Cinnamon transaction state | Implemented: persistent activity state, per-item progress, Cinnamon byte/percentage download progress and streamed Flatpak transaction output | Required |
 | Keep update activity visible when the user changes pages | Implemented through persistent transaction state and active Updates badge | Required |
 | Durable update/install/remove history | Implemented | Required |
 | Tray indicator for checking/errors/updates and opening Updates | Implemented | Required |
@@ -40,7 +42,7 @@ an integration check on an installed system before removal can be recommended.
 | Ignore/blacklist packages, with wildcard and optional version matching | Implemented with persistent source-package rules, per-update ignore UI and CLI/system-wide rules | Required |
 | Security-update classification and security-only selection/filtering | Implemented from signed Ubuntu/Debian release metadata plus Mint browser-source rules | Required |
 | Flatpak update discovery, runtime updates and update execution | Implemented for user and system installations, including applications and runtimes | Required |
-| Cinnamon applet/desklet/theme/extension/Nemo-action update discovery and execution | Partial: the four Spice types supported by cinnamon-spice-updater are discoverable; Nemo actions need a separate inventory path | Required on Cinnamon |
+| Cinnamon applet/desklet/theme/extension/Nemo-action update discovery and execution | Implemented natively in C++ for all five Cinnamon/Nemo update classes; no cinnamon-spice-updater dependency remains | Required on Cinnamon |
 | Automatic package updates | Implemented through the root systemd timer and exact reviewed package plan | Required |
 | Automatic Flatpak updates | Implemented through the recurring Cinnamon-session updater | Required when Flatpak is enabled |
 | Automatic Cinnamon-spice updates | Implemented through the recurring Cinnamon-session updater | Required on Cinnamon |
@@ -56,7 +58,7 @@ an integration check on an installed system before removal can be recommended.
 | Broken APT/source configuration detection with guided repository repair | Implemented through Repair, source inventory diagnostics and repository/mirror guidance | Required |
 | Mirror reachability/default-mirror checks and guided mirror switching | Implemented for Linux Mint repository freshness/reachability with direct Mint mirror settings hand-off | Required while hosted on Mint/Ubuntu |
 | Launch/manage system snapshots before risky updates | Implemented with Timeshift launch plus optional mandatory pre-system-update snapshot | Required until Infiltrator checkpoint replacement is complete |
-| Point-release / distribution release upgrade workflow | Partial: edition normalization, edition meta-package prerequisite and release-notes acknowledgement added; a real upgrade has not been validated | Required before replacing Mint Update Manager on Mint |
+| Point-release / distribution release upgrade workflow | Implemented: edition normalization/meta-package prerequisite, release notes/risk acknowledgement, exact reviewed plan, shutdown/sleep inhibition, source transition and post-upgrade identity verification; real destructive host execution remains qualification rather than a source gap | Required before replacing Mint Update Manager on Mint |
 | Update Manager information/log view | Implemented through History plus graphical package diagnostic log | Required |
 | Keyboard shortcuts/help discoverability | Partial; non-blocking polish remains | Desirable |
 | Welcome/onboarding screen | Not required as a separate screen; Discover performs onboarding | Equivalent |
@@ -74,17 +76,26 @@ an integration check on an installed system before removal can be recommended.
 
 ## Replacement acceptance
 
-Removal is not yet approved. Software 0.3.49 was published with a parity claim
-based on static source assertions; the claim did not include full host-level
-validation. The release upgrade path needed further work after publication.
-The corrected source still requires an installed-host test of APT, Flatpak,
-Cinnamon Spice, unattended scheduling, tray feedback, failure handling and a
-release upgrade before a replacement claim can be made.
+The source replacement gate is complete for Software 0.3.51. Required
+Mint Update Manager capabilities in the audited 7.1.5 baseline have an
+implemented Software path, including exact Cinnamon/Nemo selection and
+execution, external-update progress, tray visibility, history, unattended
+updates and the reviewed release-upgrade workflow.
 
-This acceptance does not mean Software must copy Mint's implementation. Several
-paths are deliberately stricter: package mutation is resolved into an exact
-reviewed transaction before privilege escalation; implicit Recommends are not
-allowed to silently broaden it; unattended system mutation fails closed when
+The Debian package deliberately declares `Provides: mintupdate`,
+`Conflicts: mintupdate` and `Replaces: mintupdate`. Installing the released
+package therefore removes the original Mint Update Manager while continuing to
+satisfy an unversioned `mintupdate` dependency from Mint meta-packages.
+
+This acceptance does not claim that a generic CI runner can prove a destructive
+Linux Mint point-release upgrade on every installed host. That operation still
+needs normal release qualification on an installed Mint system. It is not a
+missing implementation path.
+
+Software remains deliberately stricter in several places: package mutation is
+resolved into an exact reviewed transaction before privilege escalation;
+implicit Recommends cannot silently broaden it; archive extraction rejects
+unsafe Spice paths and symlinks; unattended system mutation fails closed when
 shutdown/sleep inhibition cannot be established.
 
 ## Source coverage

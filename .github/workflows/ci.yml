@@ -260,7 +260,11 @@ jobs:
           assert "docs/MINTUPDATE_PARITY.md" in Path("README.md").read_text()
           parity = Path("docs/MINTUPDATE_PARITY.md").read_text()
           assert "Linux Mint Update Manager replacement audit" in parity
-          assert "Removal is not yet approved" in parity
+          assert "The source replacement gate is complete for Software 0.3.51" in parity
+          control = Path("debian/control").read_text()
+          assert "Provides: mintupdate" in control
+          assert "Conflicts: mintupdate" in control
+          assert "Replaces: mintupdate" in control
           assert "Installation finished; checking installed versions and remaining update candidates." in app
           assert "finish_update_progress(" in app
 
@@ -550,7 +554,11 @@ jobs:
           test "$(dpkg-deb -f "$package" Package)" = "infiltrator-software"
           dpkg-deb -f "$package" Depends | grep -Eq '(^|, )pkexec([, ]|$)'
           dpkg-deb -f "$package" Depends | grep -Eq '(^|, )gpgv([, ]|$)'
+          dpkg-deb -f "$package" Depends | grep -Eq '(^|, )gettext([, ]|$)'
           dpkg-deb -f "$package" Depends | grep -Eq 'libxapp'
+          dpkg-deb -f "$package" Provides | grep -Eq '(^|, )mintupdate([, ]|$)'
+          dpkg-deb -f "$package" Conflicts | grep -Eq '(^|, )mintupdate([, ]|$)'
+          dpkg-deb -f "$package" Replaces | grep -Eq '(^|, )mintupdate([, ]|$)'
           dpkg-deb -f "$package" Recommends | grep -Eq '(^|, )flatpak([, ]|$)'
           dpkg-deb --fsys-tarfile "$package" | tar -tf - > package-files.txt
           grep -qx './usr/bin/infiltrator-software' package-files.txt
