@@ -477,6 +477,10 @@ std::optional<TransactionPlan> AptBackend::plan(
     arguments.emplace_back("-o");
     arguments.emplace_back("Debug::NoLocking=1");
     arguments.emplace_back("--no-remove");
+    arguments.emplace_back(
+        request.install_recommends
+            ? "--install-recommends"
+            : "--no-install-recommends");
     arguments.emplace_back("install");
     arguments.insert(
         arguments.end(),
