@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <map>
@@ -322,13 +323,40 @@ DebianSourceConfiguration::read(std::string &error)
     error.clear();
     std::vector<DebianRepositorySource> result;
     std::vector<std::filesystem::path> files;
+
+    /*
+     * Release-upgrade planning must be able to reconcile the next Mint
+     * release against its supplied repository list without changing the
+     * running system first. The override is explicit and process-local.
+     */
+    const char *override_file =
+        std::getenv("INFILTRATOR_SOFTWARE_SOURCES_FILE");
+    if (override_file != nullptr &&
+        *override_file != '\0') {
+        const std::filesystem::path path{
+            override_file};
+        std::error_code override_error;
+        if (!std::filesystem::is_regular_file(
+                path, override_error) ||
+            override_error) {
+            error =
+                "The alternate repository source file is unavailable: " +
+                path.string();
+            return {};
+        }
+        files.emplace_back(path);
+    }
+
     const std::filesystem::path main{"/etc/apt/sources.list"};
     std::error_code ec;
-    if (std::filesystem::is_regular_file(main, ec) && !ec) files.emplace_back(main);
-    ec.clear();
+    if (files.empty()) {
+        if (std::filesystem::is_regular_file(main, ec) && !ec) {
+            files.emplace_back(main);
+        }
+        ec.clear();
 
-    const std::filesystem::path directory{"/etc/apt/sources.list.d"};
-    if (std::filesystem::is_directory(directory, ec) && !ec) {
+        const std::filesystem::path directory{"/etc/apt/sources.list.d"};
+        if (std::filesystem::is_directory(directory, ec) && !ec) {
         for (const auto &entry : std::filesystem::directory_iterator(directory, ec)) {
             if (ec) break;
             if (!entry.is_regular_file(ec) || ec) {
@@ -337,6 +365,7 @@ DebianSourceConfiguration::read(std::string &error)
             }
             const auto extension = entry.path().extension();
             if (extension == ".list" || extension == ".sources") files.emplace_back(entry.path());
+        }
         }
     }
     if (ec) {
