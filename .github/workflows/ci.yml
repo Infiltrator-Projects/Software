@@ -117,7 +117,8 @@ jobs:
           ]
           assert required_rows
           assert all("**Missing**" not in line and "**Partial**" not in line for line in required_rows)
-          assert "The Required matrix is complete for Software 0.3.48." in parity
+          source_version = Path("VERSION").read_text().strip()
+          assert f"The Required matrix is complete for Software {source_version}." in parity
 
           # Mint Update Manager replacement surfaces must remain wired, not
           # merely documented as complete.
