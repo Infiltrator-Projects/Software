@@ -5517,6 +5517,15 @@ GtkWidget *make_update_row(
             kind_text.c_str(),
             "update-kind-chip");
     gtk_box_append(GTK_BOX(title_line), kind);
+    if (package.security_update) {
+        GtkWidget *security =
+            make_label(
+                "SECURITY",
+                "update-security-chip");
+        gtk_box_append(
+            GTK_BOX(title_line),
+            security);
+    }
     gtk_box_append(GTK_BOX(identity), title_line);
 
     GtkWidget *version_line =
@@ -5604,6 +5613,24 @@ GtkWidget *make_update_row(
     gtk_widget_set_valign(
         recommended, GTK_ALIGN_CENTER);
     gtk_box_append(GTK_BOX(row), recommended);
+
+    GtkWidget *details =
+        gtk_button_new_with_label("Details");
+    gtk_widget_add_css_class(
+        details, "update-details-button");
+    auto *package_copy =
+        new PackageRecord(package);
+    g_object_set_data_full(
+        G_OBJECT(details),
+        "update-package",
+        package_copy,
+        package_record_destroy);
+    g_signal_connect(
+        details,
+        "clicked",
+        G_CALLBACK(update_details_clicked),
+        state);
+    gtk_box_append(GTK_BOX(row), details);
 
     return row;
 }
