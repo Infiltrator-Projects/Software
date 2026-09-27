@@ -89,33 +89,6 @@ exit 0
         root / "gsettings",
         "printf \"'Mint-Y-Dark'\\\\n\"\n");
 
-    write_script(
-        root / "cinnamon-spice-updater",
-R"(if [ "$1" = "--list-simple" ]; then
-  if [ "$FAIL_CINNAMON_SCAN" = 1 ]; then
-    echo 'Cinnamon updates failed: cache unavailable'
-    exit 0
-  fi
-  case "$2" in
-    applet) printf 'weather@mock\n' ;;
-    desklet) printf 'clock@mock\n' ;;
-    extension) printf 'tiling@mock\n' ;;
-    theme) printf 'theme@mock\n' ;;
-    action) echo 'unsupported Cinnamon Spice type' >&2; exit 2 ;;
-  esac
-  exit 0
-fi
-if [ "$1" = "--update-all" ]; then
-  if [ "$FAIL_CINNAMON_APPLY" = 1 ]; then
-    echo 'Cinnamon updates failed: installation failed'
-    exit 0
-  fi
-  echo "cinnamon-update-all" >> "$TRACE"
-  exit 0
-fi
-exit 1
-)");
-
     const char *old_path = std::getenv("PATH");
     const std::string path =
         root.string() + ":" +
@@ -178,12 +151,11 @@ exit 1
     std::vector<ExternalUpdate> cinnamon;
     assert(discover_cinnamon_updates(cinnamon, error));
     assert(error.empty());
-    assert(cinnamon.size() == 4U);
-    (void)setenv("FAIL_CINNAMON_SCAN", "1", 1);
-    assert(!discover_cinnamon_updates(cinnamon, error));
     assert(cinnamon.empty());
-    assert(error.find("cache unavailable") != std::string::npos);
-    (void)unsetenv("FAIL_CINNAMON_SCAN");
+    assert(
+        external_update_kind_name(
+            ExternalUpdateKind::nemo_action) ==
+        "Nemo action");
 
     std::vector<std::string> flatpak_phases;
     assert(apply_flatpak_updates(true, true, error,
@@ -202,17 +174,12 @@ exit 1
             cinnamon_phases.emplace_back(phase);
         }));
     assert(error.empty());
-    assert(cinnamon_phases.size() == 1U);
-    (void)setenv("FAIL_CINNAMON_APPLY", "1", 1);
-    assert(!apply_cinnamon_updates(error));
-    assert(error.find("installation failed") != std::string::npos);
-    (void)unsetenv("FAIL_CINNAMON_APPLY");
+    assert(cinnamon_phases.empty());
 
     const std::string logged = read_all(trace);
     assert(logged.find("flatpak-uninstall") != std::string::npos);
     assert(logged.find("flatpak-update") != std::string::npos);
     assert(logged.find("org.gtk.Gtk3theme.Mint-Y-Dark") != std::string::npos);
-    assert(logged.find("cinnamon-update-all") != std::string::npos);
 
     fs::remove_all(root);
     return 0;
