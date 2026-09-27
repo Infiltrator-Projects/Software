@@ -9177,6 +9177,38 @@ void refresh_repositories(WindowState *state)
     g_object_unref(task);
 }
 
+void repository_mirror_settings_clicked(
+    GtkButton *,
+    gpointer user_data)
+{
+    auto *state =
+        static_cast<WindowState *>(
+            user_data);
+    GError *error = nullptr;
+    if (!g_spawn_command_line_async(
+            "pkexec mintsources",
+            &error)) {
+        if (state != nullptr &&
+            state->repository_status != nullptr) {
+            gtk_label_set_text(
+                GTK_LABEL(
+                    state->repository_status),
+                error != nullptr &&
+                error->message != nullptr
+                    ? error->message
+                    : "Linux Mint mirror settings are unavailable.");
+        }
+    } else if (
+        state != nullptr &&
+        state->repository_status != nullptr) {
+        gtk_label_set_text(
+            GTK_LABEL(
+                state->repository_status),
+            "Mirror settings opened. Refresh repositories after changing a mirror.");
+    }
+    g_clear_error(&error);
+}
+
 GtkWidget *make_repositories_page(WindowState *state)
 {
     GtkWidget *page =
@@ -9204,6 +9236,23 @@ GtkWidget *make_repositories_page(WindowState *state)
         G_CALLBACK(add_source_clicked),
         state);
     gtk_box_append(GTK_BOX(header), add_source);
+
+    GtkWidget *mirrors =
+        gtk_button_new_with_label(
+            "Mint mirrors…");
+    gtk_widget_add_css_class(
+        mirrors, "control-button");
+    gtk_widget_set_valign(
+        mirrors, GTK_ALIGN_CENTER);
+    g_signal_connect(
+        mirrors,
+        "clicked",
+        G_CALLBACK(
+            repository_mirror_settings_clicked),
+        state);
+    gtk_box_append(
+        GTK_BOX(header), mirrors);
+
     gtk_box_append(GTK_BOX(page), header);
 
     GtkWidget *stats = gtk_grid_new();
