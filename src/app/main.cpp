@@ -6271,7 +6271,7 @@ void destroy_update_details_context(gpointer data)
     delete static_cast<UpdateDetailsContext *>(data);
 }
 
-void ignore_update_clicked(GtkButton *, gpointer user_data)
+void ignore_update_clicked(GtkButton *button, gpointer user_data)
 {
     auto *context = static_cast<UpdateDetailsContext *>(user_data);
     if (context == nullptr || context->state == nullptr) {
@@ -6289,10 +6289,23 @@ void ignore_update_clicked(GtkButton *, gpointer user_data)
         return;
     }
 
+    const bool version_only =
+        button != nullptr &&
+        GPOINTER_TO_INT(
+            g_object_get_data(
+                G_OBJECT(button),
+                "ignore-version-only")) != 0;
+    std::string rule = identity;
+    if (version_only &&
+        !context->package.available_version.empty()) {
+        rule += "=" +
+            context->package.available_version;
+    }
+
     auto &rules = context->state->preferences.ignored_packages;
-    if (std::find(rules.begin(), rules.end(), identity) ==
+    if (std::find(rules.begin(), rules.end(), rule) ==
         rules.end()) {
-        rules.push_back(identity);
+        rules.push_back(rule);
     }
 
     std::string error;
@@ -6331,7 +6344,9 @@ void ignore_update_clicked(GtkButton *, gpointer user_data)
     if (context->status != nullptr) {
         gtk_label_set_text(
             GTK_LABEL(context->status),
-            "Ignored. Remove this rule in Software Preferences to show it again.");
+            version_only
+                ? "This update version is ignored. A later version will appear normally."
+                : "All future updates for this source package are ignored. Remove the rule in Software Preferences to restore them.");
     }
 }
 
@@ -6469,11 +6484,32 @@ void update_details_clicked(GtkButton *button, gpointer user_data)
     gtk_box_append(
         GTK_BOX(box), changelog);
 
+    GtkWidget *ignore_version =
+        gtk_button_new_with_label(
+            "Ignore this update version");
+    gtk_widget_set_halign(
+        ignore_version, GTK_ALIGN_START);
+    g_object_set_data(
+        G_OBJECT(ignore_version),
+        "ignore-version-only",
+        GINT_TO_POINTER(1));
+    g_signal_connect(
+        ignore_version,
+        "clicked",
+        G_CALLBACK(ignore_update_clicked),
+        context);
+    gtk_box_append(
+        GTK_BOX(box), ignore_version);
+
     GtkWidget *ignore =
         gtk_button_new_with_label(
-            "Ignore this package");
+            "Ignore all future updates for this package");
     gtk_widget_set_halign(
         ignore, GTK_ALIGN_START);
+    g_object_set_data(
+        G_OBJECT(ignore),
+        "ignore-version-only",
+        GINT_TO_POINTER(0));
     g_signal_connect(
         ignore,
         "clicked",
