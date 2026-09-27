@@ -5914,6 +5914,15 @@ void updates_complete(
         stop_update_progress(state);
     }
     state->update_records = std::move(result->records);
+    state->update_records.erase(
+        std::remove_if(
+            state->update_records.begin(),
+            state->update_records.end(),
+            [&](const PackageRecord &package) {
+                return update_is_ignored(
+                    package, state->preferences);
+            }),
+        state->update_records.end());
     state->updates_from_engine = result->from_engine;
     if (state->discover_updates_summary != nullptr) {
         const std::string summary =
@@ -5926,6 +5935,39 @@ void updates_complete(
 
     rebuild_discover_update_preview(state);
     update_nav_updates_badge(state);
+
+    if (state->updates_reboot_banner != nullptr) {
+        const bool required = reboot_required();
+        gtk_widget_set_visible(
+            state->updates_reboot_banner,
+            required);
+        if (required &&
+            state->updates_reboot_detail != nullptr) {
+            const auto packages =
+                reboot_required_packages();
+            std::string detail =
+                "A restart is required to finish applying system updates.";
+            if (!packages.empty()) {
+                detail += " Requested by: ";
+                for (std::size_t index = 0U;
+                     index < packages.size();
+                     ++index) {
+                    if (index != 0U) {
+                        detail += ", ";
+                    }
+                    detail += packages[index];
+                    if (index == 5U &&
+                        packages.size() > 6U) {
+                        detail += ", …";
+                        break;
+                    }
+                }
+            }
+            gtk_label_set_text(
+                GTK_LABEL(state->updates_reboot_detail),
+                detail.c_str());
+        }
+    }
     state->selected_update_ids.clear();
     for (const PackageRecord &package : state->update_records) {
         const std::string identity = update_identity(package);
