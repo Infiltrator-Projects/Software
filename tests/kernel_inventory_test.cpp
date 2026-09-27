@@ -126,17 +126,21 @@ int main()
 
     assert(fallback != nullptr);
     assert(fallback->installed);
+    assert(fallback->supported);
     assert(fallback->superseded);
     assert(!fallback->safe_to_remove);
 
     assert(old != nullptr);
     assert(old->installed);
+    assert(old->supported);
     assert(old->superseded);
     assert(old->safe_to_remove);
     assert(!old->remove_package_ids.empty());
 
     assert(future != nullptr);
     assert(!future->installed);
+    assert(future->supported);
+    assert(!future->superseded);
     assert(future->installable);
     assert(!future->install_package_ids.empty());
 
