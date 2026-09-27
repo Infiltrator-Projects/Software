@@ -454,18 +454,21 @@ jobs:
           assert "set_apt_list_entry_enabled" in source_mutation
           assert "set_apt_deb822_entry_enabled" in source_mutation
 
-          # A package upgrade can leave the previous per-user D-Bus engine
-          # process alive even when the interface API version is unchanged.
-          # Clients must therefore match both API and exact package version and
-          # recycle a stale same-user engine before any engine operation.
+          # Self-update hand-off is directional. An older GUI/tray may finish
+          # against a newer engine with a compatible API, while a newly
+          # installed client must recycle an older resident engine.
           assert "constexpr guint kApiVersion = 2U;" in engine_service
           assert '"engine-version"' in engine_service
           assert '<method name="Quit"/>' in engine_interface
           assert "kRequiredApiVersion = 2U" in engine_client
           assert "kRequiredEngineVersion" in engine_client
+          assert "engine_version_is_compatible_with_client" in engine_client
+          assert "kEngineRestartAttempts = 200U" in engine_client
           assert "ensure_engine_identity(" in engine_client
           assert "GetConnectionUnixUser" in engine_client
           assert "GetConnectionUnixProcessID" in engine_client
+          assert 'execl(' in app
+          assert '"/usr/bin/infiltrator-software"' in app
 
           # Discover must remain an operational planned-install surface, not a
           # catalogue that permanently advertises an unavailable Install path.
