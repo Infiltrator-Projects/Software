@@ -1247,16 +1247,23 @@ bool publish_path(
             destination,
             ec);
         if (ec) {
+            const std::string publish_error = ec.message();
+            std::string restore_detail;
             if (change.had_existing) {
                 std::error_code restore_error;
                 fs::rename(
                     change.backup,
                     destination,
                     restore_error);
+                if (restore_error) {
+                    restore_detail =
+                        " Restoring the previous copy also failed: " +
+                        restore_error.message() + ".";
+                }
             }
             error =
                 "Unable to atomically publish the Cinnamon Spice update: " +
-                ec.message();
+                publish_error + "." + restore_detail;
             return false;
         }
         change.new_present = true;
@@ -1268,25 +1275,48 @@ bool publish_path(
 }
 
 void rollback_published_paths(
-    std::vector<PublishedPath> &published) noexcept
+    std::vector<PublishedPath> &published,
+    std::string &error)
 {
-    std::error_code ignored;
+    std::string rollback_error;
+    std::error_code ec;
     for (auto iterator = published.rbegin();
          iterator != published.rend();
          ++iterator) {
         if (iterator->new_present) {
             fs::remove_all(
                 iterator->destination,
-                ignored);
-            ignored.clear();
+                ec);
+            if (ec && rollback_error.empty()) {
+                rollback_error =
+                    "Unable to remove partially published path " +
+                    iterator->destination.string() + ": " +
+                    ec.message() + ".";
+            }
+            ec.clear();
         }
         if (iterator->had_existing) {
             fs::rename(
                 iterator->backup,
                 iterator->destination,
-                ignored);
-            ignored.clear();
+                ec);
+            if (ec && rollback_error.empty()) {
+                rollback_error =
+                    "Unable to restore previous path " +
+                    iterator->destination.string() + ": " +
+                    ec.message() + ".";
+            }
+            ec.clear();
         }
+    }
+
+    if (!rollback_error.empty()) {
+        if (!error.empty()) {
+            error += " ";
+        }
+        error +=
+            "Cinnamon Spice rollback was incomplete: " +
+            rollback_error;
     }
 }
 
@@ -1438,7 +1468,7 @@ bool install_extracted(
                     staged.filename(),
                 published,
                 error)) {
-            rollback_published_paths(published);
+            rollback_published_paths(published, error);
             fs::remove_all(stage_root, ec);
             remove_staged_translations(translations);
             return false;
@@ -1462,7 +1492,7 @@ bool install_extracted(
                     duplicate,
                     published,
                     error)) {
-                rollback_published_paths(published);
+                rollback_published_paths(published, error);
                 fs::remove_all(stage_root, ec);
                 remove_staged_translations(translations);
                 return false;
@@ -1482,7 +1512,7 @@ bool install_extracted(
                         action,
                         published,
                         error)) {
-                    rollback_published_paths(published);
+                    rollback_published_paths(published, error);
                     fs::remove_all(stage_root, ec);
                     remove_staged_translations(translations);
                     return false;
@@ -1499,7 +1529,7 @@ bool install_extracted(
                 artifact.destination,
                 published,
                 error)) {
-            rollback_published_paths(published);
+            rollback_published_paths(published, error);
             fs::remove_all(stage_root, ec);
             remove_staged_translations(translations);
             return false;
