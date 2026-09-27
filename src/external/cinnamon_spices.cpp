@@ -11,6 +11,7 @@
 #include <chrono>
 #include <cstdint>
 #include <cstdio>
+#include <ctime>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
@@ -867,8 +868,9 @@ bool run_command(
     GSubprocess *process =
         g_subprocess_newv(
             argv.data(),
-            G_SUBPROCESS_FLAGS_STDOUT_SILENCE |
-                G_SUBPROCESS_FLAGS_STDERR_PIPE,
+            static_cast<GSubprocessFlags>(
+                G_SUBPROCESS_FLAGS_STDOUT_SILENCE |
+                G_SUBPROCESS_FLAGS_STDERR_PIPE),
             &gerror);
     if (process == nullptr) {
         error =
