@@ -1277,28 +1277,36 @@ bool spice_is_enabled(const ExternalUpdate &update)
     return enabled;
 }
 
-void restart_cinnamon_if_needed(const bool needed)
+bool restart_cinnamon_if_needed(
+    const bool needed,
+    std::string &error)
 {
     if (!needed) {
-        return;
+        return true;
     }
     const char *desktop = g_getenv("XDG_CURRENT_DESKTOP");
     if (desktop == nullptr ||
         (std::string_view(desktop) != "Cinnamon" &&
          std::string_view(desktop) != "X-Cinnamon")) {
-        return;
+        return true;
     }
     gchar *command =
         g_find_program_in_path("cinnamon-dbus-command");
     if (command == nullptr) {
-        return;
+        return true;
     }
     g_free(command);
 
-    std::string ignored;
-    (void)run_command(
-        {"cinnamon-dbus-command", "RestartCinnamon", "0"},
-        ignored);
+    std::string restart_error;
+    if (!run_command(
+            {"cinnamon-dbus-command", "RestartCinnamon", "0"},
+            restart_error)) {
+        error =
+            "Cinnamon updates were installed, but the desktop restart failed: " +
+            restart_error;
+        return false;
+    }
+    return true;
 }
 
 } // namespace
@@ -1437,7 +1445,11 @@ bool apply_native_cinnamon_updates_selected(
         }
     }
 
-    restart_cinnamon_if_needed(restart_needed);
+    if (!restart_cinnamon_if_needed(
+            restart_needed,
+            error)) {
+        return false;
+    }
     if (progress) {
         progress(
             "Cinnamon updates complete • " +
