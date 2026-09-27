@@ -18,6 +18,7 @@ struct PackageRecord {
     std::string id;
     std::string name;
     std::string package_name;
+    std::string source_package;
     std::string publisher;
     std::string category;
     std::string architecture;
@@ -53,6 +54,7 @@ struct PackageRecord {
     std::string multi_arch;
     bool essential{false};
     bool system_critical{false};
+    bool security_update{false};
 };
 
 struct TransactionRequest {
