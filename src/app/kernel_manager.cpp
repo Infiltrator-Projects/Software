@@ -159,6 +159,9 @@ std::string selected_kernel_type(
 
 void rebuild_kernel_rows(KernelManagerContext *context);
 void rebuild_queue(KernelManagerContext *context);
+void begin_kernel_actions(
+    KernelManagerContext *context,
+    const std::vector<QueuedKernel> &actions);
 void refresh_kernels(
     KernelManagerContext *context,
     bool refresh_installed);
@@ -244,6 +247,42 @@ void queue_install_clicked(
                 "kernel-record"));
     if (context == nullptr || kernel == nullptr) return;
     queue_action(context, *kernel, true);
+}
+
+void install_now_clicked(
+    GtkButton *button,
+    gpointer user_data)
+{
+    auto *context =
+        static_cast<KernelManagerContext *>(user_data);
+    auto *kernel =
+        static_cast<KernelRecord *>(
+            g_object_get_data(
+                G_OBJECT(button),
+                "kernel-record"));
+    if (context == nullptr || kernel == nullptr) return;
+    begin_kernel_actions(
+        context,
+        std::vector<QueuedKernel>{
+            QueuedKernel{*kernel, true}});
+}
+
+void remove_now_clicked(
+    GtkButton *button,
+    gpointer user_data)
+{
+    auto *context =
+        static_cast<KernelManagerContext *>(user_data);
+    auto *kernel =
+        static_cast<KernelRecord *>(
+            g_object_get_data(
+                G_OBJECT(button),
+                "kernel-record"));
+    if (context == nullptr || kernel == nullptr) return;
+    begin_kernel_actions(
+        context,
+        std::vector<QueuedKernel>{
+            QueuedKernel{*kernel, false}});
 }
 
 void queued_remove_clicked(
@@ -469,6 +508,27 @@ GtkWidget *make_kernel_row(
             G_CALLBACK(queue_remove_clicked),
             context);
         gtk_box_append(GTK_BOX(actions), queue);
+
+        GtkWidget *remove_now =
+            gtk_button_new_with_label("Remove");
+        auto *remove_kernel = new KernelRecord(kernel);
+        g_object_set_data_full(
+            G_OBJECT(remove_now),
+            "kernel-record",
+            remove_kernel,
+            [](gpointer pointer) {
+                delete static_cast<KernelRecord *>(pointer);
+            });
+        gtk_widget_set_sensitive(
+            remove_now,
+            !kernel.active &&
+                !kernel.remove_package_ids.empty());
+        g_signal_connect(
+            remove_now,
+            "clicked",
+            G_CALLBACK(remove_now_clicked),
+            context);
+        gtk_box_append(GTK_BOX(actions), remove_now);
     } else if (kernel.installable) {
         GtkWidget *queue =
             gtk_button_new_with_label("Queue installation");
@@ -486,6 +546,23 @@ GtkWidget *make_kernel_row(
             G_CALLBACK(queue_install_clicked),
             context);
         gtk_box_append(GTK_BOX(actions), queue);
+
+        GtkWidget *install_now =
+            gtk_button_new_with_label("Install");
+        auto *install_kernel = new KernelRecord(kernel);
+        g_object_set_data_full(
+            G_OBJECT(install_now),
+            "kernel-record",
+            install_kernel,
+            [](gpointer pointer) {
+                delete static_cast<KernelRecord *>(pointer);
+            });
+        g_signal_connect(
+            install_now,
+            "clicked",
+            G_CALLBACK(install_now_clicked),
+            context);
+        gtk_box_append(GTK_BOX(actions), install_now);
     }
 
     gtk_box_append(GTK_BOX(outer), actions);
@@ -1251,19 +1328,19 @@ void plan_complete(
     gtk_window_present(GTK_WINDOW(dialog));
 }
 
-void begin_queued_plan(
-    KernelManagerContext *context)
+void begin_kernel_actions(
+    KernelManagerContext *context,
+    const std::vector<QueuedKernel> &actions)
 {
     if (context == nullptr ||
-        context->queued.empty() ||
+        actions.empty() ||
         context->busy) {
         return;
     }
 
     std::set<std::string> install;
     std::set<std::string> remove;
-    for (const QueuedKernel &queued :
-         context->queued) {
+    for (const QueuedKernel &queued : actions) {
         const std::vector<std::string> &ids =
             queued.install
                 ? queued.kernel.install_package_ids
@@ -1281,9 +1358,8 @@ void begin_queued_plan(
         if (remove.find(id) != remove.end()) {
             set_status(
                 context,
-                "The queue both installs and removes " +
-                id +
-                ". Remove one of the conflicting kernel actions.");
+                "The requested kernel actions both install and remove " +
+                id + ".");
             return;
         }
     }
@@ -1298,7 +1374,7 @@ void begin_queued_plan(
         delete data;
         set_status(
             context,
-            "Queued kernel actions contain no package changes.");
+            "The requested kernel action contains no package changes.");
         return;
     }
 
@@ -1306,7 +1382,7 @@ void begin_queued_plan(
     rebuild_queue(context);
     set_status(
         context,
-        "Resolving the complete queued kernel transaction and checking removal safety…");
+        "Resolving the complete kernel transaction and checking removal safety…");
 
     GTask *task =
         g_task_new(
@@ -1322,6 +1398,15 @@ void begin_queued_plan(
         });
     g_task_run_in_thread(task, plan_worker);
     g_object_unref(task);
+}
+
+void begin_queued_plan(
+    KernelManagerContext *context)
+{
+    if (context == nullptr) return;
+    begin_kernel_actions(
+        context,
+        context->queued);
 }
 
 void apply_queue_clicked(
