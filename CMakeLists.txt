@@ -190,6 +190,13 @@ add_library(software-sources STATIC
 target_include_directories(software-sources PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/src")
 
+add_library(software-external STATIC
+    src/external/external_updates.cpp)
+target_include_directories(software-external PUBLIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_link_libraries(software-external PUBLIC
+    software-core PkgConfig::GIO)
+
 add_library(software-apt-plan-guard STATIC
     src/helper/apt_plan_guard.cpp)
 target_include_directories(software-apt-plan-guard PUBLIC
@@ -217,6 +224,11 @@ add_executable(infiltrator-software-tray
 target_link_libraries(infiltrator-software-tray PRIVATE
     software-client PkgConfig::GTK3 PkgConfig::XAPP)
 
+add_executable(infiltrator-software-session-updater
+    src/session/main.cpp)
+target_link_libraries(infiltrator-software-session-updater PRIVATE
+    software-core software-external PkgConfig::GLIB)
+
 add_executable(infiltrator-software
     src/app/main.cpp
     src/app/theme.cpp)
@@ -230,7 +242,10 @@ target_compile_definitions(infiltrator-software PRIVATE
     INFILTRATOR_SOFTWARE_VERSION="${PROJECT_VERSION}"
     INFILTRATOR_SOFTWARE_BUILD_PROFILE="${SOFTWARE_BUILD_PROFILE}")
 
-install(TARGETS infiltrator-software infiltrator-software-tray
+install(TARGETS
+    infiltrator-software
+    infiltrator-software-tray
+    infiltrator-software-session-updater
     RUNTIME DESTINATION bin)
 install(TARGETS
     infiltrator-software-helper
@@ -259,11 +274,11 @@ install(FILES ${SOFTWARE_FONT_FILES}
 install(FILES LICENSE DESTINATION share/doc/infiltrator-software)
 
 foreach(target IN ITEMS
-        software-core software-history software-engine software-client software-apt software-catalogue software-sources
+        software-core software-history software-engine software-client software-apt software-catalogue software-sources software-external
         software-apt-plan-guard
         infiltrator-software-helper infiltrator-software-update-helper
         infiltrator-software-engine infiltrator-software-tray
-        infiltrator-software)
+        infiltrator-software-session-updater infiltrator-software)
     if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
         target_compile_options(${target} PRIVATE
             -Wall -Wextra -Wpedantic -Wshadow -Wconversion -Wsign-conversion)
