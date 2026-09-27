@@ -794,6 +794,18 @@ void ThemeController::apply()
         << ".update-name { font-family: \"" << typography->brand_family
         << "\"; font-size: 14px; font-weight: " << typography->ui_bold_weight
         << "; color: " << heading << "; }"
+        << ".update-security-chip { padding: 3px 7px; border-radius: 7px; "
+        << "background: " << warning_muted << "; border: 1px solid " << warning_border
+        << "; color: " << warning << "; font-size: 10px; font-weight: "
+        << typography->ui_bold_weight << "; }"
+        << ".update-details-button { min-height: 30px; padding: 4px 10px; "
+        << "background: " << surface << "; border: 1px solid " << border
+        << "; border-radius: 8px; color: " << text << "; }"
+        << ".update-details-button:hover { background: " << card_hover << "; }"
+        << ".reboot-required-banner { padding: 10px 12px; border-radius: "
+        << metrics->card_radius << "px; background: " << warning_muted
+        << "; border: 1px solid " << warning_border << "; color: " << warning << "; }"
+        << ".reboot-required-copy { color: " << text << "; }"
         << ".update-kind-chip { padding: 2px 7px; border-radius: 999px; "
         << "border: 1px solid " << status_border << "; color: " << kicker
         << "; font-size: 9px; font-weight: " << typography->ui_bold_weight << "; }"
