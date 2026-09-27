@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "engine/engine_service_core.hpp"
 #include "engine/debian_candidate.hpp"
+#include "release/release_metadata.hpp"
 
 #include <glib.h>
 
@@ -87,7 +88,12 @@ bool load_release_info(ReleaseInfo &info,std::string &error)
         return false;
     }
     info.current_codename=codename->second;
-    info.edition=edition==current.end()?std::string{}:edition->second;
+    info.edition=edition==current.end()?std::string{}:
+        release::normalize_edition(edition->second);
+    if (release::meta_package(info.edition).empty()) {
+        error="The Linux Mint edition is missing or invalid; release upgrade cannot continue.";
+        return false;
+    }
     info.directory=std::filesystem::path("/usr/share/mint-upgrade-info")/info.current_codename;
 
     const auto target=read_assignments(info.directory/"info");
@@ -100,14 +106,8 @@ bool load_release_info(ReleaseInfo &info,std::string &error)
     }
 
     const auto editions=target.find("editions");
-    if (editions!=target.end() && !info.edition.empty()) {
-        bool allowed=false;
-        std::istringstream values(editions->second);
-        std::string value;
-        while (std::getline(values,value,',')) {
-            if (trim(value)==info.edition) { allowed=true; break; }
-        }
-        if (!allowed) {
+    if (editions!=target.end()) {
+        if (!release::supported_edition(editions->second,info.edition)) {
             error="The available release upgrade does not support this Linux Mint edition.";
             return false;
         }
@@ -171,6 +171,16 @@ bool build_plan(const ReleaseInfo &release,TransactionPlan &combined,std::string
 
     const auto installed=core.installed();
     const auto updates=core.updates();
+    const std::string meta=release::meta_package(release.edition);
+    const bool meta_installed=std::any_of(installed.begin(),installed.end(),
+        [&meta](const PackageRecord &p) {
+            return (p.package_name.empty()?p.id:p.package_name)==meta;
+        });
+    if (!meta_installed) {
+        error="Install "+meta+" before upgrading Linux Mint. This edition's "
+            "meta package is required to keep its desktop components installed.";
+        return false;
+    }
     std::set<std::string> blocked;
     for (const std::string &name:release.blacklist) blocked.insert(base(name));
 
@@ -326,18 +336,17 @@ int apply_command(int argc,char **argv)
         return 2;
     }
 
+    gchar *inhibit=g_find_program_in_path("systemd-inhibit");
+    if (inhibit==nullptr) {
+        std::cerr<<"Release upgrade refused because systemd-inhibit is unavailable.\n";
+        return 1;
+    }
+    g_free(inhibit);
     if (!publish_target_sources(release,error)) { std::cerr<<error<<"\n"; return 1; }
 
-    std::vector<std::string> command;
-    gchar *inhibit=g_find_program_in_path("systemd-inhibit");
-    if (inhibit!=nullptr) {
-        g_free(inhibit);
-        command={"systemd-inhibit","--what=shutdown:sleep",
-            "--who=Infiltrator Software","--why=Upgrading Linux Mint release","--mode=block",
-            "/usr/libexec/infiltrator-software-update-helper","apply-plan"};
-    } else {
-        command={"/usr/libexec/infiltrator-software-update-helper","apply-plan"};
-    }
+    std::vector<std::string> command={"systemd-inhibit","--what=shutdown:sleep",
+        "--who=Infiltrator Software","--why=Upgrading Linux Mint release","--mode=block",
+        "/usr/libexec/infiltrator-software-update-helper","apply-plan"};
     command.insert(command.end(),approved.begin(),approved.end());
     if (!run_command(std::move(command),error)) { std::cerr<<error<<"\n"; return 1; }
 

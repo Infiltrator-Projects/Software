@@ -116,9 +116,11 @@ jobs:
               if line.startswith("| ") and line.rstrip().endswith("| Required |")
           ]
           assert required_rows
-          assert all("**Missing**" not in line and "**Partial**" not in line for line in required_rows)
-          source_version = Path("VERSION").read_text().strip()
-          assert f"The Required matrix is complete for Software {source_version}." in parity
+          assert all(len(line.split("|")) == 5 for line in required_rows)
+          # The matrix is an audit inventory, not proof that the host has
+          # completed a real package, Flatpak, Spice and release-upgrade cycle.
+          # Never infer removal readiness from self-reported row labels.
+          assert "Removal approved after host validation" not in parity
 
           # Mint Update Manager replacement surfaces must remain wired, not
           # merely documented as complete.
@@ -252,7 +254,7 @@ jobs:
           assert "docs/MINTUPDATE_PARITY.md" in Path("README.md").read_text()
           parity = Path("docs/MINTUPDATE_PARITY.md").read_text()
           assert "Linux Mint Update Manager replacement audit" in parity
-          assert "Software must not be declared a complete Mint Update Manager replacement" in parity
+          assert "Removal is not yet approved" in parity
           assert "Installation finished; checking installed versions and remaining update candidates." in app
           assert "finish_update_progress(" in app
 

@@ -10,9 +10,9 @@ Audit baseline: Linux Mint `linuxmint/mintupdate` master at commit
 integration, preferences, automation, tray behaviour, release-upgrade helper
 and command-line interface.
 
-Software must not be declared a complete Mint Update Manager replacement while
-any **Required** row below is Missing or Partial. From 0.3.48 onward CI parses
-this table and fails the release if that condition is violated.
+This table records source-level implementation claims. A passing build and this
+table do not establish behaviour on a Linux Mint host. Each Required path needs
+an integration check on an installed system before removal can be recommended.
 
 ## Parity matrix
 
@@ -54,7 +54,7 @@ this table and fails the release if that condition is violated.
 | Broken APT/source configuration detection with guided repository repair | Implemented through Repair, source inventory diagnostics and repository/mirror guidance | Required |
 | Mirror reachability/default-mirror checks and guided mirror switching | Implemented for Linux Mint repository freshness/reachability with direct Mint mirror settings hand-off | Required while hosted on Mint/Ubuntu |
 | Launch/manage system snapshots before risky updates | Implemented with Timeshift launch plus optional mandatory pre-system-update snapshot | Required until Infiltrator checkpoint replacement is complete |
-| Point-release / distribution release upgrade workflow | Implemented with Mint upgrade metadata, exact native plan review and authenticated application | Required before replacing Mint Update Manager on Mint |
+| Point-release / distribution release upgrade workflow | Partial: edition normalization, edition meta-package prerequisite and release-notes acknowledgement added; a real upgrade has not been validated | Required before replacing Mint Update Manager on Mint |
 | Update Manager information/log view | Implemented through History plus graphical package diagnostic log | Required |
 | Keyboard shortcuts/help discoverability | Partial; non-blocking polish remains | Desirable |
 | Welcome/onboarding screen | Not required as a separate screen; Discover performs onboarding | Equivalent |
@@ -72,10 +72,12 @@ this table and fails the release if that condition is violated.
 
 ## Replacement acceptance
 
-The Required matrix is complete for Software 0.3.49. The project therefore
-permits removal of Linux Mint Update Manager on the supported Linux Mint
-Cinnamon host once Software 0.3.48 or later is installed and its package
-verification has passed.
+Removal is not yet approved. Software 0.3.49 was published with a parity claim
+based on static source assertions; the claim did not include full host-level
+validation. The release upgrade path needed further work after publication.
+The corrected source still requires an installed-host test of APT, Flatpak,
+Cinnamon Spice, unattended scheduling, tray feedback, failure handling and a
+release upgrade before a replacement claim can be made.
 
 This acceptance does not mean Software must copy Mint's implementation. Several
 paths are deliberately stricter: package mutation is resolved into an exact

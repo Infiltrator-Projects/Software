@@ -4403,6 +4403,27 @@ void release_upgrade_plan_complete(
             "Upgrade release",
             result->plan,
             true);
+    GtkWidget *content =
+        gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+    const std::string notes_uri =
+        "https://www.linuxmint.com/rel_" +
+        result->target_codename + ".php";
+    GtkWidget *notes = gtk_link_button_new_with_label(
+        notes_uri.c_str(),
+        "Read the Linux Mint release notes and known issues");
+    gtk_box_append(GTK_BOX(content), notes);
+    GtkWidget *acknowledge = gtk_check_button_new_with_label(
+        "I have read the release notes and understand that upgrading "
+        "can affect this operating system.");
+    gtk_box_append(GTK_BOX(content), acknowledge);
+    GtkWidget *accept = gtk_dialog_get_widget_for_response(
+        GTK_DIALOG(dialog), GTK_RESPONSE_ACCEPT);
+    gtk_widget_set_sensitive(accept, false);
+    g_signal_connect(acknowledge, "toggled",
+        G_CALLBACK(+[](GtkCheckButton *button, gpointer widget) {
+            gtk_widget_set_sensitive(GTK_WIDGET(widget),
+                gtk_check_button_get_active(button));
+        }), accept);
     g_signal_connect(
         dialog,
         "response",

@@ -34,7 +34,7 @@ The 0.4 architecture replaces those APT command invocations with a native Infilt
 
 ## Linux Mint Update Manager replacement status
 
-Software 0.3.49 completes the required Linux Mint Update Manager replacement gate against upstream `linuxmint/mintupdate` master at commit `a6a9f5767905b8fc94923d0b4ca0538a93309a90` (Update Manager 7.1.5 line). Required APT/Debian, Flatpak, Cinnamon Spice/Nemo action, unattended update, notification, reboot, changelog, repository/mirror, snapshot, release-upgrade, tray and CLI behaviours are implemented or deliberately superseded by a stricter reviewed-transaction mechanism. CI rejects a release if any Required row in `docs/MINTUPDATE_PARITY.md` returns to Missing or Partial.
+Software 0.3.49 contains substantial Linux Mint Update Manager replacement code, but the earlier claim of complete replacement was premature. The source audit uses `linuxmint/mintupdate` commit `a6a9f5767905b8fc94923d0b4ca0538a93309a90` (7.1.5 line). `docs/MINTUPDATE_PARITY.md` tracks the functions and remaining validation. Do not remove Mint Update Manager based on a green build or that matrix alone.
 
 Self-updates complete without exposing package-engine version plumbing to the desktop: older running clients may finish against a newer compatible engine, the GUI then replaces itself with the newly installed executable, and the new client recycles any older resident engine.
 

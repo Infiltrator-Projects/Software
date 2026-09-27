@@ -247,6 +247,14 @@ add_executable(infiltrator-software-release-upgrade
 target_link_libraries(infiltrator-software-release-upgrade PRIVATE
     software-core software-engine PkgConfig::GLIB)
 
+if(BUILD_TESTING)
+    add_executable(software-release-metadata-test
+        tests/release_metadata_test.cpp)
+    target_include_directories(software-release-metadata-test PRIVATE src)
+    add_test(NAME software-release-metadata-test
+        COMMAND software-release-metadata-test)
+endif()
+
 add_executable(infiltrator-software
     src/app/main.cpp
     src/app/theme.cpp)
