@@ -6,7 +6,7 @@
 
 Infiltrator Software is the software-management application for the Infiltrator project family. It presents software discovery, installation, removal, updates, system components, repositories, release channels, history and repair as one coherent graphical product.
 
-**Current source version:** 0.3.45  
+**Current source version:** 0.3.46  
 **Language:** C++17 application/core with native GTK4 Linux shell; C11 Common foundation  
 **Shared foundation:** Common 1.19.35  
 **Current package compatibility:** Debian repositories and .deb packages; Flatpak and AppStream catalogue integration  
@@ -167,3 +167,8 @@ main is the working branch. Development remains main-only. Published release ide
 Copyright © 1993-2026 Shannon Smith.
 
 Infiltrator Software is licensed under the GNU General Public License version 3 or, at your option, any later version (GPL-3.0-or-later).
+
+
+## Update Manager replacement parity
+
+See `docs/MINTUPDATE_PARITY.md` for the Linux Mint Update Manager replacement audit and removal gate.

@@ -729,6 +729,41 @@ void ThemeController::apply()
         << ".updates-action-bar { border-color: " << warning_border
         << "; background-image: linear-gradient(90deg, " << card << ", "
         << surface << "); }"
+        << ".update-transaction-panel { background-image: linear-gradient(135deg, "
+        << card << ", " << panel << "); border: 1px solid " << border
+        << "; border-left: 4px solid " << operation
+        << "; border-radius: 14px; padding: 14px 16px; "
+        << "box-shadow: 0 6px 18px rgba(0,0,0,0.18); }"
+        << ".update-transaction-icon { min-width: 44px; min-height: 44px; "
+        << "background: " << surface << "; border: 1px solid " << border
+        << "; border-radius: 12px; padding: 7px; }"
+        << ".update-transaction-icon image { color: " << operation << "; }"
+        << ".update-transaction-title { color: " << title
+        << "; font-size: 16px; font-weight: " << typography->ui_bold_weight << "; }"
+        << ".update-transaction-phase { color: " << operation
+        << "; font-size: 13px; font-weight: " << typography->ui_bold_weight << "; }"
+        << ".update-transaction-detail { color: " << text << "; font-size: 11px; }"
+        << ".update-transaction-meta { color: " << summary << "; font-size: 10px; }"
+        << ".update-stage-strip { margin-top: 2px; }"
+        << ".update-stage { min-height: 28px; padding: 5px 7px; "
+        << "background: " << surface << "; color: " << summary
+        << "; border: 1px solid " << border << "; border-radius: 8px; font-size: 9px; }"
+        << ".update-stage-done { background: " << selected_summary
+        << "; color: " << success << "; border-color: " << success_border << "; }"
+        << ".update-stage-active { background: " << select_bg
+        << "; color: " << select_fg << "; border-color: " << operation
+        << "; box-shadow: 0 0 12px rgba(65,118,255,0.24); }"
+        << ".update-stage-error { background: " << warning_muted
+        << "; color: " << fault << "; border-color: " << warning_border << "; }"
+        << "progressbar.update-transaction-progress trough { min-height: 8px; "
+        << "background: " << surface << "; border: 1px solid " << border
+        << "; border-radius: 999px; }"
+        << "progressbar.update-transaction-progress progress { min-height: 8px; "
+        << "background-image: linear-gradient(to right, " << info << ", " << operation
+        << "); border-radius: 999px; }"
+        << ".nav-badge-active { background: " << operation
+        << "; color: " << accent_fg
+        << "; box-shadow: 0 0 12px rgba(65,118,255,0.30); }"
         << ".updates-status-icon { color: " << warning << "; }"
         << ".updates-section-icon { color: " << warning << "; }"
         << ".update-group-row { background: transparent; }"

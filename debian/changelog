@@ -1,3 +1,23 @@
+infiltrator-software (0.3.46) unstable; urgency=high
+
+  * Add a persistent graphical update-transaction panel with explicit
+    Authorize, Refresh, Validate, Download, Install and Verify stages.
+  * Show planned package count, planned download size, elapsed time and live
+    package activity instead of leaving users with an opaque background job.
+  * Keep the Updates navigation badge visibly active while a transaction is
+    running, including when the user moves to another page.
+  * Add token-bound privileged progress telemetry in root-owned /run state and
+    derive download/install/configure/finalise activity from the constrained
+    compatibility executor without weakening the reviewed transaction boundary.
+  * Keep the progress display honest: planned bytes are exact, while no fake
+    byte percentage or transfer rate is invented from textual APT output.
+  * Audit Linux Mint Update Manager 7.1.5/current master across GUI, APT,
+    Flatpak, Cinnamon-spice, automation, preferences, tray, release-upgrade and
+    CLI surfaces; add docs/MINTUPDATE_PARITY.md as the mandatory replacement
+    gate before Mint Update Manager can be removed.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Sun, 27 Sep 2026 11:25:00 +1000
+
 infiltrator-software (0.3.45) unstable; urgency=high
 
   * Make the Software title bar structurally identical to System Settings:

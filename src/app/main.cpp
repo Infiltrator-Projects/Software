@@ -25,6 +25,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
+#include <unistd.h>
 #include <vector>
 
 #ifndef INFILTRATOR_SOFTWARE_VERSION
@@ -103,9 +104,18 @@ struct WindowState {
     GtkWidget *updates_install{};
     GtkWidget *updates_refresh{};
     GtkWidget *updates_backend{};
+    GtkWidget *updates_transaction_panel{};
+    GtkWidget *updates_transaction_phase{};
+    GtkWidget *updates_transaction_detail{};
+    GtkWidget *updates_transaction_meta{};
+    GtkWidget *updates_stage_labels[6]{};
     GtkWidget *updates_progress{};
     guint updates_progress_timer_id{0U};
     gint64 updates_progress_started_us{0};
+    std::size_t updates_progress_items{0U};
+    std::uint64_t updates_progress_download_bytes{0U};
+    std::string updates_progress_token;
+    std::string updates_progress_phase;
     bool updates_post_install_refresh{false};
     std::vector<PackageRecord> update_records;
     std::unordered_set<std::string> selected_update_ids;
@@ -4158,6 +4168,54 @@ std::filesystem::path update_runtime_state_path()
            "infiltrator-software" / "update-state";
 }
 
+std::filesystem::path privileged_update_progress_path()
+{
+    return std::filesystem::path("/run/infiltrator-software") /
+           ("update-" +
+            std::to_string(
+                static_cast<unsigned long long>(getuid())) +
+            ".state");
+}
+
+struct PrivilegedUpdateProgress {
+    std::string token;
+    std::string phase;
+    std::string detail;
+};
+
+std::optional<PrivilegedUpdateProgress>
+read_privileged_update_progress()
+{
+    std::ifstream input(privileged_update_progress_path());
+    if (!input) {
+        return std::nullopt;
+    }
+
+    std::string line;
+    if (!std::getline(input, line) || line.empty()) {
+        return std::nullopt;
+    }
+
+    const std::size_t first = line.find('\t');
+    if (first == std::string::npos) {
+        return std::nullopt;
+    }
+    const std::size_t second = line.find('\t', first + 1U);
+    if (second == std::string::npos) {
+        return std::nullopt;
+    }
+
+    PrivilegedUpdateProgress progress;
+    progress.token = line.substr(0U, first);
+    progress.phase =
+        line.substr(first + 1U, second - first - 1U);
+    progress.detail = line.substr(second + 1U);
+    if (progress.token.empty() || progress.phase.empty()) {
+        return std::nullopt;
+    }
+    return progress;
+}
+
 std::filesystem::path transaction_history_path()
 {
     const char *data = g_get_user_data_dir();
@@ -4207,6 +4265,184 @@ std::string one_line(std::string value)
 }
 
 
+int update_phase_index(const std::string_view phase) noexcept
+{
+    if (phase == "authorize") return 0;
+    if (phase == "refresh") return 1;
+    if (phase == "validate") return 2;
+    if (phase == "download") return 3;
+    if (phase == "install" ||
+        phase == "configure" ||
+        phase == "finalize") return 4;
+    if (phase == "verify" || phase == "complete") return 5;
+    return -1;
+}
+
+const char *update_phase_title(const std::string_view phase) noexcept
+{
+    if (phase == "authorize") return "Waiting for authorization";
+    if (phase == "refresh") return "Refreshing package metadata";
+    if (phase == "validate") return "Re-validating approved changes";
+    if (phase == "download") return "Downloading updates";
+    if (phase == "install") return "Installing packages";
+    if (phase == "configure") return "Configuring packages";
+    if (phase == "finalize") return "Finishing installation";
+    if (phase == "verify") return "Verifying final package state";
+    if (phase == "complete") return "Update transaction complete";
+    if (phase == "error") return "Update transaction failed";
+    return "Processing updates";
+}
+
+void update_nav_updates_badge(WindowState *state)
+{
+    if (state == nullptr || state->nav_updates_badge == nullptr) {
+        return;
+    }
+
+    if (state->updates_busy &&
+        !state->updates_progress_token.empty()) {
+        gtk_label_set_text(
+            GTK_LABEL(state->nav_updates_badge), "↻");
+        gtk_widget_add_css_class(
+            state->nav_updates_badge, "nav-badge-active");
+        gtk_widget_set_visible(
+            state->nav_updates_badge, true);
+        return;
+    }
+
+    gtk_widget_remove_css_class(
+        state->nav_updates_badge, "nav-badge-active");
+    const std::size_t count = state->update_records.size();
+    if (count == 0U) {
+        gtk_widget_set_visible(
+            state->nav_updates_badge, false);
+        return;
+    }
+
+    const std::string badge =
+        count > 99U ? "99+" : std::to_string(count);
+    gtk_label_set_text(
+        GTK_LABEL(state->nav_updates_badge),
+        badge.c_str());
+    gtk_widget_set_visible(
+        state->nav_updates_badge, true);
+}
+
+void set_update_transaction_phase(
+    WindowState *state,
+    const std::string_view phase,
+    const std::string_view detail)
+{
+    if (state == nullptr) {
+        return;
+    }
+
+    state->updates_progress_phase = std::string(phase);
+    if (state->updates_transaction_panel != nullptr) {
+        gtk_widget_set_visible(
+            state->updates_transaction_panel, true);
+    }
+    if (state->updates_transaction_phase != nullptr) {
+        gtk_label_set_text(
+            GTK_LABEL(state->updates_transaction_phase),
+            update_phase_title(phase));
+    }
+    if (state->updates_transaction_detail != nullptr) {
+        std::string copy(detail);
+        if (copy.empty()) {
+            if (phase == "authorize") {
+                copy =
+                    "Approve the exact package transaction when the administrator prompt appears.";
+            } else if (phase == "refresh") {
+                copy =
+                    "Refreshing trusted repository metadata before any package changes are applied.";
+            } else if (phase == "validate") {
+                copy =
+                    "Checking that the reviewed package versions still match the transaction to be executed.";
+            } else if (phase == "download") {
+                copy =
+                    "Downloading the approved package payloads.";
+            } else if (phase == "install") {
+                copy =
+                    "Applying the downloaded package payloads.";
+            } else if (phase == "configure") {
+                copy =
+                    "Configuring installed packages and services.";
+            } else if (phase == "finalize") {
+                copy =
+                    "Processing package triggers and finishing the transaction.";
+            } else if (phase == "verify") {
+                copy =
+                    "Reading authoritative installed state and checking which updates remain.";
+            } else if (phase == "complete") {
+                copy =
+                    "The approved transaction and final package-state verification completed successfully.";
+            }
+        }
+        gtk_label_set_text(
+            GTK_LABEL(state->updates_transaction_detail),
+            copy.c_str());
+    }
+
+    const int active = update_phase_index(phase);
+    for (int index = 0; index < 6; ++index) {
+        GtkWidget *label = state->updates_stage_labels[index];
+        if (label == nullptr) continue;
+        gtk_widget_remove_css_class(label, "update-stage-active");
+        gtk_widget_remove_css_class(label, "update-stage-done");
+        gtk_widget_remove_css_class(label, "update-stage-error");
+        if (active >= 0 && index < active) {
+            gtk_widget_add_css_class(label, "update-stage-done");
+        } else if (active >= 0 && index == active) {
+            gtk_widget_add_css_class(label, "update-stage-active");
+        }
+    }
+
+    if (state->updates_progress != nullptr) {
+        if (phase == "complete") {
+            gtk_progress_bar_set_fraction(
+                GTK_PROGRESS_BAR(state->updates_progress), 1.0);
+        } else {
+            gtk_progress_bar_pulse(
+                GTK_PROGRESS_BAR(state->updates_progress));
+        }
+    }
+}
+
+void update_transaction_meta(WindowState *state)
+{
+    if (state == nullptr ||
+        state->updates_transaction_meta == nullptr ||
+        state->updates_progress_started_us <= 0) {
+        return;
+    }
+
+    const gint64 elapsed_us =
+        g_get_monotonic_time() -
+        state->updates_progress_started_us;
+    const long long elapsed_seconds =
+        static_cast<long long>(
+            elapsed_us / G_USEC_PER_SEC);
+
+    std::ostringstream meta;
+    meta << state->updates_progress_items
+         << (state->updates_progress_items == 1U
+                 ? " package"
+                 : " packages");
+    if (state->updates_progress_download_bytes > 0U) {
+        meta << "  •  "
+             << display_size(
+                    state->updates_progress_download_bytes)
+             << " planned download";
+    }
+    meta << "  •  "
+         << elapsed_seconds
+         << " s elapsed";
+    gtk_label_set_text(
+        GTK_LABEL(state->updates_transaction_meta),
+        meta.str().c_str());
+}
+
 gboolean update_progress_tick(gpointer user_data)
 {
     auto *state = static_cast<WindowState *>(user_data);
@@ -4219,36 +4455,34 @@ gboolean update_progress_tick(gpointer user_data)
         return G_SOURCE_REMOVE;
     }
 
-    gtk_progress_bar_pulse(
-        GTK_PROGRESS_BAR(state->updates_progress));
-
-    if (state->updates_status != nullptr &&
-        state->updates_progress_started_us > 0) {
-        const gint64 elapsed_us =
-            g_get_monotonic_time() -
-            state->updates_progress_started_us;
-        const long long elapsed_seconds =
-            static_cast<long long>(
-                elapsed_us / G_USEC_PER_SEC);
-
-        const std::string message =
-            state->updates_post_install_refresh
-                ? "Installation completed; verifying final package state… " +
-                    std::to_string(elapsed_seconds) +
-                    " s elapsed."
-                : "Approved update transaction is active… " +
-                    std::to_string(elapsed_seconds) +
-                    " s elapsed. Software may be refreshing metadata, "
-                    "re-validating the approved exact versions or applying packages.";
-        gtk_label_set_text(
-            GTK_LABEL(state->updates_status),
-            message.c_str());
+    if (state->updates_post_install_refresh) {
+        set_update_transaction_phase(
+            state,
+            "verify",
+            "Installation finished; checking installed versions and remaining update candidates.");
+    } else {
+        const auto progress =
+            read_privileged_update_progress();
+        if (progress.has_value() &&
+            progress->token == state->updates_progress_token) {
+            set_update_transaction_phase(
+                state,
+                progress->phase,
+                progress->detail);
+        } else {
+            gtk_progress_bar_pulse(
+                GTK_PROGRESS_BAR(state->updates_progress));
+        }
     }
 
+    update_transaction_meta(state);
+    update_nav_updates_badge(state);
     return G_SOURCE_CONTINUE;
 }
 
-void start_update_progress(WindowState *state)
+void start_update_progress(
+    WindowState *state,
+    const TransactionPlan &plan)
 {
     if (state == nullptr ||
         state->updates_progress == nullptr) {
@@ -4257,12 +4491,33 @@ void start_update_progress(WindowState *state)
 
     state->updates_progress_started_us =
         g_get_monotonic_time();
+    state->updates_progress_items =
+        plan.items.size();
+    state->updates_progress_download_bytes =
+        plan.download_bytes;
+    state->updates_progress_token =
+        std::to_string(
+            static_cast<unsigned long long>(getpid())) +
+        "-" +
+        std::to_string(
+            static_cast<unsigned long long>(
+                state->updates_progress_started_us));
+    if (state->updates_transaction_panel != nullptr) {
+        gtk_widget_set_visible(
+            state->updates_transaction_panel, true);
+    }
     gtk_widget_set_visible(
         state->updates_progress, true);
+    gtk_progress_bar_set_fraction(
+        GTK_PROGRESS_BAR(state->updates_progress), 0.0);
     gtk_progress_bar_set_pulse_step(
-        GTK_PROGRESS_BAR(state->updates_progress), 0.08);
-    gtk_progress_bar_pulse(
-        GTK_PROGRESS_BAR(state->updates_progress));
+        GTK_PROGRESS_BAR(state->updates_progress), 0.06);
+    set_update_transaction_phase(
+        state,
+        "authorize",
+        "Waiting for administrator authorization before the reviewed transaction begins.");
+    update_transaction_meta(state);
+    update_nav_updates_badge(state);
 
     if (state->updates_progress_timer_id == 0U) {
         state->updates_progress_timer_id =
@@ -4282,10 +4537,70 @@ void stop_update_progress(WindowState *state)
         state->updates_progress_timer_id = 0U;
     }
     state->updates_progress_started_us = 0;
-    if (state->updates_progress != nullptr) {
+    state->updates_progress_items = 0U;
+    state->updates_progress_download_bytes = 0U;
+    state->updates_progress_token.clear();
+    state->updates_progress_phase.clear();
+    if (state->updates_transaction_panel != nullptr) {
         gtk_widget_set_visible(
-            state->updates_progress, false);
+            state->updates_transaction_panel, false);
     }
+    update_nav_updates_badge(state);
+}
+
+void finish_update_progress(
+    WindowState *state,
+    const bool success,
+    const std::string_view detail)
+{
+    if (state == nullptr) {
+        return;
+    }
+
+    if (state->updates_progress_timer_id != 0U) {
+        g_source_remove(state->updates_progress_timer_id);
+        state->updates_progress_timer_id = 0U;
+    }
+    if (state->updates_transaction_panel != nullptr) {
+        gtk_widget_set_visible(
+            state->updates_transaction_panel, true);
+    }
+    if (success) {
+        set_update_transaction_phase(
+            state, "complete", detail);
+    } else {
+        const int active =
+            update_phase_index(
+                state->updates_progress_phase);
+        state->updates_progress_phase = "error";
+        if (state->updates_transaction_phase != nullptr) {
+            gtk_label_set_text(
+                GTK_LABEL(state->updates_transaction_phase),
+                "Update transaction failed");
+        }
+        if (state->updates_transaction_detail != nullptr) {
+            const std::string copy(detail);
+            gtk_label_set_text(
+                GTK_LABEL(state->updates_transaction_detail),
+                copy.c_str());
+        }
+        if (state->updates_progress != nullptr) {
+            gtk_progress_bar_set_fraction(
+                GTK_PROGRESS_BAR(state->updates_progress), 0.0);
+        }
+        if (active >= 0 && active < 6 &&
+            state->updates_stage_labels[active] != nullptr) {
+            gtk_widget_remove_css_class(
+                state->updates_stage_labels[active],
+                "update-stage-active");
+            gtk_widget_add_css_class(
+                state->updates_stage_labels[active],
+                "update-stage-error");
+        }
+    }
+    update_transaction_meta(state);
+    state->updates_progress_token.clear();
+    update_nav_updates_badge(state);
 }
 
 struct DiscoverPlanTaskData {
@@ -5306,8 +5621,12 @@ void updates_complete(
         return;
     }
 
+    const bool post_install =
+        state->updates_post_install_refresh;
     state->updates_busy = false;
-    stop_update_progress(state);
+    if (!post_install) {
+        stop_update_progress(state);
+    }
     state->update_records = std::move(result->records);
     state->updates_from_engine = result->from_engine;
     if (state->discover_updates_summary != nullptr) {
@@ -5320,26 +5639,7 @@ void updates_complete(
     }
 
     rebuild_discover_update_preview(state);
-    if (state->nav_updates_badge != nullptr) {
-        const std::size_t count =
-            state->update_records.size();
-        if (count == 0U) {
-            gtk_widget_set_visible(
-                state->nav_updates_badge,
-                false);
-        } else {
-            const std::string badge =
-                count > 99U
-                    ? "99+"
-                    : std::to_string(count);
-            gtk_label_set_text(
-                GTK_LABEL(state->nav_updates_badge),
-                badge.c_str());
-            gtk_widget_set_visible(
-                state->nav_updates_badge,
-                true);
-        }
-    }
+    update_nav_updates_badge(state);
     state->selected_update_ids.clear();
     for (const PackageRecord &package : state->update_records) {
         const std::string identity = update_identity(package);
@@ -5357,8 +5657,6 @@ void updates_complete(
             g_get_monotonic_time();
     }
 
-    const bool post_install =
-        state->updates_post_install_refresh;
     state->updates_post_install_refresh = false;
 
     /*
@@ -5450,7 +5748,12 @@ void updates_complete(
     }
 
     if (post_install) {
-        stop_update_progress(state);
+        finish_update_progress(
+            state,
+            error.empty(),
+            error.empty()
+                ? "Installation complete. Final installed state has been verified."
+                : "Packages were applied, but final state verification did not complete successfully.");
         if (error.empty()) {
             /*
              * The native refresh has now published the authoritative
@@ -5618,7 +5921,6 @@ void update_process_complete(
                 state,
                 run->operation == "refresh");
         } else {
-            stop_update_progress(state);
             std::string message =
                 run->operation == "refresh"
                     ? "Unable to refresh package lists."
@@ -5646,6 +5948,8 @@ void update_process_complete(
                     GTK_LABEL(state->updates_status),
                     message.c_str());
             }
+            finish_update_progress(
+                state, false, message);
             if (state->updates_install != nullptr) {
                 update_selection_controls(state);
             }
@@ -5713,7 +6017,8 @@ void start_update_process(
         if (state->updates_install != nullptr) {
             update_selection_controls(state);
         }
-        stop_update_progress(state);
+        finish_update_progress(
+            state, false, message);
         if (!plan.items.empty()) {
             record_transaction_history(
                 plan, false, message);
@@ -5793,13 +6098,16 @@ void begin_apply_updates(WindowState *state)
         gtk_widget_set_sensitive(state->updates_refresh, false);
     }
     set_update_runtime_state("installing");
-    start_update_progress(state);
+    start_update_progress(
+        state, approved_plan);
 
     std::vector<std::string> arguments{
         "pkexec",
         "/usr/libexec/infiltrator-software-update-helper",
-        "apply-plan"};
-    arguments.reserve(specs.size() + 3U);
+        "apply-plan",
+        "--progress-token=" +
+            state->updates_progress_token};
+    arguments.reserve(specs.size() + 4U);
     arguments.insert(arguments.end(), specs.begin(), specs.end());
 
     state->pending_update_plan.reset();
@@ -6121,14 +6429,124 @@ GtkWidget *make_updates_page(WindowState *state)
 
     gtk_box_append(GTK_BOX(page), controls);
 
+    state->updates_transaction_panel =
+        gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
+    gtk_widget_add_css_class(
+        state->updates_transaction_panel,
+        "update-transaction-panel");
+    gtk_widget_set_visible(
+        state->updates_transaction_panel,
+        false);
+
+    GtkWidget *transaction_header =
+        gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
+    GtkWidget *transaction_icon_well =
+        gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    gtk_widget_add_css_class(
+        transaction_icon_well,
+        "update-transaction-icon");
+    GtkWidget *transaction_icon =
+        make_icon("software-update-available-symbolic", 25);
+    gtk_widget_set_halign(
+        transaction_icon, GTK_ALIGN_CENTER);
+    gtk_widget_set_valign(
+        transaction_icon, GTK_ALIGN_CENTER);
+    gtk_box_append(
+        GTK_BOX(transaction_icon_well),
+        transaction_icon);
+    gtk_box_append(
+        GTK_BOX(transaction_header),
+        transaction_icon_well);
+
+    GtkWidget *transaction_copy =
+        gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
+    gtk_widget_set_hexpand(transaction_copy, true);
+    gtk_box_append(
+        GTK_BOX(transaction_copy),
+        make_label(
+            "Update transaction",
+            "update-transaction-title"));
+    state->updates_transaction_phase =
+        make_label(
+            "Preparing updates",
+            "update-transaction-phase");
+    gtk_box_append(
+        GTK_BOX(transaction_copy),
+        state->updates_transaction_phase);
+    gtk_box_append(
+        GTK_BOX(transaction_header),
+        transaction_copy);
+    state->updates_transaction_meta =
+        make_label(
+            "",
+            "update-transaction-meta",
+            1.0F);
+    gtk_widget_set_valign(
+        state->updates_transaction_meta,
+        GTK_ALIGN_CENTER);
+    gtk_box_append(
+        GTK_BOX(transaction_header),
+        state->updates_transaction_meta);
+    gtk_box_append(
+        GTK_BOX(state->updates_transaction_panel),
+        transaction_header);
+
+    GtkWidget *stage_strip =
+        gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+    gtk_widget_add_css_class(
+        stage_strip, "update-stage-strip");
+    static constexpr const char *stage_names[] = {
+        "Authorize",
+        "Refresh",
+        "Validate",
+        "Download",
+        "Install",
+        "Verify"
+    };
+    for (int stage = 0; stage < 6; ++stage) {
+        state->updates_stage_labels[stage] =
+            make_label(
+                stage_names[stage],
+                "update-stage",
+                0.5F);
+        gtk_widget_set_hexpand(
+            state->updates_stage_labels[stage],
+            true);
+        gtk_box_append(
+            GTK_BOX(stage_strip),
+            state->updates_stage_labels[stage]);
+    }
+    gtk_box_append(
+        GTK_BOX(state->updates_transaction_panel),
+        stage_strip);
+
     state->updates_progress = gtk_progress_bar_new();
+    gtk_widget_add_css_class(
+        state->updates_progress,
+        "update-transaction-progress");
     gtk_progress_bar_set_show_text(
-        GTK_PROGRESS_BAR(state->updates_progress), false);
-    gtk_widget_set_visible(state->updates_progress, false);
+        GTK_PROGRESS_BAR(state->updates_progress),
+        false);
     gtk_widget_set_tooltip_text(
         state->updates_progress,
-        "Software is actively processing the approved transaction.");
-    gtk_box_append(GTK_BOX(page), state->updates_progress);
+        "Live graphical state for the approved update transaction.");
+    gtk_box_append(
+        GTK_BOX(state->updates_transaction_panel),
+        state->updates_progress);
+
+    state->updates_transaction_detail =
+        make_label(
+            "",
+            "update-transaction-detail");
+    gtk_label_set_wrap(
+        GTK_LABEL(state->updates_transaction_detail),
+        true);
+    gtk_box_append(
+        GTK_BOX(state->updates_transaction_panel),
+        state->updates_transaction_detail);
+    gtk_box_append(
+        GTK_BOX(page),
+        state->updates_transaction_panel);
 
     GtkWidget *card =
         gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);

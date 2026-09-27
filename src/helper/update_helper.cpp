@@ -9,6 +9,7 @@
 #include <fcntl.h>
 #include <string>
 #include <string_view>
+#include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -234,6 +235,208 @@ const char *apt_get_path()
     return nullptr;
 }
 
+bool safe_progress_token(const std::string_view token)
+{
+    if (token.empty() || token.size() > 96U) {
+        return false;
+    }
+    for (const unsigned char ch : token) {
+        if (std::isalnum(ch) != 0 || ch == '-' || ch == '_') {
+            continue;
+        }
+        return false;
+    }
+    return true;
+}
+
+std::string privileged_progress_path()
+{
+    const char *uid = std::getenv("PKEXEC_UID");
+    if (uid == nullptr || *uid == '\0') {
+        return {};
+    }
+    for (const unsigned char ch : std::string_view(uid)) {
+        if (std::isdigit(ch) == 0) {
+            return {};
+        }
+    }
+    return std::string("/run/infiltrator-software/update-") +
+           uid + ".state";
+}
+
+std::string progress_detail(std::string_view detail)
+{
+    std::string clean(detail);
+    for (char &ch : clean) {
+        if (ch == '\n' || ch == '\r' || ch == '\t') {
+            ch = ' ';
+        }
+    }
+    if (clean.size() > 360U) {
+        clean.resize(357U);
+        clean += "...";
+    }
+    return clean;
+}
+
+void write_progress(
+    const std::string &path,
+    const std::string_view token,
+    const std::string_view phase,
+    const std::string_view detail)
+{
+    if (path.empty() || token.empty() || phase.empty()) {
+        return;
+    }
+
+    if (mkdir("/run/infiltrator-software", 0755) != 0 &&
+        errno != EEXIST) {
+        return;
+    }
+
+    const int fd = open(
+        path.c_str(),
+        O_WRONLY | O_CREAT | O_TRUNC |
+        O_CLOEXEC | O_NOFOLLOW,
+        0644);
+    if (fd < 0) {
+        return;
+    }
+
+    const std::string clean = progress_detail(detail);
+    (void)dprintf(
+        fd,
+        "%.*s\t%.*s\t%s\n",
+        static_cast<int>(token.size()), token.data(),
+        static_cast<int>(phase.size()), phase.data(),
+        clean.c_str());
+    close(fd);
+}
+
+void update_progress_from_apt_line(
+    const std::string &path,
+    const std::string_view token,
+    const std::string_view line)
+{
+    if (line.rfind("Need to get ", 0U) == 0U ||
+        line.rfind("Get:", 0U) == 0U ||
+        line.rfind("Ign:", 0U) == 0U) {
+        write_progress(path, token, "download", line);
+    } else if (line.rfind("Fetched ", 0U) == 0U) {
+        write_progress(
+            path, token, "install",
+            "Download complete. Installing approved packages.");
+    } else if (line.rfind("Preparing to unpack ", 0U) == 0U ||
+               line.rfind("Unpacking ", 0U) == 0U) {
+        write_progress(path, token, "install", line);
+    } else if (line.rfind("Setting up ", 0U) == 0U) {
+        write_progress(path, token, "configure", line);
+    } else if (line.rfind("Processing triggers for ", 0U) == 0U) {
+        write_progress(path, token, "finalize", line);
+    }
+}
+
+int run_apt_with_progress(
+    std::vector<std::string> arguments,
+    const std::string &progress_path,
+    const std::string_view token)
+{
+    const char *path = apt_get_path();
+    if (path == nullptr) {
+        std::fprintf(stderr, "apt-get is not available.\n");
+        return 127;
+    }
+
+    int pipe_fd[2]{};
+    if (pipe(pipe_fd) != 0) {
+        std::perror("Unable to create apt-get progress pipe");
+        return 127;
+    }
+
+    const pid_t child = fork();
+    if (child < 0) {
+        close(pipe_fd[0]);
+        close(pipe_fd[1]);
+        std::perror("Unable to start apt-get");
+        return 127;
+    }
+
+    if (child == 0) {
+        close(pipe_fd[0]);
+        if (dup2(pipe_fd[1], STDOUT_FILENO) < 0) {
+            _exit(127);
+        }
+        close(pipe_fd[1]);
+        std::vector<char *> argv = apt_argv(arguments);
+        (void)setenv("DEBIAN_FRONTEND", "noninteractive", 1);
+        (void)setenv("LC_ALL", "C", 1);
+        execv(path, argv.data());
+        std::perror("Unable to execute apt-get");
+        _exit(127);
+    }
+
+    close(pipe_fd[1]);
+    std::string pending;
+    char buffer[4096]{};
+    bool read_failed = false;
+    for (;;) {
+        const ssize_t count =
+            read(pipe_fd[0], buffer, sizeof(buffer));
+        if (count > 0) {
+            (void)write(
+                STDOUT_FILENO,
+                buffer,
+                static_cast<std::size_t>(count));
+            pending.append(
+                buffer,
+                static_cast<std::size_t>(count));
+            for (;;) {
+                const std::size_t newline =
+                    pending.find('\n');
+                if (newline == std::string::npos) {
+                    break;
+                }
+                const std::string line =
+                    pending.substr(0U, newline);
+                pending.erase(0U, newline + 1U);
+                update_progress_from_apt_line(
+                    progress_path, token, line);
+            }
+            continue;
+        }
+        if (count == 0) {
+            break;
+        }
+        if (errno == EINTR) {
+            continue;
+        }
+        read_failed = true;
+        break;
+    }
+    close(pipe_fd[0]);
+    if (!pending.empty()) {
+        update_progress_from_apt_line(
+            progress_path, token, pending);
+    }
+
+    int status = 0;
+    while (waitpid(child, &status, 0) < 0) {
+        if (errno == EINTR) {
+            continue;
+        }
+        std::perror("Unable to collect apt-get status");
+        return 127;
+    }
+    if (read_failed) {
+        std::perror("Unable to read apt-get progress output");
+        return 127;
+    }
+    if (!WIFEXITED(status)) {
+        return 1;
+    }
+    return WEXITSTATUS(status);
+}
+
 std::vector<char *> apt_argv(std::vector<std::string> &arguments)
 {
     std::vector<char *> argv;
@@ -414,6 +617,31 @@ int main(int argc, char **argv)
         argc >= 3 && std::strcmp(argv[1], "apply-plan") == 0;
 
     if (legacy_upgrade || resolved_plan) {
+        int specification_start = 2;
+        std::string progress_token;
+        if (argc > specification_start &&
+            std::string_view(argv[specification_start]).rfind(
+                "--progress-token=", 0U) == 0U) {
+            progress_token =
+                std::string(argv[specification_start]).substr(17U);
+            if (!safe_progress_token(progress_token)) {
+                std::fprintf(
+                    stderr,
+                    "Invalid update progress token.\n");
+                return 64;
+            }
+            ++specification_start;
+        }
+        if (argc <= specification_start) {
+            std::fprintf(
+                stderr,
+                "At least one exact package specification is required.\n");
+            return 64;
+        }
+        const std::string progress_path =
+            progress_token.empty()
+                ? std::string{}
+                : privileged_progress_path();
         std::vector<std::string> arguments{
             "-y",
             "--no-install-recommends",
@@ -423,9 +651,11 @@ int main(int argc, char **argv)
 
         bool has_removal = false;
         std::vector<std::string> approved_specs;
-        approved_specs.reserve(static_cast<std::size_t>(argc - 2));
+        approved_specs.reserve(
+            static_cast<std::size_t>(
+                argc - specification_start));
 
-        for (int index = 2; index < argc; ++index) {
+        for (int index = specification_start; index < argc; ++index) {
             std::string approved(argv[index]);
             const bool removal =
                 approved.rfind("remove:", 0U) == 0U;
@@ -499,6 +729,11 @@ int main(int argc, char **argv)
         }
 
         if (pending_specs.empty()) {
+            write_progress(
+                progress_path,
+                progress_token,
+                "complete",
+                "Approved package versions are already installed.");
             std::puts("INFILTRATOR_NO_CHANGES_REQUIRED");
             return 0;
         }
@@ -511,6 +746,11 @@ int main(int argc, char **argv)
          * explicitly. Recommends/Suggests are disabled so APT cannot silently
          * broaden the native plan.
          */
+        write_progress(
+            progress_path,
+            progress_token,
+            "refresh",
+            "Refreshing trusted repository metadata.");
         const int refresh_status = run_apt({"update"});
         if (refresh_status != 0) {
             std::fprintf(
@@ -526,6 +766,11 @@ int main(int argc, char **argv)
          * identities and versions. Any added dependency, missing change,
          * architecture drift or removal aborts before system mutation.
          */
+        write_progress(
+            progress_path,
+            progress_token,
+            "validate",
+            "Re-validating the reviewed package versions against refreshed metadata.");
         std::vector<std::string> simulation_arguments = arguments;
         simulation_arguments.insert(simulation_arguments.begin(), "-s");
 
@@ -546,7 +791,34 @@ int main(int argc, char **argv)
             return 66;
         }
 
-        return execute_apt(std::move(arguments));
+        if (progress_token.empty()) {
+            return execute_apt(std::move(arguments));
+        }
+
+        write_progress(
+            progress_path,
+            progress_token,
+            "download",
+            "Downloading approved package payloads.");
+        const int install_status =
+            run_apt_with_progress(
+                std::move(arguments),
+                progress_path,
+                progress_token);
+        if (install_status == 0) {
+            write_progress(
+                progress_path,
+                progress_token,
+                "finalize",
+                "Package application finished; returning to Software for final verification.");
+        } else {
+            write_progress(
+                progress_path,
+                progress_token,
+                "error",
+                "The privileged package transaction failed.");
+        }
+        return install_status;
     }
 
     std::fprintf(

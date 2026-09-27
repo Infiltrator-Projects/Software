@@ -186,7 +186,21 @@ jobs:
           assert "CREATE TABLE IF NOT EXISTS transactions" in history
           assert "CREATE TABLE IF NOT EXISTS transaction_items" in history
           assert "updates_progress" in app
-          assert "Approved update transaction is active" in app
+          assert "Update transaction" in app
+          assert '"Authorize"' in app
+          assert '"Download"' in app
+          assert '"Verify"' in app
+          assert "privileged_update_progress_path" in app
+          assert "update_progress_from_apt_line" in helper
+          assert '"--progress-token="' in app
+          assert '"--progress-token="' in helper
+          assert ".update-transaction-panel" in theme
+          assert ".update-stage-active" in theme
+          assert ".nav-badge-active" in theme
+          assert "docs/MINTUPDATE_PARITY.md" in Path("README.md").read_text()
+          parity = Path("docs/MINTUPDATE_PARITY.md").read_text()
+          assert "Linux Mint Update Manager replacement audit" in parity
+          assert "Software must not be declared a complete Mint Update Manager replacement" in parity
           assert "Installation completed; verifying final package state" in app
 
           assert "GTK_POLICY_ALWAYS" in app

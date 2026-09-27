@@ -57,9 +57,11 @@ The executor boundary is intentionally narrow so a future native installer can r
 
 ## Progress
 
-The current opaque privileged compatibility subprocess cannot provide trustworthy per-package completion events. Software therefore keeps an indeterminate graphical progress indicator and elapsed-time status visible from authorization through metadata refresh, exact-plan revalidation, package application and final state refresh.
+Software exposes the compatibility transaction as a persistent graphical workflow rather than an opaque spinner. The Updates page keeps a visible transaction card from authorization through final verification with explicit Authorize, Refresh, Validate, Download, Install and Verify stages, a live activity bar, elapsed time, planned package count and planned download bytes. The Updates navigation badge remains visibly active if the user changes pages.
 
-Structured phase/package/completed-total/cancellability events remain the contract for the future native payload executor; the documentation does not present them as implemented today.
+The constrained privileged helper publishes a tiny read-only stage record in root-owned `/run/infiltrator-software` state keyed to the invoking user and a per-transaction token. It reports metadata refresh, exact-plan revalidation and package-application phases. During the final APT/dpkg compatibility boundary Software also interprets ordinary apt output well enough to distinguish downloading, unpacking/installing, configuring and trigger/finalisation activity. These events are presentation telemetry only; they do not broaden the privileged transaction contract and are ignored unless their token matches the active reviewed transaction.
+
+Download bytes shown in the transaction card are the immutable planner's total planned download size. Until the native payload executor owns the transfer stream directly, Software deliberately does not invent a byte-accurate percentage or transfer rate from textual APT output. The long-term native executor contract still includes structured package/completed-total/byte-progress/cancellability events.
 
 ## Verification and history
 
