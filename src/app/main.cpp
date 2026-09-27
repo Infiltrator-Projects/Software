@@ -4220,19 +4220,39 @@ void release_upgrade_plan_worker(
                 } else if (fields[1] == "Install") {
                     item.action =
                         TransactionAction::install;
-                } else {
+                } else if (fields[1] == "Upgrade") {
                     item.action =
                         TransactionAction::upgrade;
+                } else {
+                    result->error =
+                        "The release-upgrade planner returned an unknown transaction action.";
+                    break;
                 }
                 item.package_id = fields[2];
                 item.from_version = fields[3];
                 item.to_version = fields[4];
                 try {
+                    std::size_t consumed = 0U;
                     item.download_bytes =
                         static_cast<std::uint64_t>(
-                            std::stoull(fields[5]));
-                } catch (...) {
-                    item.download_bytes = 0U;
+                            std::stoull(
+                                fields[5],
+                                &consumed));
+                    if (consumed != fields[5].size()) {
+                        result->error =
+                            "The release-upgrade planner returned an invalid download size.";
+                        break;
+                    }
+                } catch (const std::exception &) {
+                    result->error =
+                        "The release-upgrade planner returned an invalid download size.";
+                    break;
+                }
+                if (fields[6] != "0" &&
+                    fields[6] != "1") {
+                    result->error =
+                        "The release-upgrade planner returned an invalid system-critical marker.";
+                    break;
                 }
                 item.system_critical =
                     fields[6] == "1";
@@ -4246,9 +4266,10 @@ void release_upgrade_plan_worker(
             }
         }
 
-        if (result->target_name.empty() ||
-            result->specs.empty() ||
-            result->plan.items.empty()) {
+        if (result->error.empty() &&
+            (result->target_name.empty() ||
+             result->specs.empty() ||
+             result->plan.items.empty())) {
             result->error =
                 "The release-upgrade planner returned an incomplete review plan.";
         }
