@@ -15,6 +15,7 @@ namespace {
 using infiltrator::software::EngineServiceCore;
 using infiltrator::software::EngineServiceStatus;
 using infiltrator::software::PackageRecord;
+using infiltrator::software::KernelRecord;
 using infiltrator::software::TransactionAction;
 using infiltrator::software::TransactionItem;
 using infiltrator::software::TransactionPlan;
@@ -26,7 +27,7 @@ constexpr const char *kObjectPath =
     "/net/ssmith/infiltrator/software/Engine";
 constexpr const char *kInterfaceName =
     "net.ssmith.infiltrator.software.Engine";
-constexpr guint kApiVersion = 2U;
+constexpr guint kApiVersion = 3U;
 constexpr std::size_t kMaximumPlanPackages = 4096U;
 
 constexpr const char *kIntrospectionXml = R"XML(
@@ -40,6 +41,10 @@ constexpr const char *kIntrospectionXml = R"XML(
     </method>
     <method name="ListUpdates">
       <arg name="packages" type="aa{sv}" direction="out"/>
+    </method>
+    <method name="ListKernels">
+      <arg name="kernel_type" type="s" direction="in"/>
+      <arg name="kernels" type="aa{sv}" direction="out"/>
     </method>
     <method name="PlanTransaction">
       <arg name="action" type="s" direction="in"/>
@@ -197,6 +202,69 @@ GVariant *package_variant(const PackageRecord &package)
             std::string(
                 infiltrator::software::package_kind_name(
                     package.kind)).c_str()));
+    return g_variant_builder_end(&builder);
+}
+
+GVariant *string_array_variant(const std::vector<std::string> &values)
+{
+    GVariantBuilder builder;
+    g_variant_builder_init(&builder, G_VARIANT_TYPE("as"));
+    for (const std::string &value : values) {
+        g_variant_builder_add(&builder, "s", value.c_str());
+    }
+    return g_variant_builder_end(&builder);
+}
+
+GVariant *kernel_variant(const KernelRecord &kernel)
+{
+    GVariantBuilder builder;
+    g_variant_builder_init(&builder, G_VARIANT_TYPE_VARDICT);
+    g_variant_builder_add(&builder, "{sv}", "version",
+        g_variant_new_string(kernel.version.c_str()));
+    g_variant_builder_add(&builder, "{sv}", "package-version",
+        g_variant_new_string(kernel.package_version.c_str()));
+    g_variant_builder_add(&builder, "{sv}", "kernel-type",
+        g_variant_new_string(kernel.kernel_type.c_str()));
+    g_variant_builder_add(&builder, "{sv}", "series",
+        g_variant_new_string(kernel.series.c_str()));
+    g_variant_builder_add(&builder, "{sv}", "image-package",
+        g_variant_new_string(kernel.image_package.c_str()));
+    g_variant_builder_add(&builder, "{sv}", "origin",
+        g_variant_new_string(kernel.origin.c_str()));
+    g_variant_builder_add(&builder, "{sv}", "archive",
+        g_variant_new_string(kernel.archive.c_str()));
+    g_variant_builder_add(&builder, "{sv}", "support-status",
+        g_variant_new_string(kernel.support_status.c_str()));
+    g_variant_builder_add(&builder, "{sv}", "support-end",
+        g_variant_new_string(kernel.support_end.c_str()));
+    g_variant_builder_add(&builder, "{sv}", "installed",
+        g_variant_new_boolean(kernel.installed));
+    g_variant_builder_add(&builder, "{sv}", "active",
+        g_variant_new_boolean(kernel.active));
+    g_variant_builder_add(&builder, "{sv}", "installable",
+        g_variant_new_boolean(kernel.installable));
+    g_variant_builder_add(&builder, "{sv}", "supported",
+        g_variant_new_boolean(kernel.supported));
+    g_variant_builder_add(&builder, "{sv}", "superseded",
+        g_variant_new_boolean(kernel.superseded));
+    g_variant_builder_add(&builder, "{sv}", "end-of-life",
+        g_variant_new_boolean(kernel.end_of_life));
+    g_variant_builder_add(&builder, "{sv}", "safe-to-remove",
+        g_variant_new_boolean(kernel.safe_to_remove));
+    g_variant_builder_add(&builder, "{sv}", "install-package-ids",
+        string_array_variant(kernel.install_package_ids));
+    g_variant_builder_add(&builder, "{sv}", "remove-package-ids",
+        string_array_variant(kernel.remove_package_ids));
+    return g_variant_builder_end(&builder);
+}
+
+GVariant *kernels_variant(const std::vector<KernelRecord> &kernels)
+{
+    GVariantBuilder builder;
+    g_variant_builder_init(&builder, G_VARIANT_TYPE("aa{sv}"));
+    for (const KernelRecord &kernel : kernels) {
+        g_variant_builder_add_value(&builder, kernel_variant(kernel));
+    }
     return g_variant_builder_end(&builder);
 }
 
@@ -610,6 +678,41 @@ void handle_method_call(
             g_variant_new(
                 "(@aa{sv})",
                 packages_variant(packages)));
+        return;
+    }
+
+    if (method == "ListKernels") {
+        const EngineServiceStatus status = state->core.status();
+        if (status.generation == 0U) {
+            return_engine_error(
+                invocation,
+                "net.ssmith.infiltrator.software.Engine.Error.NoState",
+                status.detail);
+            return;
+        }
+
+        const gchar *kernel_type = nullptr;
+        g_variant_get(parameters, "(&s)", &kernel_type);
+        const std::string selected =
+            kernel_type == nullptr || *kernel_type == '\0'
+                ? infiltrator::software::KernelInventory::default_kernel_type()
+                : std::string(kernel_type);
+        if (!infiltrator::software::KernelInventory::supported_kernel_type(
+                selected)) {
+            return_engine_error(
+                invocation,
+                "net.ssmith.infiltrator.software.Engine.Error.InvalidRequest",
+                "Unsupported Linux kernel type.");
+            return;
+        }
+
+        const std::vector<KernelRecord> kernels =
+            state->core.kernels(selected);
+        g_dbus_method_invocation_return_value(
+            invocation,
+            g_variant_new(
+                "(@aa{sv})",
+                kernels_variant(kernels)));
         return;
     }
 
