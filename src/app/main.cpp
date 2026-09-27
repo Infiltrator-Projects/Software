@@ -223,6 +223,7 @@ void select_page(WindowState *state, int index);
 void settings_clicked(GtkButton *button, gpointer user_data);
 void about_clicked(GtkButton *button, gpointer user_data);
 void discover_install_clicked(GtkButton *button, gpointer user_data);
+void system_manage_kernels_clicked(GtkButton *button, gpointer user_data);
 
 GtkWidget *make_icon(const char *name, int size)
 {
@@ -4601,6 +4602,22 @@ GtkWidget *make_system_page(WindowState *state)
     gtk_box_append(
         GTK_BOX(controls),
         state->system_review_updates);
+
+    GtkWidget *kernels =
+        gtk_button_new_with_label(
+            "Manage kernels…");
+    gtk_widget_add_css_class(
+        kernels, "accent-button");
+    gtk_widget_set_tooltip_text(
+        kernels,
+        "Inspect, install, queue and safely remove Linux kernel releases.");
+    g_signal_connect(
+        kernels,
+        "clicked",
+        G_CALLBACK(system_manage_kernels_clicked),
+        state);
+    gtk_box_append(
+        GTK_BOX(controls), kernels);
 
     GtkWidget *snapshots =
         gtk_button_new_with_label(
