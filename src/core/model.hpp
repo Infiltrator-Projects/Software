@@ -60,6 +60,7 @@ struct PackageRecord {
 struct TransactionRequest {
     TransactionAction action{TransactionAction::install};
     std::vector<std::string> package_ids;
+    bool install_recommends{false};
 };
 
 struct TransactionItem {
