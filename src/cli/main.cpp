@@ -19,6 +19,9 @@ struct Options {
     bool security_only{false};
     bool kernel_only{false};
     bool dry_run{false};
+    bool refresh_cache{false};
+    bool assume_yes{false};
+    bool install_recommends_requested{false};
     bool keep_configuration{false};
     bool replace_configuration{false};
     std::vector<std::string> ignores;
@@ -31,7 +34,8 @@ void usage()
         << "  infiltrator-software-cli list [--security-only] [--kernel-only] [--ignore PATTERN]\n"
         << "  infiltrator-software-cli refresh\n"
         << "  infiltrator-software-cli upgrade [--security-only] [--kernel-only] [--dry-run]\n"
-        << "      [--ignore PATTERN] [--keep-configuration|--replace-configuration]\n"
+        << "      [--ignore PATTERN] [--refresh-cache] [--yes] [--keep-configuration|--replace-configuration]\n"
+        << "      [--install-recommends]\n"
         << "  infiltrator-software-cli ignore list\n"
         << "  infiltrator-software-cli ignore add PATTERN\n"
         << "  infiltrator-software-cli ignore remove PATTERN\n";
@@ -41,14 +45,25 @@ bool parse_options(int argc, char **argv, int start, Options &options, std::stri
 {
     for (int i=start; i<argc; ++i) {
         const std::string_view v(argv[i]);
-        if (v=="--security-only") options.security_only=true;
-        else if (v=="--kernel-only") options.kernel_only=true;
-        else if (v=="--dry-run") options.dry_run=true;
+        if (v=="--security-only" || v=="-s") options.security_only=true;
+        else if (v=="--kernel-only" || v=="--only-kernel" || v=="-k") options.kernel_only=true;
+        else if (v=="--dry-run" || v=="-d") options.dry_run=true;
+        else if (v=="--refresh-cache" || v=="-r") options.refresh_cache=true;
+        else if (v=="--yes" || v=="-y") options.assume_yes=true;
+        else if (v=="--install-recommends") options.install_recommends_requested=true;
         else if (v=="--keep-configuration") options.keep_configuration=true;
         else if (v=="--replace-configuration") options.replace_configuration=true;
-        else if (v=="--ignore") {
+        else if (v=="--ignore" || v=="-i") {
             if (i+1>=argc) { error="--ignore requires a pattern."; return false; }
-            options.ignores.emplace_back(argv[++i]);
+            std::string values(argv[++i]);
+            std::size_t start=0U;
+            for (;;) {
+                const std::size_t comma=values.find(',',start);
+                const std::string rule=values.substr(start,comma==std::string::npos?std::string::npos:comma-start);
+                if (!rule.empty()) options.ignores.push_back(rule);
+                if (comma==std::string::npos) break;
+                start=comma+1U;
+            }
         } else { error="Unknown option: "+std::string(v); return false; }
     }
     if (options.keep_configuration && options.replace_configuration) {
@@ -140,6 +155,16 @@ int main(int argc,char **argv)
 {
     using namespace infiltrator::software;
     if (argc<2) { usage(); return 64; }
+    if (std::string_view(argv[1])=="--version" ||
+        std::string_view(argv[1])=="-v") {
+        std::cout << INFILTRATOR_SOFTWARE_VERSION << "\n";
+        return 0;
+    }
+    if (std::string_view(argv[1])=="--help" ||
+        std::string_view(argv[1])=="-h") {
+        usage();
+        return 0;
+    }
     const std::string command(argv[1]);
     if (command=="ignore") return ignore_command(argc,argv);
 
@@ -162,7 +187,8 @@ int main(int argc,char **argv)
     if (!load_software_preferences(prefs,error)) { std::cerr<<error<<"\n"; return 1; }
     for (const std::string &rule:options.ignores) prefs.ignored_packages.push_back(rule);
 
-    if (command=="upgrade" && !engine.refresh(error)) { std::cerr<<error<<"\n"; return 1; }
+    if ((command=="upgrade" || options.refresh_cache) &&
+        !engine.refresh(error)) { std::cerr<<error<<"\n"; return 1; }
     std::vector<PackageRecord> updates;
     if (!engine.list_updates(updates,error)) { std::cerr<<error<<"\n"; return 1; }
 
@@ -191,7 +217,26 @@ int main(int argc,char **argv)
         std::cout<<transaction_action_name(item.action)<<"\t"<<item.package_id<<"\t"
                  <<item.from_version<<" -> "<<item.to_version<<"\n";
 
+    if (options.install_recommends_requested) {
+        std::cout
+            << "Note: Software does not permit implicit Recommends to broaden a reviewed transaction. "
+            << "Recommended packages must be explicitly selected so they appear in the plan.\n";
+    }
     if (options.dry_run) return 0;
+
+    if (!options.assume_yes) {
+        std::cout << "Proceed with this exact transaction? [y/N] " << std::flush;
+        std::string answer;
+        std::getline(std::cin,answer);
+        if (answer!="y" && answer!="Y" &&
+            answer!="yes" && answer!="YES") {
+            std::cout << "Cancelled.\n";
+            return 0;
+        }
+    } else if (!options.keep_configuration) {
+        options.replace_configuration=true;
+    }
+
     if (!execute_plan(*plan,options,error)) { std::cerr<<error<<"\n"; return 1; }
     std::cout<<"Update transaction completed.\n";
     return 0;
