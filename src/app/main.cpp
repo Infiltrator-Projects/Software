@@ -7682,6 +7682,173 @@ void begin_apply_updates(WindowState *state)
         approved_plan);
 }
 
+struct UpdateSnapshotRun {
+    GtkWindow *window{};
+};
+
+void update_snapshot_complete(
+    GObject *source_object,
+    GAsyncResult *async_result,
+    gpointer user_data)
+{
+    auto *run =
+        static_cast<UpdateSnapshotRun *>(
+            user_data);
+    auto *process =
+        G_SUBPROCESS(source_object);
+    GError *error = nullptr;
+    gchar *out = nullptr;
+    gchar *err = nullptr;
+    const gboolean communicated =
+        g_subprocess_communicate_utf8_finish(
+            process,
+            async_result,
+            &out,
+            &err,
+            &error);
+
+    auto *state =
+        run == nullptr ||
+        run->window == nullptr
+            ? nullptr
+            : static_cast<WindowState *>(
+                  g_object_get_data(
+                      G_OBJECT(run->window),
+                      "infiltrator-window-state"));
+
+    const bool success =
+        communicated &&
+        g_subprocess_get_successful(process);
+    if (state != nullptr) {
+        if (success) {
+            if (state->updates_status != nullptr) {
+                gtk_label_set_text(
+                    GTK_LABEL(
+                        state->updates_status),
+                    "Pre-update snapshot created. Starting the reviewed update transaction…");
+            }
+            begin_apply_updates(state);
+        } else {
+            state->updates_busy = false;
+            state->pending_update_plan.reset();
+            std::string message =
+                "The system update was not started because the requested pre-update snapshot failed.";
+            if (err != nullptr &&
+                *err != '\0') {
+                message += " ";
+                message += one_line(err);
+            } else if (
+                error != nullptr &&
+                error->message != nullptr) {
+                message += " ";
+                message += one_line(
+                    error->message);
+            }
+            if (state->updates_status != nullptr) {
+                gtk_label_set_text(
+                    GTK_LABEL(
+                        state->updates_status),
+                    message.c_str());
+            }
+            if (state->updates_install != nullptr) {
+                update_selection_controls(state);
+            }
+            if (state->updates_refresh != nullptr) {
+                gtk_widget_set_sensitive(
+                    state->updates_refresh,
+                    true);
+            }
+        }
+    }
+
+    g_free(out);
+    g_free(err);
+    g_clear_error(&error);
+    if (run != nullptr) {
+        if (run->window != nullptr) {
+            g_object_unref(run->window);
+        }
+        delete run;
+    }
+}
+
+bool create_snapshot_before_update(
+    WindowState *state)
+{
+    if (state == nullptr ||
+        state->window == nullptr) {
+        return false;
+    }
+
+    const char *timeshift =
+        g_find_program_in_path(
+            "timeshift");
+    if (timeshift == nullptr) {
+        if (state->updates_status != nullptr) {
+            gtk_label_set_text(
+                GTK_LABEL(
+                    state->updates_status),
+                "A pre-update snapshot was requested, but Timeshift is not installed.");
+        }
+        return false;
+    }
+    g_free(
+        const_cast<char *>(timeshift));
+
+    const gchar *argv[] = {
+        "pkexec",
+        "timeshift",
+        "--create",
+        "--comments",
+        "Infiltrator Software system update",
+        "--tags",
+        "D",
+        nullptr
+    };
+
+    GError *error = nullptr;
+    GSubprocess *process =
+        g_subprocess_newv(
+            argv,
+            static_cast<GSubprocessFlags>(
+                G_SUBPROCESS_FLAGS_STDOUT_PIPE |
+                G_SUBPROCESS_FLAGS_STDERR_PIPE),
+            &error);
+    if (process == nullptr) {
+        if (state->updates_status != nullptr) {
+            gtk_label_set_text(
+                GTK_LABEL(
+                    state->updates_status),
+                error != nullptr &&
+                error->message != nullptr
+                    ? error->message
+                    : "Unable to start the snapshot tool.");
+        }
+        g_clear_error(&error);
+        return false;
+    }
+
+    if (state->updates_status != nullptr) {
+        gtk_label_set_text(
+            GTK_LABEL(
+                state->updates_status),
+            "Creating the requested pre-update system snapshot…");
+    }
+    auto *run =
+        new UpdateSnapshotRun{
+            GTK_WINDOW(
+                g_object_ref(
+                    state->window))};
+    g_subprocess_communicate_utf8_async(
+        process,
+        nullptr,
+        nullptr,
+        update_snapshot_complete,
+        run);
+    g_object_unref(process);
+    return true;
+}
+
 void update_confirm_response(
     GtkDialog *dialog,
     gint response_id,
@@ -7695,6 +7862,23 @@ void update_confirm_response(
     }
 
     if (response_id == GTK_RESPONSE_ACCEPT) {
+        if (state->pending_update_plan.has_value() &&
+            state->pending_update_plan->touches_system &&
+            state->preferences.snapshot_before_system_updates) {
+            if (!create_snapshot_before_update(state)) {
+                state->updates_busy = false;
+                state->pending_update_plan.reset();
+                if (state->updates_install != nullptr) {
+                    update_selection_controls(state);
+                }
+                if (state->updates_refresh != nullptr) {
+                    gtk_widget_set_sensitive(
+                        state->updates_refresh,
+                        true);
+                }
+            }
+            return;
+        }
         begin_apply_updates(state);
         return;
     }
