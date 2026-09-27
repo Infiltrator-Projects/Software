@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "client/engine_client.hpp"
+#include "core/update_policy.hpp"
 
 #include <gtk/gtk.h>
 #include <libxapp/xapp-status-icon.h>
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <fcntl.h>
@@ -19,6 +21,9 @@ namespace {
 
 using infiltrator::software::EngineClient;
 using infiltrator::software::PackageRecord;
+using infiltrator::software::SoftwarePreferences;
+using infiltrator::software::load_software_preferences;
+using infiltrator::software::update_is_ignored;
 
 struct CheckResult {
     std::vector<PackageRecord> updates;
@@ -39,6 +44,9 @@ struct TrayState {
     GDBusConnection *engine_connection{};
     guint state_signal_id{0U};
     guint health_signal_id{0U};
+    SoftwarePreferences preferences{};
+    gint64 started_us{0};
+    gint64 last_metadata_refresh_us{0};
 };
 
 int acquire_single_instance_lock()
@@ -109,6 +117,14 @@ void render(TrayState *state)
         return;
     }
 
+    std::string preference_error;
+    SoftwarePreferences preferences;
+    if (load_software_preferences(
+            preferences,
+            preference_error)) {
+        state->preferences = std::move(preferences);
+    }
+
     const std::string override = read_override();
     if (override == "installing") {
         xapp_status_icon_set_icon_name(
@@ -167,7 +183,14 @@ void render(TrayState *state)
             state->icon, "Your system is up to date");
     }
 
-    xapp_status_icon_set_visible(state->icon, TRUE);
+    const bool visible =
+        !(state->preferences.hide_tray &&
+          !state->checking &&
+          state->last_error.empty() &&
+          state->update_count == 0U);
+    xapp_status_icon_set_visible(
+        state->icon,
+        visible ? TRUE : FALSE);
 }
 
 void check_worker(
@@ -189,6 +212,22 @@ void check_worker(
             result->error);
     }
 
+    SoftwarePreferences preferences;
+    std::string preference_error;
+    if (load_software_preferences(
+            preferences,
+            preference_error)) {
+        result->updates.erase(
+            std::remove_if(
+                result->updates.begin(),
+                result->updates.end(),
+                [&](const PackageRecord &package) {
+                    return update_is_ignored(
+                        package, preferences);
+                }),
+            result->updates.end());
+    }
+
     g_task_return_pointer(
         task,
         result,
@@ -207,9 +246,20 @@ void check_complete(
         return;
     }
 
+    auto *task = G_TASK(async_result);
+    auto *data = static_cast<CheckTaskData *>(
+        g_task_get_task_data(task));
     auto *result = static_cast<CheckResult *>(
-        g_task_propagate_pointer(G_TASK(async_result), nullptr));
+        g_task_propagate_pointer(task, nullptr));
     state->checking = false;
+
+    if (data != nullptr &&
+        data->refresh_metadata &&
+        result != nullptr &&
+        result->error.empty()) {
+        state->last_metadata_refresh_us =
+            g_get_monotonic_time();
+    }
 
     if (result != nullptr) {
         state->update_count = result->updates.size();
@@ -340,9 +390,43 @@ void subscribe_engine(TrayState *state)
 
 gboolean scheduled_check(gpointer user_data)
 {
-    begin_check(
-        static_cast<TrayState *>(user_data),
-        true);
+    auto *state =
+        static_cast<TrayState *>(user_data);
+    if (state == nullptr) {
+        return G_SOURCE_CONTINUE;
+    }
+
+    std::string preference_error;
+    SoftwarePreferences preferences;
+    if (load_software_preferences(
+            preferences,
+            preference_error)) {
+        state->preferences = std::move(preferences);
+    }
+
+    if (!state->preferences.refresh_schedule_enabled) {
+        return G_SOURCE_CONTINUE;
+    }
+
+    const gint64 now = g_get_monotonic_time();
+    const gint64 minute_us =
+        static_cast<gint64>(G_USEC_PER_SEC) * 60;
+    const gint64 required =
+        state->last_metadata_refresh_us == 0
+            ? static_cast<gint64>(
+                  state->preferences.first_refresh_minutes) *
+                  minute_us
+            : static_cast<gint64>(
+                  state->preferences.recurring_refresh_minutes) *
+                  minute_us;
+    const gint64 reference =
+        state->last_metadata_refresh_us == 0
+            ? state->started_us
+            : state->last_metadata_refresh_us;
+
+    if (reference == 0 || now - reference >= required) {
+        begin_check(state, true);
+    }
     return G_SOURCE_CONTINUE;
 }
 
@@ -431,6 +515,11 @@ int main(int argc, char **argv)
     }
 
     TrayState state;
+    state.started_us = g_get_monotonic_time();
+    std::string preference_error;
+    (void)load_software_preferences(
+        state.preferences,
+        preference_error);
     state.icon =
         xapp_status_icon_new_with_name("infiltrator-software-updater");
     if (state.icon == nullptr) {
@@ -470,11 +559,11 @@ int main(int argc, char **argv)
         [](gpointer data) -> gboolean {
             begin_check(
                 static_cast<TrayState *>(data),
-                true);
+                false);
             return G_SOURCE_REMOVE;
         },
         &state);
-    g_timeout_add_seconds(600U, scheduled_check, &state);
+    g_timeout_add_seconds(60U, scheduled_check, &state);
     g_timeout_add_seconds(2U, state_tick, &state);
 
     gtk_main();
