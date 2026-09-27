@@ -7,6 +7,7 @@
 #include <fstream>
 #include <string>
 #include <sys/stat.h>
+#include <unistd.h>
 #include <vector>
 
 namespace {
@@ -82,7 +83,7 @@ exit 0
 
     write_script(
         root / "gsettings",
-        "printf "'Mint-Y-Dark'\\n"\n");
+        "printf \"'Mint-Y-Dark'\\\\n\"\n");
 
     write_script(
         root / "cinnamon-spice-updater",
