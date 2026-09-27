@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "app/theme.hpp"
+#include "app/kernel_manager.hpp"
 #include "backends/apt/apt_backend.hpp"
 #include "catalogue/repository_catalogue.hpp"
 #include "catalogue/catalogue_snapshot_store.hpp"
@@ -4056,6 +4057,38 @@ void system_refresh_clicked(
     refresh_system(
         static_cast<WindowState *>(user_data),
         true);
+}
+
+void kernel_manager_changed(gpointer user_data)
+{
+    auto *state = static_cast<WindowState *>(user_data);
+    if (state == nullptr) return;
+    if (state->system_loaded) {
+        refresh_system(state, false);
+    }
+    if (state->updates_loaded) {
+        refresh_updates(state, false);
+    }
+    if (state->installed_loaded) {
+        refresh_installed(state);
+    }
+    if (state->history_loaded) {
+        refresh_history(state);
+    }
+}
+
+void system_manage_kernels_clicked(
+    GtkButton *,
+    gpointer user_data)
+{
+    auto *state = static_cast<WindowState *>(user_data);
+    if (state == nullptr || state->window == nullptr) {
+        return;
+    }
+    infiltrator::software::present_kernel_manager(
+        state->window,
+        kernel_manager_changed,
+        state);
 }
 
 void system_review_updates_clicked(
