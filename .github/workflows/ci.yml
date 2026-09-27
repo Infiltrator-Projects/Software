@@ -260,11 +260,16 @@ jobs:
           assert "docs/MINTUPDATE_PARITY.md" in Path("README.md").read_text()
           parity = Path("docs/MINTUPDATE_PARITY.md").read_text()
           assert "Linux Mint Update Manager replacement audit" in parity
-          assert "The source replacement gate is complete for Software 0.3.51" in parity
+          assert "The source replacement gate is complete for Software 0.3.52" in parity
           control = Path("debian/control").read_text()
           assert "Provides: mintupdate" in control
-          assert "Conflicts: mintupdate" in control
+          assert "Conflicts: mintupdate" not in control
           assert "Replaces: mintupdate" in control
+          dependency = Path("src/engine/debian_dependency.cpp").read_text()
+          transaction = Path("src/engine/debian_transaction.cpp").read_text()
+          assert "candidate_requires_installed_removal" in dependency
+          assert "result.remove_installed" in dependency
+          assert "resolution.remove_installed" in transaction
           assert "Installation finished; checking installed versions and remaining update candidates." in app
           assert "finish_update_progress(" in app
 
@@ -557,7 +562,10 @@ jobs:
           dpkg-deb -f "$package" Depends | grep -Eq '(^|, )gettext([, ]|$)'
           dpkg-deb -f "$package" Depends | grep -Eq 'libxapp'
           dpkg-deb -f "$package" Provides | grep -Eq '(^|, )mintupdate([, ]|$)'
-          dpkg-deb -f "$package" Conflicts | grep -Eq '(^|, )mintupdate([, ]|$)'
+          if dpkg-deb -f "$package" Conflicts 2>/dev/null | grep -Eq '(^|, )mintupdate([, ]|$)'; then
+            echo "::error::Bootstrap release must not Conflict with mintupdate or Software 0.3.49 cannot self-update."
+            exit 1
+          fi
           dpkg-deb -f "$package" Replaces | grep -Eq '(^|, )mintupdate([, ]|$)'
           dpkg-deb -f "$package" Recommends | grep -Eq '(^|, )flatpak([, ]|$)'
           dpkg-deb --fsys-tarfile "$package" | tar -tf - > package-files.txt
