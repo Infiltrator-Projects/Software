@@ -6,7 +6,7 @@
 
 Infiltrator Software is the software-management application for the Infiltrator project family. It presents software discovery, installation, removal, updates, system components, repositories, release channels, history and repair as one coherent graphical product.
 
-**Current source version:** 0.3.51<br>
+**Current source version:** 0.3.52<br>
 **Language:** C++17 application/core with native GTK4 Linux shell; C11 Common foundation  
 **Shared foundation:** Common 1.19.35  
 **Current package compatibility:** Debian repositories and .deb packages; Flatpak and AppStream catalogue integration  
@@ -34,7 +34,7 @@ The 0.4 architecture replaces those APT command invocations with a native Infilt
 
 ## Linux Mint Update Manager replacement status
 
-Software 0.3.51 completes the source-level replacement gate against `linuxmint/mintupdate` commit `a6a9f5767905b8fc94923d0b4ca0538a93309a90` (7.1.5 line). The native C++ Cinnamon backend now discovers and updates applets, desklets, extensions, themes and Nemo actions, supports exact per-item selection, reports transfer/item activity, records external updates in Software history, and includes Flatpak/Cinnamon/Nemo state in the tray. The Debian package now `Provides`, `Conflicts` with and `Replaces` `mintupdate`, allowing Software to satisfy Mint's update-manager dependency while removing the original package. `docs/MINTUPDATE_PARITY.md` is the audited capability matrix.
+Software 0.3.52 completes the source-level replacement gate against `linuxmint/mintupdate` commit `a6a9f5767905b8fc94923d0b4ca0538a93309a90` (7.1.5 line). The native C++ Cinnamon backend discovers and updates applets, desklets, extensions, themes and Nemo actions, supports exact per-item selection, reports transfer/item activity, records external updates in Software history, and includes Flatpak/Cinnamon/Nemo state in the tray. The native Debian resolver now models a package that both `Conflicts` with and `Replaces` an installed package as an explicit reviewed removal rather than a fatal conflict. For bootstrap from Software 0.3.49, 0.3.52 deliberately `Provides` and `Replaces` `mintupdate` without declaring a package conflict, so the old planner can install 0.3.52; once 0.3.52 is active, the installed Mint Update Manager can be removed through Software while Mint meta-package dependencies remain satisfied by the provider. `docs/MINTUPDATE_PARITY.md` is the audited capability matrix.
 
 A real distribution point-release upgrade remains an installed-host qualification exercise because CI cannot safely perform a destructive upgrade of the user's machine; that is a validation limitation, not a missing release-upgrade code path.
 
