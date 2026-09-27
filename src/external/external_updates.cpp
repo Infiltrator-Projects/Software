@@ -503,11 +503,14 @@ bool discover_flatpak_updates(
             seen,
             user_error);
 
-    if (!system_ok && !user_ok) {
-        error =
-            !system_error.empty()
-                ? system_error
-                : user_error;
+    if (!system_ok || !user_ok) {
+        error = system_ok
+            ? "User Flatpak installation: " + user_error
+            : "System Flatpak installation: " + system_error;
+        if (!system_ok && !user_ok) {
+            error += "; User Flatpak installation: " + user_error;
+        }
+        updates.clear();
         return false;
     }
     return true;
@@ -575,7 +578,8 @@ bool discover_cinnamon_updates(
 bool apply_flatpak_updates(
     const bool remove_unused,
     const bool match_host_theme,
-    std::string &error)
+    std::string &error,
+    ExternalProgressCallback progress)
 {
     error.clear();
     if (!program_available("flatpak")) {
@@ -584,6 +588,9 @@ bool apply_flatpak_updates(
 
     if (remove_unused) {
         for (const bool user : {false, true}) {
+            if (progress) progress(user
+                ? "Removing unused user Flatpak runtimes"
+                : "Removing unused system Flatpak runtimes");
             std::vector<std::string> command{
                 "flatpak", "uninstall",
                 "--unused", "-y",
@@ -599,11 +606,15 @@ bool apply_flatpak_updates(
     }
 
     if (match_host_theme) {
+        if (progress) progress("Checking desktop theme runtimes");
         install_matching_theme(false);
         install_matching_theme(true);
     }
 
     for (const bool user : {false, true}) {
+        if (progress) progress(user
+            ? "Downloading and installing user Flatpak updates"
+            : "Downloading and installing system Flatpak updates");
         std::vector<std::string> command{
             "flatpak", "update",
             "-y", "--noninteractive"
@@ -619,7 +630,8 @@ bool apply_flatpak_updates(
 }
 
 bool apply_cinnamon_updates(
-    std::string &error)
+    std::string &error,
+    ExternalProgressCallback progress)
 {
     error.clear();
     if (!program_available(
@@ -628,6 +640,7 @@ bool apply_cinnamon_updates(
     }
 
     std::string output;
+    if (progress) progress("Applying Cinnamon Spice updates");
     return run_command(
         {"cinnamon-spice-updater",
          "--update-all"},

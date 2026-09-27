@@ -128,6 +128,7 @@ struct WindowState {
     GtkWidget *updates_backend{};
     GtkListBox *external_updates_list{};
     GtkWidget *external_updates_status{};
+    GtkWidget *external_updates_spinner{};
     GtkWidget *external_flatpak_apply{};
     GtkWidget *external_cinnamon_apply{};
     std::vector<ExternalUpdate> external_update_records;
@@ -150,6 +151,7 @@ struct WindowState {
     std::optional<TransactionPlan> pending_update_plan;
     unsigned int updates_generation{0U};
     bool updates_busy{false};
+    bool external_updates_active{false};
     bool updates_from_engine{false};
     bool updates_auto_refresh_pending{true};
     gint64 updates_last_metadata_refresh_us{0};
@@ -4807,7 +4809,8 @@ void update_nav_updates_badge(WindowState *state)
     }
 
     if (state->updates_busy &&
-        !state->updates_progress_token.empty()) {
+        (state->external_updates_active ||
+         !state->updates_progress_token.empty())) {
         gtk_label_set_text(
             GTK_LABEL(state->nav_updates_badge), "↻");
         gtk_widget_add_css_class(
@@ -6930,6 +6933,34 @@ struct ExternalApplyResult {
     std::string error;
 };
 
+struct ExternalProgressNotice {
+    GtkWindow *window{};
+    std::string message;
+};
+
+void publish_external_progress(GTask *task, std::string_view message)
+{
+    auto *notice = new ExternalProgressNotice{
+        GTK_WINDOW(g_object_ref(g_task_get_source_object(task))),
+        std::string(message)};
+    g_idle_add_full(G_PRIORITY_DEFAULT, +[](gpointer data) -> gboolean {
+        auto *notice = static_cast<ExternalProgressNotice *>(data);
+        auto *state = static_cast<WindowState *>(g_object_get_data(
+            G_OBJECT(notice->window), "infiltrator-window-state"));
+        if (state != nullptr && state->external_updates_active) {
+            if (state->external_updates_status != nullptr)
+                gtk_label_set_text(GTK_LABEL(state->external_updates_status),
+                    notice->message.c_str());
+            if (state->updates_status != nullptr)
+                gtk_label_set_text(GTK_LABEL(state->updates_status),
+                    notice->message.c_str());
+        }
+        g_object_unref(notice->window);
+        delete notice;
+        return G_SOURCE_REMOVE;
+    }, notice, nullptr);
+}
+
 void external_apply_worker(
     GTask *task,
     gpointer,
@@ -6952,11 +6983,17 @@ void external_apply_worker(
             apply_flatpak_updates(
                 true,
                 true,
-                result->error);
+                result->error,
+                [task](std::string_view message) {
+                    publish_external_progress(task, message);
+                });
     } else {
         result->success =
             apply_cinnamon_updates(
-                result->error);
+                result->error,
+                [task](std::string_view message) {
+                    publish_external_progress(task, message);
+                });
     }
 
     g_task_return_pointer(
@@ -6994,6 +7031,12 @@ void external_apply_complete(
         return;
     }
 
+    state->external_updates_active = false;
+    if (state->external_updates_spinner != nullptr) {
+        gtk_spinner_stop(GTK_SPINNER(state->external_updates_spinner));
+        gtk_widget_set_visible(state->external_updates_spinner, false);
+    }
+
     if (result->success) {
         if (state->external_updates_status != nullptr) {
             gtk_label_set_text(
@@ -7004,12 +7047,14 @@ void external_apply_complete(
                     : "Cinnamon Spice updates complete. Rechecking…");
         }
         state->updates_busy = false;
+        update_nav_updates_badge(state);
         delete result;
         refresh_updates(state, false);
         return;
     }
 
     state->updates_busy = false;
+    update_nav_updates_badge(state);
     if (state->external_updates_status != nullptr) {
         const std::string message =
             result->error.empty()
@@ -7042,6 +7087,12 @@ void external_apply_clicked(
             state->external_flatpak_apply);
 
     state->updates_busy = true;
+    state->external_updates_active = true;
+    update_nav_updates_badge(state);
+    if (state->external_updates_spinner != nullptr) {
+        gtk_widget_set_visible(state->external_updates_spinner, true);
+        gtk_spinner_start(GTK_SPINNER(state->external_updates_spinner));
+    }
     if (state->external_flatpak_apply != nullptr) {
         gtk_widget_set_sensitive(
             state->external_flatpak_apply,
@@ -8562,6 +8613,12 @@ GtkWidget *make_updates_page(WindowState *state)
     gtk_box_append(
         GTK_BOX(external_heading),
         external_copy);
+
+    state->external_updates_spinner = gtk_spinner_new();
+    gtk_widget_set_size_request(state->external_updates_spinner, 24, 24);
+    gtk_widget_set_visible(state->external_updates_spinner, false);
+    gtk_box_append(GTK_BOX(external_heading),
+        state->external_updates_spinner);
 
     state->external_flatpak_apply =
         gtk_button_new_with_label(

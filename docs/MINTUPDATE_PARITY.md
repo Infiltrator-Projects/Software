@@ -21,12 +21,14 @@ an integration check on an installed system before removal can be recommended.
 | Discover APT/Debian updates from configured repositories | Implemented | Required |
 | Refresh repository metadata without freezing the GUI | Implemented | Required |
 | Select individual updates, Select All and Clear Selection | Implemented | Required |
+| Select individual Flatpak and Cinnamon updates in the unified update list | Partial: Flatpak and Cinnamon are listed, but the current controls apply all available external updates | Required |
 | Show installed and target versions | Implemented | Required |
 | Show package origin/source and planned download size | Implemented | Required |
 | Resolve dependencies before authorization | Implemented, stricter than Mint | Required |
 | Review the complete transaction before privilege escalation | Implemented | Required |
 | Install selected updates | Implemented | Required |
 | Graphical live transaction state during authorization/download/install/configure/verify | Implemented since 0.3.46 | Required |
+| Visible Flatpak and Cinnamon transaction state | Partial: phase messages, spinner and active Updates badge are present; transfer and per-item progress are not yet reported | Required |
 | Keep update activity visible when the user changes pages | Implemented through persistent transaction state and active Updates badge | Required |
 | Durable update/install/remove history | Implemented | Required |
 | Tray indicator for checking/errors/updates and opening Updates | Implemented | Required |

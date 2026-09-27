@@ -54,6 +54,10 @@ int main()
         root / "flatpak",
         R"(case "$*" in
   *remote-ls*)
+    if [ "$FAIL_SYSTEM_SCAN" = 1 ] && [ "$2" = "--system" ]; then
+      echo 'System Flatpak repository is unavailable' >&2
+      exit 1
+    fi
     printf 'org.example.App\tapp/org.example.App/x86_64/stable\t2.0\t1234\n'
     printf 'org.example.Runtime\truntime/org.example.Runtime/x86_64/24.08\t24.08\t2345\n'
     exit 0
@@ -130,6 +134,14 @@ exit 1
     assert(saw_app);
     assert(saw_runtime);
 
+    (void)setenv("FAIL_SYSTEM_SCAN", "1", 1);
+    flatpak.clear();
+    assert(!discover_flatpak_updates(flatpak, error));
+    assert(flatpak.empty());
+    assert(error.find("System Flatpak installation") !=
+        std::string::npos);
+    (void)unsetenv("FAIL_SYSTEM_SCAN");
+
     std::vector<ExternalUpdate> cinnamon;
     assert(discover_cinnamon_updates(cinnamon, error));
     assert(error.empty());
@@ -143,10 +155,24 @@ exit 1
     }
     assert(saw_action);
 
-    assert(apply_flatpak_updates(true, true, error));
+    std::vector<std::string> flatpak_phases;
+    assert(apply_flatpak_updates(true, true, error,
+        [&](std::string_view phase) {
+            flatpak_phases.emplace_back(phase);
+        }));
     assert(error.empty());
-    assert(apply_cinnamon_updates(error));
+    assert(flatpak_phases.size() == 5U);
+    assert(flatpak_phases[3].find("system Flatpak updates") !=
+        std::string::npos);
+    assert(flatpak_phases[4].find("user Flatpak updates") !=
+        std::string::npos);
+    std::vector<std::string> cinnamon_phases;
+    assert(apply_cinnamon_updates(error,
+        [&](std::string_view phase) {
+            cinnamon_phases.emplace_back(phase);
+        }));
     assert(error.empty());
+    assert(cinnamon_phases.size() == 1U);
 
     const std::string logged = read_all(trace);
     assert(logged.find("flatpak-uninstall") != std::string::npos);

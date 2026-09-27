@@ -3,6 +3,7 @@
 #define INFILTRATOR_SOFTWARE_EXTERNAL_UPDATES_HPP
 
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -29,6 +30,9 @@ struct ExternalUpdate {
     std::uint64_t download_bytes{0U};
 };
 
+using ExternalProgressCallback =
+    std::function<void(std::string_view)>;
+
 std::string_view external_update_kind_name(
     ExternalUpdateKind kind) noexcept;
 
@@ -43,10 +47,12 @@ bool discover_cinnamon_updates(
 bool apply_flatpak_updates(
     bool remove_unused,
     bool match_host_theme,
-    std::string &error);
+    std::string &error,
+    ExternalProgressCallback progress = {});
 
 bool apply_cinnamon_updates(
-    std::string &error);
+    std::string &error,
+    ExternalProgressCallback progress = {});
 
 } // namespace infiltrator::software
 
