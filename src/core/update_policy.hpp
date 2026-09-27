@@ -25,6 +25,7 @@ struct SoftwarePreferences {
     bool auto_update_packages{false};
     bool auto_update_flatpaks{false};
     bool auto_update_cinnamon_spices{false};
+    bool auto_remove_obsolete{false};
     bool hide_window_after_update{false};
     bool hide_tray{false};
     bool install_recommends{false};
