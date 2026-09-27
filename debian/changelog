@@ -1,3 +1,18 @@
+infiltrator-software (0.3.52) unstable; urgency=high
+
+  * Fix native dependency resolution for Debian replacement transactions:
+    Conflicts + Replaces is now an explicit reviewed package removal rather
+    than a fatal planning error.
+  * Preserve final-state dependency validation through Provides while removing
+    the superseded package, and emit exact removal items for privileged APT
+    simulation/authorization.
+  * Add regression coverage for the exact Software/mintupdate replacement case.
+  * Bootstrap safely from installed Software 0.3.49 by keeping Provides and
+    Replaces for mintupdate but omitting Conflicts in this transition release;
+    this lets 0.3.49 install the fixed resolver before mintupdate is removed.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Sun, 27 Sep 2026 21:58:00 +1000
+
 infiltrator-software (0.3.51) unstable; urgency=high
 
   * Complete the Linux Mint Update Manager replacement gate against the
