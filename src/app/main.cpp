@@ -79,6 +79,7 @@ struct WindowState {
     GtkWidget *theme_button{};
     GtkWidget *maximize_button{};
     GtkWidget *global_search{};
+    bool search_syncing{false};
     GtkStringList *installed_strings{};
     GtkWidget *installed_status{};
     GtkWidget *installed_count{};
@@ -468,6 +469,27 @@ std::string folded(const std::string_view value)
     std::string result(text);
     g_free(text);
     return result;
+}
+
+std::string discover_search_text(const PackageRecord &record)
+{
+    /*
+     * Discover is a software search, not just a title search.  Index every
+     * user-facing identity/description field we already have so queries such
+     * as "theme" can match package summaries, publishers, source package
+     * names and catalogue identifiers as well as the visible application
+     * name.  Keep the folded representation cached by the caller.
+     */
+    return folded(
+        record.name + "\n" +
+        record.summary + "\n" +
+        record.description + "\n" +
+        record.publisher + "\n" +
+        record.category + "\n" +
+        record.id + "\n" +
+        record.package_name + "\n" +
+        record.source_package + "\n" +
+        record.source);
 }
 
 std::string display_size(const std::uint64_t bytes)
@@ -1813,10 +1835,7 @@ void rebuild_discover(WindowState *state)
             const std::string haystack =
                 cached_search_text
                     ? state->discover_search_texts[index]
-                    : folded(
-                          record.name + "\n" + record.description + "\n" +
-                          record.category + "\n" + record.package_name + "\n" +
-                          record.source);
+                    : discover_search_text(record);
             if (haystack.find(query) == std::string::npos) {
                 continue;
             }
@@ -1980,7 +1999,11 @@ void discover_grid_unbind(
 void discover_filter_changed(GtkWidget *, gpointer user_data)
 {
     auto *state = static_cast<WindowState *>(user_data);
-    if (state != nullptr &&
+    if (state == nullptr) {
+        return;
+    }
+
+    if (!state->search_syncing &&
         state->discover_search != nullptr &&
         state->global_search != nullptr) {
         const char *local_text =
@@ -1990,9 +2013,18 @@ void discover_filter_changed(GtkWidget *, gpointer user_data)
             gtk_editable_get_text(
                 GTK_EDITABLE(state->global_search));
         if (g_strcmp0(local_text, global_text) != 0) {
+            /*
+             * Mirroring the two search boxes used to recurse through the
+             * opposite "search-changed" handler.  That handler also changed
+             * navigation selection, which could steal focus between
+             * keystrokes and make each new character replace the previous
+             * one.  Mirror silently at the application level instead.
+             */
+            state->search_syncing = true;
             gtk_editable_set_text(
                 GTK_EDITABLE(state->global_search),
                 local_text == nullptr ? "" : local_text);
+            state->search_syncing = false;
         }
     }
     rebuild_discover(state);
@@ -2533,10 +2565,7 @@ void discover_complete(
         state->discover_records.size());
     for (const PackageRecord &record : state->discover_records) {
         state->discover_search_texts.emplace_back(
-            folded(
-                record.name + "\n" + record.description + "\n" +
-                record.category + "\n" + record.package_name + "\n" +
-                record.source));
+            discover_search_text(record));
     }
 
     std::set<std::string> categories;
@@ -11995,23 +12024,45 @@ void global_search_changed(
     auto *state =
         static_cast<WindowState *>(user_data);
     if (state == nullptr ||
-        state->discover_search == nullptr) {
+        state->discover_search == nullptr ||
+        state->search_syncing) {
         return;
     }
 
-    const char *text =
+    const char *entry_text =
         gtk_editable_get_text(GTK_EDITABLE(entry));
+    const std::string text =
+        entry_text == nullptr ? "" : entry_text;
     const char *local =
         gtk_editable_get_text(
             GTK_EDITABLE(state->discover_search));
-    if (g_strcmp0(text, local) != 0) {
+    if (g_strcmp0(text.c_str(), local) != 0) {
+        state->search_syncing = true;
         gtk_editable_set_text(
             GTK_EDITABLE(state->discover_search),
-            text == nullptr ? "" : text);
+            text.c_str());
+        state->search_syncing = false;
+    } else {
+        /* No mirrored signal will rebuild the result set in this case. */
+        rebuild_discover(state);
     }
 
-    if (text != nullptr && *text != '\0') {
-        select_page(state, 0);
+    if (!text.empty()) {
+        const char *visible =
+            state->stack == nullptr
+                ? nullptr
+                : gtk_stack_get_visible_child_name(state->stack);
+        if (visible == nullptr ||
+            std::strcmp(visible, "discover") != 0) {
+            /*
+             * A global search should move to Discover once, not re-select the
+             * navigation row on every keystroke.  Reassert focus afterwards
+             * so typing continues as one uninterrupted query.
+             */
+            select_page(state, 0);
+            gtk_widget_grab_focus(GTK_WIDGET(entry));
+            gtk_editable_set_position(GTK_EDITABLE(entry), -1);
+        }
     }
 }
 
