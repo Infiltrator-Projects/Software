@@ -8693,6 +8693,53 @@ void update_install_clicked(GtkButton *, gpointer user_data)
     g_object_unref(task);
 }
 
+void restart_system_clicked(
+    GtkButton *,
+    gpointer user_data)
+{
+    auto *state = static_cast<WindowState *>(user_data);
+    if (state == nullptr || state->window == nullptr) {
+        return;
+    }
+
+    const char *desktop = g_getenv("XDG_CURRENT_DESKTOP");
+    std::vector<std::string> candidates;
+    if (desktop != nullptr &&
+        (std::string_view(desktop) == "Cinnamon" ||
+         std::string_view(desktop) == "X-Cinnamon")) {
+        candidates.emplace_back(
+            "cinnamon-session-quit --reboot");
+    } else if (desktop != nullptr &&
+               std::string_view(desktop).find("XFCE") !=
+                   std::string_view::npos) {
+        candidates.emplace_back(
+            "xfce4-session-logout --reboot");
+    }
+    candidates.emplace_back("systemctl reboot");
+
+    GError *last_error = nullptr;
+    for (const std::string &command : candidates) {
+        GError *error = nullptr;
+        if (g_spawn_command_line_async(
+                command.c_str(), &error)) {
+            g_clear_error(&last_error);
+            return;
+        }
+        g_clear_error(&last_error);
+        last_error = error;
+    }
+
+    if (state->updates_status != nullptr) {
+        gtk_label_set_text(
+            GTK_LABEL(state->updates_status),
+            last_error != nullptr &&
+                    last_error->message != nullptr
+                ? last_error->message
+                : "Unable to request a system restart.");
+    }
+    g_clear_error(&last_error);
+}
+
 GtkWidget *make_updates_page(WindowState *state)
 {
     GtkWidget *page = gtk_box_new(GTK_ORIENTATION_VERTICAL, 16);
@@ -8964,6 +9011,22 @@ GtkWidget *make_updates_page(WindowState *state)
     gtk_box_append(
         GTK_BOX(state->updates_reboot_banner),
         state->updates_reboot_detail);
+    GtkWidget *restart_now =
+        gtk_button_new_with_label("Restart");
+    gtk_widget_add_css_class(
+        restart_now,
+        "suggested-action");
+    gtk_widget_set_tooltip_text(
+        restart_now,
+        "Restart the system now so installed kernel and system updates take effect.");
+    g_signal_connect(
+        restart_now,
+        "clicked",
+        G_CALLBACK(restart_system_clicked),
+        state);
+    gtk_box_append(
+        GTK_BOX(state->updates_reboot_banner),
+        restart_now);
     gtk_widget_set_visible(
         state->updates_reboot_banner,
         reboot_required());
