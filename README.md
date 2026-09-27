@@ -6,7 +6,7 @@
 
 Infiltrator Software is the software-management application for the Infiltrator project family. It presents software discovery, installation, removal, updates, system components, repositories, release channels, history and repair as one coherent graphical product.
 
-**Current source version:** 0.3.46  
+**Current source version:** 0.3.47  
 **Language:** C++17 application/core with native GTK4 Linux shell; C11 Common foundation  
 **Shared foundation:** Common 1.19.35  
 **Current package compatibility:** Debian repositories and .deb packages; Flatpak and AppStream catalogue integration  
@@ -40,7 +40,7 @@ The primary navigation contract is:
 
 - **Discover** — merged catalogue of verified Infiltrator applications, host AppStream applications and configured Flatpak sources.
 - **Installed** — installed applications and components with versions, source, size and state.
-- **Updates** — preferred application, library, kernel and system update candidates with per-package/subset selection, visible repository/policy provenance, complete preflight planning before authorization, and visible elapsed activity through privileged execution and final state verification.
+- **Updates** — preferred application, library, kernel and system update candidates with per-package/subset selection, visible repository/policy provenance, complete preflight planning before authorization, and visible elapsed activity through privileged execution and final state verification, security-only selection, persistent ignore rules, reboot-required indication and source-package details.
 - **System** — live kernel, driver and core operating-system inventory with installed/current versions, preferred update state, system-critical counts, repository refresh and a direct hand-off to the unified Updates workflow.
 - **Repositories** — Debian/Infiltrator sources, Flatpak remotes, channels, trust and health, with graphical enable/disable controls for mutable configured sources.
 - **History** — live durable transaction history with completed/failed outcomes, exact before/after versions, requested and dependency-driven changes, source provenance and transaction identifiers.

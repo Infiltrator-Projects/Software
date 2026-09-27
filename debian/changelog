@@ -1,3 +1,24 @@
+infiltrator-software (0.3.47) unstable; urgency=high
+
+  * Add persistent update preferences and wildcard/version-specific ignore rules.
+  * Classify security updates from signed Ubuntu/Debian release metadata plus
+    Mint's browser-source convention and add one-click Security only selection.
+  * Persist source-package identity and security classification in package-state
+    schema 5 and expose both through the shared engine D-Bus API.
+  * Add graphical update details with description, repository provenance,
+    download size and the complete set of update binaries from the same source.
+  * Detect /var/run/reboot-required and present a persistent restart-required
+    banner including the packages that requested the restart when available.
+  * Detect dpkg/APT fcntl locks at the privileged boundary, keep the graphical
+    transaction visibly in a Waiting for package manager state and retry safely.
+  * Expand Software Preferences with refresh scheduling, notification,
+    Flatpak/Cinnamon, automation, tray, configuration-file and snapshot policy.
+  * Honour Hide Software after a successful update immediately.
+  * Add unit coverage for preference persistence, wildcard ignores and reboot
+    marker handling.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Sun, 27 Sep 2026 12:20:00 +1000
+
 infiltrator-software (0.3.46) unstable; urgency=high
 
   * Add a persistent graphical update-transaction panel with explicit
