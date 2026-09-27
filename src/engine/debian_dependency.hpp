@@ -45,6 +45,9 @@ struct DebianResolutionProblem {
 
 struct DebianResolution {
     std::vector<DebianPackageVersion> selected;
+    // Installed packages that a selected package both Conflicts with and
+    // Replaces. These become explicit reviewed removals in the final plan.
+    std::vector<std::string> remove_installed;
     std::vector<DebianResolutionProblem> problems;
 
     [[nodiscard]] bool complete() const noexcept
