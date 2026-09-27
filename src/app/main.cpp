@@ -141,6 +141,7 @@ struct WindowState {
     std::string updates_progress_token;
     std::string updates_progress_phase;
     bool updates_post_install_refresh{false};
+    bool updates_restart_after_verify{false};
     std::vector<PackageRecord> update_records;
     std::unordered_set<std::string> selected_update_ids;
     std::optional<TransactionPlan> pending_update_plan;
@@ -6492,6 +6493,28 @@ void updates_complete(
             refresh_installed(state);
             refresh_discover(state);
             refresh_repositories(state);
+
+            if (state->updates_restart_after_verify) {
+                state->updates_restart_after_verify = false;
+                GError *restart_error = nullptr;
+                if (g_spawn_command_line_async(
+                        "/usr/bin/infiltrator-software --updates",
+                        &restart_error)) {
+                    GApplication *application =
+                        g_application_get_default();
+                    if (application != nullptr) {
+                        g_application_quit(application);
+                    }
+                } else {
+                    g_warning(
+                        "Software updated successfully but could not restart: %s",
+                        restart_error != nullptr &&
+                        restart_error->message != nullptr
+                            ? restart_error->message
+                            : "unknown restart error");
+                    g_clear_error(&restart_error);
+                }
+            }
         }
     }
 
@@ -6644,6 +6667,20 @@ void update_process_complete(
 
             state->updates_post_install_refresh =
                 run->operation == "install";
+            if (run->operation == "install") {
+                state->updates_restart_after_verify =
+                    std::any_of(
+                        run->plan.items.begin(),
+                        run->plan.items.end(),
+                        [](const TransactionItem &item) {
+                            const std::string_view id(
+                                item.package_id);
+                            return id == "infiltrator-software" ||
+                                   id.rfind(
+                                       "infiltrator-software:",
+                                       0U) == 0U;
+                        });
+            }
             /*
              * Re-read authoritative dpkg state first. Repository metadata was
              * already refreshed by the privileged helper before mutation, so
