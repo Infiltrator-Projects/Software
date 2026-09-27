@@ -21,6 +21,7 @@
 #include <cerrno>
 #include <cctype>
 #include <cstring>
+#include <exception>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
