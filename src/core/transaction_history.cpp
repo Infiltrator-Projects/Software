@@ -91,6 +91,32 @@ bool open_database(
     return true;
 }
 
+bool open_database_readonly(
+    const std::string &path,
+    Database &database,
+    std::string &error)
+{
+    if (!std::filesystem::exists(path)) {
+        error.clear();
+        return true;
+    }
+
+    if (sqlite3_open_v2(
+            path.c_str(),
+            &database.handle,
+            SQLITE_OPEN_READONLY |
+                SQLITE_OPEN_FULLMUTEX,
+            nullptr) != SQLITE_OK) {
+        error = sqlite_error(database.handle);
+        return false;
+    }
+
+    (void)sqlite3_busy_timeout(
+        database.handle,
+        5000);
+    return true;
+}
+
 bool ensure_schema(sqlite3 *database, std::string &error)
 {
     static constexpr const char *schema =
@@ -347,8 +373,13 @@ TransactionHistoryStore::load_recent(
     std::vector<TransactionHistoryItem> result;
 
     Database database;
-    if (!open_database(path_, database, error) ||
-        !ensure_schema(database.handle, error)) {
+    if (!std::filesystem::exists(path_)) {
+        return result;
+    }
+    if (!open_database_readonly(
+            path_,
+            database,
+            error)) {
         return result;
     }
 
