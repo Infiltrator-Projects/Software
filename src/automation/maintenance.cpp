@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "core/update_policy.hpp"
+#include "core/transaction_history.hpp"
 #include "engine/engine_service_core.hpp"
 
 #include <glib.h>
@@ -215,6 +216,57 @@ bool proposed_kernel_removal_is_safe(
     return true;
 }
 
+void record_maintenance_history(
+    const TransactionPlan &plan,
+    const bool success,
+    const std::string_view message)
+{
+    if (plan.items.empty()) {
+        return;
+    }
+    const std::string path =
+        system_transaction_history_path();
+    TransactionHistoryStore store(path);
+    std::string history_error;
+    if (!store.append(
+            plan,
+            success,
+            message,
+            history_error)) {
+        g_warning(
+            "Unable to record automatic-maintenance history: %s",
+            history_error.c_str());
+        return;
+    }
+    if (chmod(path.c_str(), 0644) != 0) {
+        g_warning(
+            "Automatic-maintenance history was written but could not be made "
+            "readable by the Software history view.");
+    }
+}
+
+TransactionPlan maintenance_history_plan(
+    const std::vector<SimulatedRemoval> &removals)
+{
+    TransactionPlan plan;
+    for (const SimulatedRemoval &removal :
+         removals) {
+        TransactionItem item;
+        item.package_id =
+            removal.identity;
+        item.action =
+            TransactionAction::remove;
+        item.from_version =
+            removal.version;
+        item.source =
+            "APT autoremove";
+        item.requested = true;
+        plan.items.emplace_back(
+            std::move(item));
+    }
+    return plan;
+}
+
 } // namespace
 
 int main()
@@ -341,6 +393,10 @@ int main()
             removal.version);
     }
 
+    const TransactionPlan history_plan =
+        maintenance_history_plan(
+            removals);
+
     /*
      * Do not execute a second unconstrained autoremove. The privileged helper
      * refreshes metadata, re-simulates this exact version-pinned purge plan and
@@ -349,11 +405,21 @@ int main()
     if (!run_command(
             std::move(command),
             error)) {
+        record_maintenance_history(
+            history_plan,
+            false,
+            "Automatic maintenance failed: " +
+                error);
         g_printerr(
             "Automatic maintenance failed: %s\n",
             error.c_str());
         return 1;
     }
+
+    record_maintenance_history(
+        history_plan,
+        true,
+        "Automatic maintenance removed obsolete packages after native kernel-safety verification.");
 
     g_message(
         "Automatic maintenance completed after native kernel-safety verification.");
