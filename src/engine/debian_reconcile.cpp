@@ -109,6 +109,17 @@ std::string build_fingerprint(
         checksum_field(checksum, source.suite);
         for (const std::string &component : source.components) checksum_field(checksum, component);
         for (const std::string &keyring : source.keyrings) checksum_field(checksum, keyring);
+        for (const std::string &inline_key : source.inline_keys) checksum_field(checksum, inline_key);
+        for (const std::string &fingerprint : source.allowed_fingerprints) checksum_field(checksum, fingerprint);
+        for (const std::string &item : source.architectures) checksum_field(checksum, item);
+        for (const std::string &item : source.architecture_additions) checksum_field(checksum, item);
+        for (const std::string &item : source.architecture_removals) checksum_field(checksum, item);
+        checksum_field(checksum, source.verify_signatures ? "verify" : "trusted");
+        checksum_field(checksum, source.check_valid_until ? "valid-until" : "no-valid-until");
+        checksum_field(checksum, source.check_date ? "check-date" : "no-check-date");
+        checksum_field(checksum, std::to_string(source.valid_until_min_seconds));
+        checksum_field(checksum, std::to_string(source.valid_until_max_seconds));
+        checksum_field(checksum, std::to_string(source.date_max_future_seconds));
     }
     for (const DebianPackageVersion &package : available) {
         checksum_field(checksum, package.package);
