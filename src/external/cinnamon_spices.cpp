@@ -1973,6 +1973,12 @@ bool install_extracted(
                         published,
                         error)) {
                     rollback_published_paths(published, error);
+                    std::string journal_error;
+                    if (!clear_spice_journal(journal, journal_error) &&
+                        !journal_error.empty()) {
+                        if (!error.empty()) error += " ";
+                        error += journal_error;
+                    }
                     fs::remove_all(stage_root, ec);
                     remove_staged_translations(translations);
                     return false;
