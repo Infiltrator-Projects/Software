@@ -61,11 +61,26 @@ bool architecture_enabled(
     const DebianRepositorySource &source,
     const std::string_view architecture)
 {
-    if (source.architectures.empty()) return true;
-    return std::find(
-               source.architectures.begin(),
-               source.architectures.end(),
-               architecture) != source.architectures.end();
+    bool enabled =
+        source.architectures.empty() ||
+        std::find(
+            source.architectures.begin(),
+            source.architectures.end(),
+            architecture) != source.architectures.end();
+
+    if (std::find(
+            source.architecture_additions.begin(),
+            source.architecture_additions.end(),
+            architecture) != source.architecture_additions.end()) {
+        enabled = true;
+    }
+    if (std::find(
+            source.architecture_removals.begin(),
+            source.architecture_removals.end(),
+            architecture) != source.architecture_removals.end()) {
+        enabled = false;
+    }
+    return enabled;
 }
 
 void checksum_field(GChecksum *checksum, const std::string_view value)
