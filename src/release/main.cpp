@@ -1170,6 +1170,10 @@ int apply_inhibited_command(int argc,char **argv)
     }
     ReleaseInfo release;
     std::string error;
+    if (!recover_pending_release(error)) {
+        std::cerr << error << "\n";
+        return 1;
+    }
     if (!load_release_info(release,error)) { std::cerr<<error<<"\n"; return 1; }
 
     TransactionPlan plan;
@@ -1193,6 +1197,39 @@ int apply_inhibited_command(int argc,char **argv)
         return 1;
     }
 
+    if (!write_release_journal(
+            make_release_journal(
+                release,
+                publication,
+                "packages-applying"),
+            error)) {
+        const std::string journal_error = error;
+        std::string rollback_error;
+        if (rollback_target_sources(
+                publication,
+                rollback_error,
+                true)) {
+            std::string cleanup_error;
+            (void)cleanup_release_artifacts(
+                publication,
+                cleanup_error);
+            std::cerr
+                << "Release upgrade stopped before package mutation because "
+                   "its recovery journal could not be advanced: "
+                << journal_error
+                << "\nPrevious repository configuration was restored.\n";
+        } else {
+            std::cerr
+                << "Release upgrade recovery journal failed before package "
+                   "mutation: "
+                << journal_error
+                << "\nRepository rollback also failed: "
+                << rollback_error
+                << "\n";
+        }
+        return 1;
+    }
+
     std::vector<std::string> command={
         "/usr/libexec/infiltrator-software-update-helper",
         "apply-plan"};
@@ -1209,13 +1246,40 @@ int apply_inhibited_command(int argc,char **argv)
                 << "\nRelease upgrade also failed to restore the previous "
                    "repository configuration: "
                 << rollback_error
-                << "\n";
+                << "\nRecovery journal and backups were preserved.\n";
         } else {
+            ReleaseJournal rolled_back =
+                make_release_journal(
+                    release,
+                    publication,
+                    "rolled-back");
+            std::string state_error;
+            if (write_release_journal(
+                    rolled_back,
+                    state_error)) {
+                std::string cleanup_error;
+                (void)cleanup_release_artifacts(
+                    publication,
+                    cleanup_error);
+            }
             std::cerr
                 << transaction_error
                 << "\nPrevious repository configuration was restored.\n";
         }
         return 1;
+    }
+
+    if (!write_release_journal(
+            make_release_journal(
+                release,
+                publication,
+                "packages-applied"),
+            error)) {
+        std::cerr
+            << "Release packages were applied, but durable recovery state "
+               "could not be advanced: "
+            << error << "\n";
+        return 3;
     }
 
     std::vector<std::string> finalization_errors;
@@ -1256,6 +1320,29 @@ int apply_inhibited_command(int argc,char **argv)
         }
         return 3;
     }
+
+    if (!write_release_journal(
+            make_release_journal(
+                release,
+                publication,
+                "complete"),
+            error)) {
+        std::cerr
+            << "Release upgrade completed, but recovery state could not be "
+               "marked complete: "
+            << error << "\n";
+        return 3;
+    }
+    if (!cleanup_release_artifacts(
+            publication,
+            error)) {
+        std::cerr
+            << "Release upgrade completed, but stale recovery artifacts "
+               "could not be removed: "
+            << error << "\n";
+        return 3;
+    }
+
     std::cout<<"Release upgrade complete: "<<release.target_name<<" ("<<release.target_codename<<").\n";
     return 0;
 }
@@ -1299,9 +1386,19 @@ int apply_command(int argc, char **argv)
 int main(int argc,char **argv)
 {
     if (argc==2 && std::string_view(argv[1])=="plan") return plan_command();
+    if (argc==2 && std::string_view(argv[1])=="recover") {
+        std::string error;
+        if (!recover_pending_release(error)) {
+            std::cerr << error << "\n";
+            return 1;
+        }
+        return 0;
+    }
     if (argc>=3 && std::string_view(argv[1])=="apply") return apply_command(argc,argv);
     if (argc>=3 && std::string_view(argv[1])=="apply-inhibited")
         return apply_inhibited_command(argc,argv);
-    std::cerr<<"Usage: infiltrator-software-release-upgrade plan | apply SPEC...\n";
+    std::cerr
+        << "Usage: infiltrator-software-release-upgrade "
+           "plan | recover | apply SPEC...\n";
     return 64;
 }
