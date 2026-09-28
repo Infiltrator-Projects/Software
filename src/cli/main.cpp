@@ -264,6 +264,8 @@ int main(int argc,char **argv)
 
     TransactionRequest request;
     request.action=TransactionAction::upgrade;
+    request.install_recommends =
+        options.install_recommends_requested;
     for (const PackageRecord &p:chosen) request.package_ids.push_back(p.package_name.empty()?p.id:p.package_name);
     const auto plan=engine.plan(request,error);
     if (!plan.has_value()) { std::cerr<<error<<"\n"; return 1; }
@@ -274,11 +276,6 @@ int main(int argc,char **argv)
         std::cout<<transaction_action_name(item.action)<<"\t"<<item.package_id<<"\t"
                  <<item.from_version<<" -> "<<item.to_version<<"\n";
 
-    if (options.install_recommends_requested) {
-        std::cout
-            << "Note: Software does not permit implicit Recommends to broaden a reviewed transaction. "
-            << "Recommended packages must be explicitly selected so they appear in the plan.\n";
-    }
     if (options.dry_run) return 0;
 
     if (!options.assume_yes) {

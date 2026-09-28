@@ -28,7 +28,7 @@ constexpr const char *kObjectPath =
     "/net/ssmith/infiltrator/software/Engine";
 constexpr const char *kInterfaceName =
     "net.ssmith.infiltrator.software.Engine";
-constexpr guint kApiVersion = 4U;
+constexpr guint kApiVersion = 5U;
 constexpr std::size_t kMaximumPlanPackages = 4096U;
 
 constexpr const char *kIntrospectionXml = R"XML(
@@ -50,12 +50,14 @@ constexpr const char *kIntrospectionXml = R"XML(
     <method name="PlanTransaction">
       <arg name="action" type="s" direction="in"/>
       <arg name="package_ids" type="as" direction="in"/>
+      <arg name="install_recommends" type="b" direction="in"/>
       <arg name="plan" type="a{sv}" direction="out"/>
     </method>
     <method name="PlanMixedTransaction">
       <arg name="action" type="s" direction="in"/>
       <arg name="package_ids" type="as" direction="in"/>
       <arg name="remove_package_ids" type="as" direction="in"/>
+      <arg name="install_recommends" type="b" direction="in"/>
       <arg name="plan" type="a{sv}" direction="out"/>
     </method>
     <method name="ReloadState">
@@ -782,22 +784,27 @@ void handle_method_call(
         const gchar *action_text = nullptr;
         GVariant *package_ids_variant = nullptr;
         GVariant *remove_ids_variant = nullptr;
+        gboolean install_recommends = FALSE;
         if (mixed) {
             g_variant_get(
                 parameters,
-                "(&s@as@as)",
+                "(&s@as@asb)",
                 &action_text,
                 &package_ids_variant,
-                &remove_ids_variant);
+                &remove_ids_variant,
+                &install_recommends);
         } else {
             g_variant_get(
                 parameters,
-                "(&s@as)",
+                "(&s@asb)",
                 &action_text,
-                &package_ids_variant);
+                &package_ids_variant,
+                &install_recommends);
         }
 
         TransactionRequest request;
+        request.install_recommends =
+            install_recommends != FALSE;
         if (!parse_action(
                 action_text == nullptr
                     ? std::string_view{}
@@ -868,19 +875,6 @@ void handle_method_call(
         if (!package_ids_valid ||
             !remove_ids_valid) {
             return;
-        }
-
-        infiltrator::software::SoftwarePreferences preferences;
-        std::string preferences_error;
-        if (infiltrator::software::load_software_preferences(
-                preferences,
-                preferences_error)) {
-            request.install_recommends =
-                preferences.install_recommends;
-        } else if (!preferences_error.empty()) {
-            g_warning(
-                "Unable to load transaction preferences: %s",
-                preferences_error.c_str());
         }
 
         std::string error;

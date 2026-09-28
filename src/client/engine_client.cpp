@@ -25,7 +25,7 @@ constexpr const char *kInterfaceName =
 constexpr int kInventoryCallTimeoutMs = 750;
 constexpr int kControlCallTimeoutMs = 5000;
 constexpr int kRefreshCallTimeoutMs = 125000;
-constexpr guint32 kRequiredApiVersion = 4U;
+constexpr guint32 kRequiredApiVersion = 5U;
 constexpr const char *kRequiredEngineVersion =
     INFILTRATOR_SOFTWARE_VERSION;
 constexpr guint kEngineRestartAttempts = 200U;
@@ -784,14 +784,16 @@ std::optional<TransactionPlan> EngineClient::plan(
                 : "PlanTransaction",
             mixed
                 ? g_variant_new(
-                      "(s^as^as)",
+                      "(s^as^asb)",
                       action.c_str(),
                       ids.data(),
-                      removals.data())
+                      removals.data(),
+                      request.install_recommends)
                 : g_variant_new(
-                      "(s^as)",
+                      "(s^asb)",
                       action.c_str(),
-                      ids.data()),
+                      ids.data(),
+                      request.install_recommends),
             G_VARIANT_TYPE("(a{sv})"),
             kControlCallTimeoutMs,
             error);

@@ -18,12 +18,14 @@
     <method name="PlanTransaction">
       <arg name="action" type="s" direction="in"/>
       <arg name="package_ids" type="as" direction="in"/>
+      <arg name="install_recommends" type="b" direction="in"/>
       <arg name="plan" type="a{sv}" direction="out"/>
     </method>
     <method name="PlanMixedTransaction">
       <arg name="action" type="s" direction="in"/>
       <arg name="package_ids" type="as" direction="in"/>
       <arg name="remove_package_ids" type="as" direction="in"/>
+      <arg name="install_recommends" type="b" direction="in"/>
       <arg name="plan" type="a{sv}" direction="out"/>
     </method>
     <method name="ReloadState">
