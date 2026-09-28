@@ -33,7 +33,7 @@ private:
     [[nodiscard]] bool system_prefers_dark() const;
     void apply();
     void load_preferences();
-    void save_preferences() const;
+    [[nodiscard]] bool save_preferences() const;
     void set_mode(InfiltratrThemeMode mode, bool persist);
     [[nodiscard]] std::string preferences_path() const;
 
