@@ -478,15 +478,20 @@ bool flatpak_installation_absent(
 bool valid_flatpak_component(
     const std::string_view value)
 {
-    return !value.empty() &&
-           std::all_of(
-               value.begin(),
-               value.end(),
-               [](const unsigned char ch) {
-                   return std::isalnum(ch) != 0 ||
-                          ch == '.' || ch == '-' ||
-                          ch == '_';
-               });
+    if (value.empty() ||
+        std::isalnum(
+            static_cast<unsigned char>(
+                value.front())) == 0) {
+        return false;
+    }
+    return std::all_of(
+        value.begin(),
+        value.end(),
+        [](const unsigned char ch) {
+            return std::isalnum(ch) != 0 ||
+                   ch == '.' || ch == '-' ||
+                   ch == '_';
+        });
 }
 
 bool install_matching_theme(
