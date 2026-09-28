@@ -116,6 +116,45 @@ Pin-Priority: 1000
         "packages.mozilla.org");
     assert(policy.evaluate(firefox).priority == 1000);
 
+    const std::string compatibility_preferences =
+        "Package: src:shared-source\r\n"
+        "Pin: origin \"packages.example.invalid\"\r\n"
+        "Pin-Priority: 725\r\n"
+        "\r\n"
+        "Package: second-package\r\n"
+        "Pin: version 9.*\r\n"
+        "Pin-Priority: 810\r\n";
+
+    const DebianAptPreferences compatibility =
+        DebianAptPreferences::parse(
+            compatibility_preferences,
+            "compat.pref",
+            error);
+    assert(error.empty());
+
+    DebianPackageVersion source_binary = package(
+        "binary-from-source",
+        "1.0",
+        "Example",
+        "stable",
+        "stable",
+        "main",
+        "packages.example.invalid");
+    source_binary.source_package = "shared-source";
+    assert(compatibility.evaluate(source_binary).has_value());
+    assert(compatibility.evaluate(source_binary)->priority == 725);
+
+    DebianPackageVersion second = package(
+        "second-package",
+        "9.4",
+        "Example",
+        "stable",
+        "stable",
+        "main",
+        "elsewhere.invalid");
+    assert(compatibility.evaluate(second).has_value());
+    assert(compatibility.evaluate(second)->priority == 810);
+
     const auto backports = package(
         "backported",
         "1.0",
