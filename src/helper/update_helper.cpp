@@ -1,7 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "apt_plan_guard.hpp"
+#include "core/exact_transaction_spec.hpp"
+
+#include <glib.h>
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <cerrno>
 #include <cstdio>
@@ -777,6 +781,134 @@ int run_apt_capture(
     return WEXITSTATUS(status);
 }
 
+bool sha256_file(
+    const std::filesystem::path &path,
+    std::string &digest)
+{
+    digest.clear();
+    std::ifstream input(path, std::ios::binary);
+    if (!input) return false;
+
+    GChecksum *checksum =
+        g_checksum_new(G_CHECKSUM_SHA256);
+    if (checksum == nullptr) return false;
+
+    std::array<char, 64U * 1024U> buffer{};
+    while (input) {
+        input.read(
+            buffer.data(),
+            static_cast<std::streamsize>(buffer.size()));
+        const std::streamsize count = input.gcount();
+        if (count > 0) {
+            g_checksum_update(
+                checksum,
+                reinterpret_cast<const guchar *>(buffer.data()),
+                static_cast<gsize>(count));
+        }
+    }
+    if (input.bad()) {
+        g_checksum_free(checksum);
+        return false;
+    }
+
+    const gchar *text = g_checksum_get_string(checksum);
+    if (text != nullptr) digest = text;
+    g_checksum_free(checksum);
+    return digest.size() == 64U;
+}
+
+bool verify_downloaded_artifacts(
+    const std::filesystem::path &archive_directory,
+    const std::vector<infiltrator::software::ExactTransactionSpec> &expected,
+    std::string &error)
+{
+    error.clear();
+    std::vector<bool> matched(expected.size(), false);
+    std::size_t deb_count = 0U;
+    std::error_code ec;
+
+    for (const auto &entry :
+         std::filesystem::directory_iterator(archive_directory, ec)) {
+        if (ec) break;
+        if (!entry.is_regular_file(ec) || ec) {
+            ec.clear();
+            continue;
+        }
+        if (entry.path().extension() != ".deb") continue;
+        ++deb_count;
+
+        std::string digest;
+        if (!sha256_file(entry.path(), digest)) {
+            error =
+                "Unable to hash downloaded package artifact " +
+                entry.path().filename().string() + ".";
+            return false;
+        }
+
+        bool found = false;
+        for (std::size_t index = 0U; index < expected.size(); ++index) {
+            if (!matched[index] &&
+                g_ascii_strcasecmp(
+                    digest.c_str(),
+                    expected[index].sha256.c_str()) == 0) {
+                matched[index] = true;
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            error =
+                "APT downloaded a package artifact that was not part of the "
+                "reviewed SHA-256 set: " +
+                entry.path().filename().string() + ".";
+            return false;
+        }
+    }
+
+    if (ec) {
+        error =
+            "Unable to inspect downloaded package artifacts: " +
+            ec.message();
+        return false;
+    }
+    if (deb_count != expected.size() ||
+        std::find(matched.begin(), matched.end(), false) != matched.end()) {
+        error =
+            "The downloaded package artifact set does not exactly match the "
+            "reviewed transaction.";
+        return false;
+    }
+    return true;
+}
+
+bool make_transaction_archive_directory(
+    std::filesystem::path &directory,
+    std::string &error)
+{
+    error.clear();
+    std::string pattern =
+        "/var/cache/apt/archives/infiltrator-software-XXXXXX";
+    std::vector<char> writable(pattern.begin(), pattern.end());
+    writable.push_back('\0');
+    char *created = mkdtemp(writable.data());
+    if (created == nullptr) {
+        error =
+            "Unable to create isolated package archive directory: " +
+            std::string(std::strerror(errno));
+        return false;
+    }
+    directory = created;
+    std::error_code ec;
+    std::filesystem::create_directories(directory / "partial", ec);
+    if (ec) {
+        std::filesystem::remove_all(directory, ec);
+        error =
+            "Unable to prepare isolated package archive directory.";
+        return false;
+    }
+    return true;
+}
+
 int execute_dpkg_configure()
 {
     const char *path =
@@ -934,16 +1066,64 @@ int main(int argc, char **argv)
 
         bool has_removal = false;
         std::vector<std::string> approved_specs;
+        std::vector<infiltrator::software::ExactTransactionSpec>
+            reviewed_specs;
         approved_specs.reserve(
             static_cast<std::size_t>(
                 argc - specification_start));
+        reviewed_specs.reserve(approved_specs.capacity());
 
         for (int index = specification_start; index < argc; ++index) {
-            std::string approved(argv[index]);
-            const bool removal =
-                approved.rfind("remove:", 0U) == 0U;
-            const std::string spec =
-                removal ? approved.substr(7U) : approved;
+            const std::string approved(argv[index]);
+            infiltrator::software::ExactTransactionSpec reviewed;
+            std::string spec;
+            bool removal = false;
+
+            if (resolved_plan &&
+                approved.rfind("x2|", 0U) == 0U) {
+                std::string decode_error;
+                if (!infiltrator::software::decode_exact_transaction_spec(
+                        approved, reviewed, decode_error)) {
+                    std::fprintf(
+                        stderr,
+                        "Invalid exact transaction specification: %s\n",
+                        decode_error.c_str());
+                    return 64;
+                }
+                removal =
+                    reviewed.action ==
+                    infiltrator::software::TransactionAction::remove;
+                spec =
+                    reviewed.package_id + "=" +
+                    reviewed.version;
+            } else {
+                removal =
+                    approved.rfind("remove:", 0U) == 0U;
+                spec =
+                    removal ? approved.substr(7U) : approved;
+
+                /*
+                 * Old apply-plan removal specs are retained for the automatic
+                 * maintenance path because removals have no repository payload
+                 * to bind. Install/upgrade plans must use x2 artifact specs.
+                 */
+                if (resolved_plan && !removal) {
+                    std::fprintf(
+                        stderr,
+                        "Install/upgrade apply-plan specifications must include "
+                        "the reviewed repository artifact identity.\n");
+                    return 64;
+                }
+                reviewed.action =
+                    removal
+                        ? infiltrator::software::TransactionAction::remove
+                        : infiltrator::software::TransactionAction::install;
+                const std::size_t equals = spec.find('=');
+                if (equals != std::string::npos) {
+                    reviewed.package_id = spec.substr(0U, equals);
+                    reviewed.version = spec.substr(equals + 1U);
+                }
+            }
 
             if (!safe_package_spec(spec) ||
                 spec.find('=') == std::string::npos) {
@@ -960,12 +1140,6 @@ int main(int argc, char **argv)
                 return 64;
             }
 
-            /*
-             * The legacy entry point remains upgrade-only for compatibility
-             * with older Software clients. apply-plan accepts the exact
-             * install/upgrade/removal set already resolved by the native
-             * planner.
-             */
             if (legacy_upgrade && !installed_package(spec)) {
                 std::fprintf(
                     stderr,
@@ -975,7 +1149,9 @@ int main(int argc, char **argv)
                 return 65;
             }
 
-            approved_specs.push_back(approved);
+            approved_specs.push_back(
+                removal ? "remove:" + spec : spec);
+            reviewed_specs.push_back(std::move(reviewed));
             if (removal) {
                 has_removal = true;
                 const std::size_t equals = spec.find('=');
@@ -1004,8 +1180,14 @@ int main(int argc, char **argv)
          * state is already true, the transaction is a successful no-op.
          */
         std::vector<std::string> pending_specs;
+        std::vector<infiltrator::software::ExactTransactionSpec>
+            pending_artifacts;
         pending_specs.reserve(approved_specs.size());
-        for (const std::string &approved : approved_specs) {
+        pending_artifacts.reserve(approved_specs.size());
+        for (std::size_t index = 0U;
+             index < approved_specs.size();
+             ++index) {
+            const std::string &approved = approved_specs[index];
             bool satisfied = false;
             std::string state_error;
             if (!approved_spec_already_satisfied(
@@ -1015,6 +1197,11 @@ int main(int argc, char **argv)
             }
             if (!satisfied) {
                 pending_specs.push_back(approved);
+                if (resolved_plan &&
+                    reviewed_specs[index].action !=
+                        infiltrator::software::TransactionAction::remove) {
+                    pending_artifacts.push_back(reviewed_specs[index]);
+                }
             }
         }
 
@@ -1090,20 +1277,90 @@ int main(int argc, char **argv)
             return 66;
         }
 
-        if (progress_token.empty()) {
-            return execute_apt(std::move(arguments));
+        std::filesystem::path archive_directory;
+        if (!pending_artifacts.empty()) {
+            std::string archive_error;
+            if (!make_transaction_archive_directory(
+                    archive_directory, archive_error)) {
+                std::fprintf(stderr, "%s\n", archive_error.c_str());
+                return 69;
+            }
+
+            std::vector<std::string> download_arguments = arguments;
+            download_arguments.insert(
+                download_arguments.begin(),
+                "-o");
+            download_arguments.insert(
+                download_arguments.begin() + 1,
+                "Dir::Cache::archives=" +
+                    archive_directory.string());
+            download_arguments.insert(
+                download_arguments.begin() + 2,
+                "--download-only");
+
+            write_progress(
+                progress_path,
+                progress_token,
+                "download",
+                "Downloading the exact reviewed package artifacts.");
+            const int download_status =
+                run_apt(std::move(download_arguments));
+            if (download_status != 0) {
+                std::error_code cleanup_error;
+                std::filesystem::remove_all(
+                    archive_directory, cleanup_error);
+                return download_status;
+            }
+
+            if (!verify_downloaded_artifacts(
+                    archive_directory,
+                    pending_artifacts,
+                    archive_error)) {
+                std::fprintf(stderr, "%s\n", archive_error.c_str());
+                std::error_code cleanup_error;
+                std::filesystem::remove_all(
+                    archive_directory, cleanup_error);
+                return 70;
+            }
+
+            /*
+             * The final APT invocation is not allowed to fetch replacement
+             * bytes after verification. It must consume only the isolated
+             * archive set whose SHA-256 values matched the reviewed plan.
+             */
+            arguments.insert(arguments.begin(), "-o");
+            arguments.insert(
+                arguments.begin() + 1,
+                "Dir::Cache::archives=" +
+                    archive_directory.string());
+            arguments.insert(
+                arguments.begin() + 2,
+                "--no-download");
         }
 
-        write_progress(
-            progress_path,
-            progress_token,
-            "download",
-            "Downloading approved package payloads.");
-        const int install_status =
-            run_apt_with_progress(
-                std::move(arguments),
+        int install_status = 0;
+        if (progress_token.empty()) {
+            install_status = run_apt(std::move(arguments));
+        } else {
+            write_progress(
                 progress_path,
-                progress_token);
+                progress_token,
+                pending_artifacts.empty() ? "install" : "verify",
+                pending_artifacts.empty()
+                    ? "Applying the approved package transaction."
+                    : "Installing the SHA-256 verified reviewed artifacts.");
+            install_status =
+                run_apt_with_progress(
+                    std::move(arguments),
+                    progress_path,
+                    progress_token);
+        }
+
+        if (!archive_directory.empty()) {
+            std::error_code cleanup_error;
+            std::filesystem::remove_all(
+                archive_directory, cleanup_error);
+        }
         if (install_status == 0) {
             write_progress(
                 progress_path,
