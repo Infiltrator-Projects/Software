@@ -10,6 +10,7 @@
 #include <array>
 #include <chrono>
 #include <cstdint>
+#include <cerrno>
 #include <cstring>
 #include <cstdio>
 #include <cstdlib>
@@ -24,6 +25,7 @@
 #include <string_view>
 #include <system_error>
 #include <fcntl.h>
+#include <sys/stat.h>
 #include <sys/syscall.h>
 #include <unistd.h>
 #include <utility>
