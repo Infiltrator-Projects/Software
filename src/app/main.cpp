@@ -5,6 +5,7 @@
 #include "app/history_view.hpp"
 #include "app/installed_controller.hpp"
 #include "app/installed_inventory.hpp"
+#include "app/repository_controller.hpp"
 #include "app/ui_components.hpp"
 #include "backends/apt/apt_backend.hpp"
 #include "catalogue/repository_catalogue.hpp"
@@ -89,6 +90,9 @@ using infiltrator::software::read_installed_packages;
 using infiltrator::software::InstalledController;
 using infiltrator::software::create_installed_page;
 using infiltrator::software::refresh_installed_controller;
+using infiltrator::software::RepositoryController;
+using infiltrator::software::configure_repository_controller;
+using infiltrator::software::refresh_repository_controller;
 using infiltrator::software::make_icon;
 using infiltrator::software::make_label;
 using infiltrator::software::make_page_intro;
@@ -127,12 +131,7 @@ struct WindowState {
     std::vector<std::string> discover_search_texts;
     unsigned int discover_generation{0U};
 
-    GtkWidget *repository_flow{};
-    GtkWidget *repository_count{};
-    GtkWidget *repository_status{};
-    std::vector<SourceRecord> repository_records;
-    unsigned int repositories_generation{0U};
-    bool repositories_busy{false};
+    RepositoryController repositories;
 
     GtkListBox *updates_list{};
     GtkWidget *updates_status{};
@@ -213,7 +212,6 @@ struct WindowState {
     bool discover_loaded{false};
     bool updates_loaded{false};
     bool system_loaded{false};
-    bool repositories_loaded{false};
     bool repair_loaded{false};
 };
 
@@ -1202,7 +1200,7 @@ void rebuild_discover_repository_preview(
     clear_box_children(
         state->discover_repository_preview);
 
-    if (state->repository_records.empty()) {
+    if (state->repositories.records.empty()) {
         gtk_box_append(
             GTK_BOX(
                 state->discover_repository_preview),
@@ -1216,13 +1214,13 @@ void rebuild_discover_repository_preview(
 
     const std::size_t limit =
         std::min<std::size_t>(
-            state->repository_records.size(),
+            state->repositories.records.size(),
             3U);
     for (std::size_t index = 0U;
          index < limit;
          ++index) {
         const SourceRecord &source =
-            state->repository_records[index];
+            state->repositories.records[index];
         gtk_box_append(
             GTK_BOX(
                 state->discover_repository_preview),
@@ -9564,21 +9562,21 @@ void source_toggle_process_complete(
                       "infiltrator-window-state"));
 
     if (state != nullptr) {
-        state->repositories_busy = false;
-        if (state->repository_flow != nullptr) {
+        state->repositories.busy = false;
+        if (state->repositories.flow != nullptr) {
             gtk_widget_set_sensitive(
-                state->repository_flow, true);
+                state->repositories.flow, true);
         }
 
         if (success) {
-            if (state->repository_status != nullptr) {
+            if (state->repositories.status != nullptr) {
                 const std::string message =
                     run->source_name +
                     (run->enabled
                          ? " enabled. Refreshing software state…"
                          : " disabled. Refreshing software state…");
                 gtk_label_set_text(
-                    GTK_LABEL(state->repository_status),
+                    GTK_LABEL(state->repositories.status),
                     message.c_str());
             }
 
@@ -9589,7 +9587,7 @@ void source_toggle_process_complete(
             if (state->updates_loaded) {
                 refresh_updates(state, true);
             }
-        } else if (state->repository_status != nullptr) {
+        } else if (state->repositories.status != nullptr) {
             std::string message =
                 run != nullptr && run->enabled
                     ? "Unable to enable source."
@@ -9604,7 +9602,7 @@ void source_toggle_process_complete(
                 message += one_line(error->message);
             }
             gtk_label_set_text(
-                GTK_LABEL(state->repository_status),
+                GTK_LABEL(state->repositories.status),
                 message.c_str());
         }
     }
@@ -9630,7 +9628,7 @@ void source_toggle_clicked(
         g_object_get_data(
             G_OBJECT(context->window),
             "infiltrator-window-state"));
-    if (state == nullptr || state->repositories_busy) {
+    if (state == nullptr || state->repositories.busy) {
         return;
     }
 
@@ -9641,9 +9639,9 @@ void source_toggle_clicked(
         infiltrator::software::SourceKind::apt) {
         if (context->source.backing_file.empty() ||
             context->source.entry_index == 0U) {
-            if (state->repository_status != nullptr) {
+            if (state->repositories.status != nullptr) {
                 gtk_label_set_text(
-                    GTK_LABEL(state->repository_status),
+                    GTK_LABEL(state->repositories.status),
                     "This APT source has no mutable source-file identity.");
             }
             return;
@@ -9700,7 +9698,7 @@ void source_toggle_clicked(
                 G_SUBPROCESS_FLAGS_STDERR_PIPE),
             &error);
     if (process == nullptr) {
-        if (state->repository_status != nullptr) {
+        if (state->repositories.status != nullptr) {
             std::string message =
                 enable
                     ? "Unable to enable source."
@@ -9711,24 +9709,24 @@ void source_toggle_clicked(
                 message += one_line(error->message);
             }
             gtk_label_set_text(
-                GTK_LABEL(state->repository_status),
+                GTK_LABEL(state->repositories.status),
                 message.c_str());
         }
         g_clear_error(&error);
         return;
     }
 
-    state->repositories_busy = true;
-    if (state->repository_flow != nullptr) {
+    state->repositories.busy = true;
+    if (state->repositories.flow != nullptr) {
         gtk_widget_set_sensitive(
-            state->repository_flow, false);
+            state->repositories.flow, false);
     }
-    if (state->repository_status != nullptr) {
+    if (state->repositories.status != nullptr) {
         const std::string message =
             std::string(enable ? "Enabling " : "Disabling ") +
             context->source.name + "…";
         gtk_label_set_text(
-            GTK_LABEL(state->repository_status),
+            GTK_LABEL(state->repositories.status),
             message.c_str());
     }
 
@@ -9852,274 +9850,34 @@ GtkWidget *make_source_card(
     return card;
 }
 
-struct RepositoryResult {
-    unsigned int generation{0U};
-    std::vector<SourceRecord> sources;
-    std::string mirror_status;
-    std::string error;
-};
-
-struct RepositoryTaskData {
-    unsigned int generation{0U};
-};
-
-std::optional<curl_off_t> url_file_time(
-    const std::string &url)
+void repository_controller_changed(gpointer user_data)
 {
-    CURL *curl = curl_easy_init();
-    if (curl == nullptr) {
-        return std::nullopt;
-    }
-    curl_easy_setopt(
-        curl, CURLOPT_URL, url.c_str());
-    curl_easy_setopt(
-        curl, CURLOPT_NOBODY, 1L);
-    curl_easy_setopt(
-        curl, CURLOPT_FILETIME, 1L);
-    curl_easy_setopt(
-        curl, CURLOPT_FOLLOWLOCATION, 1L);
-    curl_easy_setopt(
-        curl, CURLOPT_CONNECTTIMEOUT, 6L);
-    curl_easy_setopt(
-        curl, CURLOPT_TIMEOUT, 12L);
-    curl_easy_setopt(
-        curl, CURLOPT_USERAGENT,
-        "Infiltrator-Software/" INFILTRATOR_SOFTWARE_VERSION);
-    const CURLcode code =
-        curl_easy_perform(curl);
-    long response = 0;
-    curl_off_t file_time = -1;
-    (void)curl_easy_getinfo(
-        curl,
-        CURLINFO_RESPONSE_CODE,
-        &response);
-    (void)curl_easy_getinfo(
-        curl,
-        CURLINFO_FILETIME_T,
-        &file_time);
-    curl_easy_cleanup(curl);
-    if (code != CURLE_OK ||
-        response < 200L ||
-        response >= 400L ||
-        file_time < 0) {
-        return std::nullopt;
-    }
-    return file_time;
-}
+    auto *state = static_cast<WindowState *>(user_data);
+    if (state == nullptr) return;
 
-std::string mint_mirror_status()
-{
-    const std::filesystem::path sources{
-        "/etc/apt/sources.list.d/official-package-repositories.list"};
-    std::ifstream input(sources);
-    if (!input) {
-        return {};
-    }
-
-    std::string mirror;
-    std::string line;
-    while (std::getline(input, line)) {
-        const std::string clean =
-            one_line(line);
-        if (clean.rfind("deb ", 0U) != 0U ||
-            clean.find(
-                "main upstream import") ==
-                std::string::npos) {
-            continue;
-        }
-        std::istringstream words(clean);
-        std::string deb;
-        words >> deb >> mirror;
-        break;
-    }
-    while (!mirror.empty() &&
-           mirror.back() == '/') {
-        mirror.pop_back();
-    }
-    if (mirror.empty()) {
-        return {};
-    }
-
-    if (mirror ==
-            "http://packages.linuxmint.com" ||
-        mirror ==
-            "https://packages.linuxmint.com") {
-        return "The default Linux Mint repository is in use. A local mirror may be faster; use Mint mirrors… to choose one.";
-    }
-
-    const auto reference =
-        url_file_time(
-            "https://packages.linuxmint.com/db/version");
-    const auto selected =
-        url_file_time(
-            mirror + "/db/version");
-
-    if (reference.has_value() &&
-        !selected.has_value()) {
-        return mirror +
-            " is unreachable. Use Mint mirrors… to choose another mirror.";
-    }
-    if (reference.has_value() &&
-        selected.has_value()) {
-        static constexpr curl_off_t day =
-            24 * 60 * 60;
-        if (*reference - *selected >
-            2 * day) {
-            const curl_off_t days =
-                (*reference - *selected) /
-                day;
-            return mirror +
-                " is about " +
-                std::to_string(
-                    static_cast<long long>(
-                        days)) +
-                " days behind the Linux Mint reference repository. Use Mint mirrors… to switch.";
-        }
-        return "Linux Mint mirror is reachable and current.";
-    }
-    return {};
-}
-
-void repositories_worker(
-    GTask *task,
-    gpointer,
-    gpointer task_data,
-    GCancellable *)
-{
-    auto *data = static_cast<RepositoryTaskData *>(task_data);
-    auto *result = new RepositoryResult{};
-    result->generation = data == nullptr ? 0U : data->generation;
-
-    SourceInventory inventory;
-    result->sources = inventory.list(result->error);
-    if (result->error.empty()) {
-        result->mirror_status =
-            mint_mirror_status();
-    }
-
-    g_task_return_pointer(
-        task,
-        result,
-        [](gpointer pointer) {
-            delete static_cast<RepositoryResult *>(pointer);
-        });
-}
-
-void repositories_complete(
-    GObject *source_object,
-    GAsyncResult *async_result,
-    gpointer)
-{
-    auto *window = GTK_WINDOW(source_object);
-    auto *state = static_cast<WindowState *>(
-        g_object_get_data(
-            G_OBJECT(window), "infiltrator-window-state"));
-    auto *result = static_cast<RepositoryResult *>(
-        g_task_propagate_pointer(
-            G_TASK(async_result), nullptr));
-
-    if (state == nullptr || result == nullptr) {
-        delete result;
-        return;
-    }
-    if (result->generation != state->repositories_generation) {
-        delete result;
-        return;
-    }
-
-    state->repositories_busy = false;
-    state->repository_records =
-        result->sources;
     rebuild_discover_repository_preview(state);
-
-    GtkWidget *child =
-        gtk_widget_get_first_child(state->repository_flow);
-    while (child != nullptr) {
-        GtkWidget *next = gtk_widget_get_next_sibling(child);
-        gtk_flow_box_remove(
-            GTK_FLOW_BOX(state->repository_flow), child);
-        child = next;
-    }
-
-    std::size_t enabled = 0U;
-    for (const SourceRecord &source : result->sources) {
-        gtk_flow_box_append(
-            GTK_FLOW_BOX(state->repository_flow),
-            make_source_card(state, source));
-        if (source.enabled) {
-            ++enabled;
-        }
-    }
-
-    if (state->repository_count != nullptr) {
-        const std::string count =
-            std::to_string(result->sources.size());
-        gtk_label_set_text(
-            GTK_LABEL(state->repository_count), count.c_str());
-    }
-
     if (state->discover_repositories_summary != nullptr) {
         const std::string count =
-            std::to_string(result->sources.size());
+            std::to_string(state->repositories.records.size());
         gtk_label_set_text(
             GTK_LABEL(state->discover_repositories_summary),
             count.c_str());
     }
+}
 
-    if (state->repository_status != nullptr) {
-        if (!result->error.empty()) {
-            gtk_label_set_text(
-                GTK_LABEL(state->repository_status),
-                result->error.c_str());
-        } else {
-            std::ostringstream status;
-            status << enabled << " enabled source"
-                   << (enabled == 1U ? "" : "s")
-                   << " detected. APT sources and Flatpak remotes feed Discover.";
-            if (!result->mirror_status.empty()) {
-                status << "  " << result->mirror_status;
-            }
-            gtk_label_set_text(
-                GTK_LABEL(state->repository_status),
-                status.str().c_str());
-        }
-    }
-
-    delete result;
+GtkWidget *repository_make_card(
+    gpointer user_data,
+    const SourceRecord &source)
+{
+    return make_source_card(
+        static_cast<WindowState *>(user_data),
+        source);
 }
 
 void refresh_repositories(WindowState *state)
 {
-    if (state == nullptr || state->repository_flow == nullptr ||
-        state->window == nullptr || state->repositories_busy) {
-        return;
-    }
-
-    state->repositories_loaded = true;
-    state->repositories_busy = true;
-    ++state->repositories_generation;
-
-    if (state->repository_status != nullptr) {
-        gtk_label_set_text(
-            GTK_LABEL(state->repository_status),
-            "Reading configured software sources…");
-    }
-
-    auto *data = new RepositoryTaskData{
-        state->repositories_generation};
-    GTask *task = g_task_new(
-        G_OBJECT(state->window),
-        nullptr,
-        repositories_complete,
-        nullptr);
-    g_task_set_task_data(
-        task,
-        data,
-        [](gpointer pointer) {
-            delete static_cast<RepositoryTaskData *>(pointer);
-        });
-    g_task_run_in_thread(task, repositories_worker);
-    g_object_unref(task);
+    if (state == nullptr) return;
+    refresh_repository_controller(&state->repositories);
 }
 
 void repository_mirror_settings_clicked(
@@ -10134,10 +9892,10 @@ void repository_mirror_settings_clicked(
             "pkexec mintsources",
             &error)) {
         if (state != nullptr &&
-            state->repository_status != nullptr) {
+            state->repositories.status != nullptr) {
             gtk_label_set_text(
                 GTK_LABEL(
-                    state->repository_status),
+                    state->repositories.status),
                 error != nullptr &&
                 error->message != nullptr
                     ? error->message
@@ -10145,10 +9903,10 @@ void repository_mirror_settings_clicked(
         }
     } else if (
         state != nullptr &&
-        state->repository_status != nullptr) {
+        state->repositories.status != nullptr) {
         gtk_label_set_text(
             GTK_LABEL(
-                state->repository_status),
+                state->repositories.status),
             "Mirror settings opened. Refresh repositories after changing a mirror.");
     }
     g_clear_error(&error);
@@ -10207,7 +9965,7 @@ GtkWidget *make_repositories_page(WindowState *state)
         GTK_GRID(stats),
         make_stat_card(
             "SOURCES", "0", "stat-info",
-            &state->repository_count),
+            &state->repositories.count),
         0, 0, 1, 1);
     gtk_grid_attach(
         GTK_GRID(stats),
@@ -10221,26 +9979,26 @@ GtkWidget *make_repositories_page(WindowState *state)
         2, 0, 1, 1);
     gtk_box_append(GTK_BOX(page), stats);
 
-    state->repository_status = make_label(
+    state->repositories.status = make_label(
         "Reading configured software sources…",
         "discover-status");
     gtk_box_append(
-        GTK_BOX(page), state->repository_status);
+        GTK_BOX(page), state->repositories.status);
 
-    state->repository_flow = gtk_flow_box_new();
+    state->repositories.flow = gtk_flow_box_new();
     gtk_flow_box_set_selection_mode(
-        GTK_FLOW_BOX(state->repository_flow),
+        GTK_FLOW_BOX(state->repositories.flow),
         GTK_SELECTION_NONE);
     gtk_flow_box_set_row_spacing(
-        GTK_FLOW_BOX(state->repository_flow), 10U);
+        GTK_FLOW_BOX(state->repositories.flow), 10U);
     gtk_flow_box_set_column_spacing(
-        GTK_FLOW_BOX(state->repository_flow), 10U);
+        GTK_FLOW_BOX(state->repositories.flow), 10U);
     gtk_flow_box_set_min_children_per_line(
-        GTK_FLOW_BOX(state->repository_flow), 1U);
+        GTK_FLOW_BOX(state->repositories.flow), 1U);
     gtk_flow_box_set_max_children_per_line(
-        GTK_FLOW_BOX(state->repository_flow), 2U);
+        GTK_FLOW_BOX(state->repositories.flow), 2U);
     gtk_widget_set_valign(
-        state->repository_flow, GTK_ALIGN_START);
+        state->repositories.flow, GTK_ALIGN_START);
 
     GtkWidget *scroll = gtk_scrolled_window_new();
     gtk_widget_set_vexpand(scroll, true);
@@ -10250,8 +10008,18 @@ GtkWidget *make_repositories_page(WindowState *state)
         GTK_POLICY_AUTOMATIC);
     gtk_scrolled_window_set_child(
         GTK_SCROLLED_WINDOW(scroll),
-        state->repository_flow);
+        state->repositories.flow);
     gtk_box_append(GTK_BOX(page), scroll);
+
+    configure_repository_controller(
+        &state->repositories,
+        state->window,
+        state->repositories.flow,
+        state->repositories.count,
+        state->repositories.status,
+        repository_make_card,
+        repository_controller_changed,
+        state);
 
     return page;
 }
@@ -11453,7 +11221,7 @@ void refresh_page_if_needed(WindowState *state, const int index)
         if (!state->updates_loaded) {
             refresh_updates(state);
         }
-        if (!state->repositories_loaded) {
+        if (!state->repositories.loaded) {
             refresh_repositories(state);
         }
         if (!state->history.loaded) {
@@ -11484,7 +11252,7 @@ void refresh_page_if_needed(WindowState *state, const int index)
         }
         break;
     case 4:
-        if (!state->repositories_loaded) {
+        if (!state->repositories.loaded) {
             refresh_repositories(state);
         }
         break;
