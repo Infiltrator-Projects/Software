@@ -274,6 +274,7 @@ add_executable(infiltrator-software
     src/app/repository_controller.cpp
     src/app/repository_view.cpp
     src/app/repair_view.cpp
+    src/app/system_view.cpp
     src/app/preferences_dialog.cpp
     src/app/kernel_manager.cpp
     src/app/theme.cpp
