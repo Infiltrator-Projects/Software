@@ -70,6 +70,7 @@ using infiltrator::software::external_update_kind_name;
 using infiltrator::software::discover_flatpak_updates;
 using infiltrator::software::discover_cinnamon_updates;
 using infiltrator::software::apply_flatpak_updates;
+using infiltrator::software::set_flatpak_application_installed;
 using infiltrator::software::apply_cinnamon_updates;
 using infiltrator::software::apply_cinnamon_updates_selected;
 using infiltrator::software::source_kind_name;
@@ -5230,6 +5231,336 @@ void finish_update_progress(
     update_nav_updates_badge(state);
 }
 
+struct DiscoverFlatpakOperation {
+    GtkWindow *main_window{};
+    GtkWidget *button{};
+    GtkWidget *status{};
+    std::string application_id;
+    std::string remote;
+    bool user_installation{false};
+    bool install{true};
+};
+
+void destroy_discover_flatpak_operation(gpointer pointer)
+{
+    auto *operation =
+        static_cast<DiscoverFlatpakOperation *>(pointer);
+    if (operation == nullptr) return;
+    if (operation->main_window != nullptr) {
+        g_object_unref(operation->main_window);
+    }
+    if (operation->button != nullptr) {
+        g_object_unref(operation->button);
+    }
+    if (operation->status != nullptr) {
+        g_object_unref(operation->status);
+    }
+    delete operation;
+}
+
+TransactionPlan discover_flatpak_history_plan(
+    const DiscoverFlatpakOperation &operation)
+{
+    TransactionPlan plan;
+    TransactionItem item;
+    item.package_id = operation.application_id;
+    item.action =
+        operation.install
+            ? TransactionAction::install
+            : TransactionAction::remove;
+    item.source =
+        operation.user_installation
+            ? "Flatpak User"
+            : "Flatpak System";
+    item.requested = true;
+    plan.items.emplace_back(std::move(item));
+    plan.touches_system = !operation.user_installation;
+    return plan;
+}
+
+void discover_flatpak_worker(
+    GTask *task,
+    gpointer,
+    gpointer task_data,
+    GCancellable *)
+{
+    auto *operation =
+        static_cast<DiscoverFlatpakOperation *>(task_data);
+    if (operation == nullptr) {
+        g_task_return_new_error(
+            task,
+            G_IO_ERROR,
+            G_IO_ERROR_FAILED,
+            "Flatpak operation state is unavailable.");
+        return;
+    }
+
+    std::string error;
+    if (!set_flatpak_application_installed(
+            operation->application_id,
+            operation->remote,
+            operation->user_installation,
+            operation->install,
+            error)) {
+        g_task_return_new_error(
+            task,
+            G_IO_ERROR,
+            G_IO_ERROR_FAILED,
+            "%s",
+            error.empty()
+                ? "Flatpak operation failed."
+                : error.c_str());
+        return;
+    }
+    g_task_return_boolean(task, TRUE);
+}
+
+void discover_flatpak_complete(
+    GObject *,
+    GAsyncResult *async_result,
+    gpointer)
+{
+    auto *task = G_TASK(async_result);
+    auto *operation =
+        static_cast<DiscoverFlatpakOperation *>(
+            g_task_get_task_data(task));
+    if (operation == nullptr) {
+        return;
+    }
+
+    GError *error = nullptr;
+    const bool success =
+        g_task_propagate_boolean(task, &error) != FALSE;
+
+    std::string message;
+    if (success) {
+        message =
+            operation->install
+                ? "Flatpak application installed."
+                : "Flatpak application removed.";
+    } else {
+        message =
+            error != nullptr && error->message != nullptr
+                ? one_line(error->message)
+                : "Flatpak operation failed.";
+    }
+
+    if (operation->status != nullptr) {
+        gtk_label_set_text(
+            GTK_LABEL(operation->status),
+            message.c_str());
+    }
+    if (operation->button != nullptr) {
+        gtk_widget_set_sensitive(
+            operation->button,
+            success ? false : true);
+    }
+
+    const TransactionPlan history_plan =
+        discover_flatpak_history_plan(*operation);
+    record_transaction_history(
+        history_plan,
+        success,
+        message);
+
+    if (operation->main_window != nullptr) {
+        auto *state = static_cast<WindowState *>(
+            g_object_get_data(
+                G_OBJECT(operation->main_window),
+                "infiltrator-window-state"));
+        if (state != nullptr) {
+            if (success) {
+                refresh_discover(state, true);
+                if (state->installed_loaded) {
+                    refresh_installed(state);
+                }
+                if (state->updates_loaded) {
+                    refresh_updates(state, false);
+                }
+            }
+            if (state->history_loaded) {
+                refresh_history(state);
+            }
+        }
+    }
+
+    g_clear_error(&error);
+}
+
+void start_discover_flatpak_operation(
+    DiscoverFlatpakOperation *operation)
+{
+    if (operation == nullptr || operation->button == nullptr) {
+        destroy_discover_flatpak_operation(operation);
+        return;
+    }
+
+    if (operation->status != nullptr) {
+        gtk_label_set_text(
+            GTK_LABEL(operation->status),
+            operation->install
+                ? "Installing the selected Flatpak application…"
+                : "Removing the selected Flatpak application…");
+    }
+
+    GTask *task =
+        g_task_new(
+            G_OBJECT(operation->button),
+            nullptr,
+            discover_flatpak_complete,
+            nullptr);
+    g_task_set_task_data(
+        task,
+        operation,
+        destroy_discover_flatpak_operation);
+    g_task_run_in_thread(
+        task,
+        discover_flatpak_worker);
+    g_object_unref(task);
+}
+
+void discover_flatpak_confirm_response(
+    GtkDialog *dialog,
+    const gint response_id,
+    gpointer user_data)
+{
+    auto *operation =
+        static_cast<DiscoverFlatpakOperation *>(user_data);
+    gtk_window_destroy(GTK_WINDOW(dialog));
+
+    if (operation == nullptr) {
+        return;
+    }
+    if (response_id == GTK_RESPONSE_ACCEPT) {
+        start_discover_flatpak_operation(operation);
+        return;
+    }
+
+    if (operation->status != nullptr) {
+        gtk_label_set_text(
+            GTK_LABEL(operation->status),
+            operation->install
+                ? "Flatpak installation cancelled."
+                : "Flatpak removal cancelled.");
+    }
+    if (operation->button != nullptr) {
+        gtk_widget_set_sensitive(
+            operation->button, true);
+    }
+    destroy_discover_flatpak_operation(operation);
+}
+
+void confirm_discover_flatpak_operation(
+    WindowState *state,
+    GtkWidget *button,
+    GtkWidget *status,
+    const PackageRecord &record)
+{
+    const bool user_installation =
+        record.id.rfind("flatpak:user:", 0U) == 0U;
+    const bool system_installation =
+        record.id.rfind("flatpak:system:", 0U) == 0U;
+    if (!user_installation && !system_installation) {
+        if (status != nullptr) {
+            gtk_label_set_text(
+                GTK_LABEL(status),
+                "Flatpak application has no installation-scope identity.");
+        }
+        gtk_widget_set_sensitive(button, true);
+        return;
+    }
+
+    auto *operation =
+        new DiscoverFlatpakOperation{};
+    operation->main_window =
+        GTK_WINDOW(g_object_ref(state->window));
+    operation->button =
+        GTK_WIDGET(g_object_ref(button));
+    operation->status =
+        status != nullptr
+            ? GTK_WIDGET(g_object_ref(status))
+            : nullptr;
+    operation->application_id =
+        record.package_name;
+    operation->remote =
+        record.repository_origin;
+    operation->user_installation =
+        user_installation;
+    operation->install =
+        record.state !=
+            infiltrator::software::InstallState::installed;
+
+    G_GNUC_BEGIN_IGNORE_DEPRECATIONS
+    GtkWidget *dialog =
+        gtk_dialog_new_with_buttons(
+            operation->install
+                ? "Review Flatpak installation"
+                : "Review Flatpak removal",
+            state->window,
+            static_cast<GtkDialogFlags>(
+                GTK_DIALOG_MODAL |
+                GTK_DIALOG_DESTROY_WITH_PARENT),
+            "Cancel",
+            GTK_RESPONSE_CANCEL,
+            operation->install ? "Install" : "Remove",
+            GTK_RESPONSE_ACCEPT,
+            nullptr);
+    GtkWidget *content =
+        gtk_dialog_get_content_area(
+            GTK_DIALOG(dialog));
+    G_GNUC_END_IGNORE_DEPRECATIONS
+    gtk_box_set_spacing(GTK_BOX(content), 12);
+    gtk_widget_set_margin_start(content, 18);
+    gtk_widget_set_margin_end(content, 18);
+    gtk_widget_set_margin_top(content, 16);
+    gtk_widget_set_margin_bottom(content, 16);
+
+    const std::string heading =
+        std::string(
+            operation->install ? "Install " : "Remove ") +
+        record.name;
+    GtkWidget *heading_label =
+        make_label(
+            heading.c_str(),
+            "hero-title");
+    gtk_label_set_wrap(
+        GTK_LABEL(heading_label), true);
+    gtk_box_append(
+        GTK_BOX(content),
+        heading_label);
+
+    std::string detail =
+        "Flatpak " +
+        std::string(
+            user_installation
+                ? "User"
+                : "System") +
+        " installation · " +
+        record.package_name;
+    if (!record.repository_origin.empty()) {
+        detail +=
+            " · remote " +
+            record.repository_origin;
+    }
+    GtkWidget *detail_label =
+        make_label(
+            detail.c_str(),
+            "detail-note");
+    gtk_label_set_wrap(
+        GTK_LABEL(detail_label), true);
+    gtk_box_append(
+        GTK_BOX(content),
+        detail_label);
+
+    g_signal_connect(
+        dialog,
+        "response",
+        G_CALLBACK(
+            discover_flatpak_confirm_response),
+        operation);
+    gtk_window_present(GTK_WINDOW(dialog));
+}
+
 struct DiscoverPlanTaskData {
     std::string package_id;
     TransactionAction action{TransactionAction::install};
@@ -5693,6 +6024,22 @@ void discover_install_clicked(
                 : TransactionAction::install;
 
     gtk_widget_set_sensitive(GTK_WIDGET(button), false);
+
+    if (record->id.rfind("flatpak:", 0U) == 0U) {
+        if (status != nullptr) {
+            gtk_label_set_text(
+                GTK_LABEL(status),
+                action == TransactionAction::remove
+                    ? "Preparing scoped Flatpak removal…"
+                    : "Preparing scoped Flatpak installation…");
+        }
+        confirm_discover_flatpak_operation(
+            state,
+            GTK_WIDGET(button),
+            status,
+            *record);
+        return;
+    }
     if (status != nullptr) {
         gtk_label_set_text(
             GTK_LABEL(status),
