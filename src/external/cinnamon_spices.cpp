@@ -1250,6 +1250,10 @@ struct PublishedPath {
     fs::path staged;
     fs::path destination;
     fs::path backup;
+    std::uint64_t staged_device{0U};
+    std::uint64_t staged_inode{0U};
+    std::uint64_t destination_device{0U};
+    std::uint64_t destination_inode{0U};
     bool had_existing{false};
     bool new_present{false};
 };
@@ -1292,19 +1296,66 @@ bool sync_directory_path(
     return synced && closed;
 }
 
+bool read_path_identity(
+    const fs::path &path,
+    bool &exists,
+    std::uint64_t &device,
+    std::uint64_t &inode,
+    std::string &error)
+{
+    struct stat metadata {};
+    if (lstat(path.c_str(), &metadata) == 0) {
+        exists = true;
+        device = static_cast<std::uint64_t>(metadata.st_dev);
+        inode = static_cast<std::uint64_t>(metadata.st_ino);
+        return true;
+    }
+    if (errno == ENOENT) {
+        exists = false;
+        device = 0U;
+        inode = 0U;
+        return true;
+    }
+    error =
+        "Unable to inspect Cinnamon Spice transaction path " +
+        path.string() + ": " + std::strerror(errno);
+    return false;
+}
+
+bool identity_matches(
+    const bool exists,
+    const std::uint64_t device,
+    const std::uint64_t inode,
+    const std::uint64_t expected_device,
+    const std::uint64_t expected_inode) noexcept
+{
+    return exists &&
+           expected_inode != 0U &&
+           device == expected_device &&
+           inode == expected_inode;
+}
+
 bool write_spice_journal(
     const fs::path &journal,
     const std::vector<PublishedPath> &intents,
+    const bool committed,
     std::string &error)
 {
     std::ostringstream content;
-    content << "INFLTR-SPICE-JOURNAL 1\n";
+    content
+        << "INFLTR-SPICE-JOURNAL 2 "
+        << (committed ? "COMMITTED" : "PREPARED")
+        << '\n';
     for (const PublishedPath &intent : intents) {
         content
             << std::quoted(intent.destination.string()) << ' '
             << std::quoted(intent.backup.string()) << ' '
             << std::quoted(intent.staged.string()) << ' '
-            << (intent.had_existing ? 1 : 0) << '\n';
+            << (intent.had_existing ? 1 : 0) << ' '
+            << intent.staged_device << ' '
+            << intent.staged_inode << ' '
+            << intent.destination_device << ' '
+            << intent.destination_inode << '\n';
     }
 
     std::string pattern =
@@ -1372,9 +1423,11 @@ bool clear_spice_journal(
 bool load_spice_journal(
     const fs::path &journal,
     std::vector<PublishedPath> &intents,
+    bool &committed,
     std::string &error)
 {
     intents.clear();
+    committed = false;
     std::error_code ec;
     if (!fs::exists(journal, ec)) {
         if (ec) {
@@ -1393,7 +1446,9 @@ bool load_spice_journal(
     }
     std::string header;
     std::getline(input, header);
-    if (header != "INFLTR-SPICE-JOURNAL 1") {
+    if (header == "INFLTR-SPICE-JOURNAL 2 COMMITTED") {
+        committed = true;
+    } else if (header != "INFLTR-SPICE-JOURNAL 2 PREPARED") {
         error =
             "Cinnamon Spice recovery journal has an unsupported format.";
         return false;
@@ -1404,17 +1459,22 @@ bool load_spice_journal(
         std::string backup;
         std::string staged;
         int had_existing = 0;
+        PublishedPath intent;
         if (!(input >> std::quoted(destination))) {
             break;
         }
         if (!(input >> std::quoted(backup) >>
-              std::quoted(staged) >> had_existing) ||
+              std::quoted(staged) >>
+              had_existing >>
+              intent.staged_device >>
+              intent.staged_inode >>
+              intent.destination_device >>
+              intent.destination_inode) ||
             (had_existing != 0 && had_existing != 1)) {
             error = "Cinnamon Spice recovery journal is malformed.";
             intents.clear();
             return false;
         }
-        PublishedPath intent;
         intent.destination = destination;
         intent.backup = backup;
         intent.staged = staged;
@@ -1507,10 +1567,43 @@ bool publish_path(
         return false;
     }
 
+    bool staged_exists = false;
+    if (staged != nullptr &&
+        (!read_path_identity(
+             *staged,
+             staged_exists,
+             change.staged_device,
+             change.staged_inode,
+             error) ||
+         !staged_exists)) {
+        if (error.empty()) {
+            error =
+                "The staged Cinnamon Spice transaction path disappeared before publication.";
+        }
+        return false;
+    }
+    if (change.had_existing) {
+        bool destination_exists = false;
+        if (!read_path_identity(
+                destination,
+                destination_exists,
+                change.destination_device,
+                change.destination_inode,
+                error) ||
+            !destination_exists) {
+            if (error.empty()) {
+                error =
+                    "The existing Cinnamon Spice path disappeared before publication.";
+            }
+            return false;
+        }
+    }
+
     published.emplace_back(change);
     if (!write_spice_journal(
             journal,
             published,
+            false,
             error)) {
         published.pop_back();
         return false;
@@ -1594,9 +1687,11 @@ bool recover_spice_journal(
     std::string &error)
 {
     std::vector<PublishedPath> intents;
+    bool committed = false;
     if (!load_spice_journal(
             journal,
             intents,
+            committed,
             error)) {
         return false;
     }
@@ -1605,40 +1700,90 @@ bool recover_spice_journal(
     }
 
     std::error_code ec;
+    if (committed) {
+        /*
+         * COMMITTED is written and fsynced only after every live path was
+         * published. Recovery therefore finishes cleanup rather than rolling
+         * a completed multi-path update backwards.
+         */
+        for (const PublishedPath &intent : intents) {
+            if (intent.had_existing) {
+                fs::remove_all(intent.backup, ec);
+                if (ec) {
+                    error =
+                        "Unable to discard committed Cinnamon Spice rollback copy: " +
+                        ec.message();
+                    return false;
+                }
+            }
+            if (!intent.staged.empty()) {
+                ec.clear();
+                fs::remove_all(intent.staged, ec);
+                if (ec) {
+                    error =
+                        "Unable to remove committed Cinnamon Spice staging path: " +
+                        ec.message();
+                    return false;
+                }
+            }
+        }
+        return clear_spice_journal(journal, error);
+    }
+
     for (auto iterator = intents.rbegin();
          iterator != intents.rend();
          ++iterator) {
         PublishedPath &intent = *iterator;
-        const bool backup_exists =
-            fs::exists(intent.backup, ec);
-        if (ec) {
-            error =
-                "Unable to inspect Cinnamon Spice rollback copy: " +
-                ec.message();
+
+        bool backup_exists = false;
+        std::uint64_t backup_device = 0U;
+        std::uint64_t backup_inode = 0U;
+        if (!read_path_identity(
+                intent.backup,
+                backup_exists,
+                backup_device,
+                backup_inode,
+                error)) {
             return false;
         }
 
-        const bool destination_exists =
-            fs::exists(intent.destination, ec);
-        if (ec) {
-            error =
-                "Unable to inspect Cinnamon Spice live path during recovery: " +
-                ec.message();
+        bool destination_exists = false;
+        std::uint64_t destination_device = 0U;
+        std::uint64_t destination_inode = 0U;
+        if (!read_path_identity(
+                intent.destination,
+                destination_exists,
+                destination_device,
+                destination_inode,
+                error)) {
             return false;
         }
 
-        const bool staged_exists =
-            !intent.staged.empty() &&
-            fs::exists(intent.staged, ec);
-        if (ec) {
-            error =
-                "Unable to inspect Cinnamon Spice staged path during recovery: " +
-                ec.message();
+        bool staged_exists = false;
+        std::uint64_t staged_device = 0U;
+        std::uint64_t staged_inode = 0U;
+        if (!intent.staged.empty() &&
+            !read_path_identity(
+                intent.staged,
+                staged_exists,
+                staged_device,
+                staged_inode,
+                error)) {
             return false;
         }
 
         if (intent.had_existing) {
             if (backup_exists) {
+                if (!identity_matches(
+                        true,
+                        backup_device,
+                        backup_inode,
+                        intent.destination_device,
+                        intent.destination_inode)) {
+                    error =
+                        "Cinnamon Spice rollback copy identity changed; refusing unsafe recovery.";
+                    return false;
+                }
                 if (destination_exists) {
                     fs::remove_all(intent.destination, ec);
                     if (ec) {
@@ -1658,22 +1803,52 @@ bool recover_spice_journal(
                         ec.message();
                     return false;
                 }
-            } else if (staged_exists && destination_exists) {
-                /*
-                 * A crash may occur after RENAME_EXCHANGE but before the old
-                 * live tree is renamed to its backup. In that narrow window
-                 * the staged path contains the previous live copy.
-                 */
-                std::string exchange_error;
-                if (!exchange_paths(
-                        intent.staged,
-                        intent.destination,
-                        exchange_error)) {
+            } else if (!intent.staged.empty() &&
+                       staged_exists &&
+                       destination_exists) {
+                const bool untouched =
+                    identity_matches(
+                        true,
+                        destination_device,
+                        destination_inode,
+                        intent.destination_device,
+                        intent.destination_inode) &&
+                    identity_matches(
+                        true,
+                        staged_device,
+                        staged_inode,
+                        intent.staged_device,
+                        intent.staged_inode);
+                const bool exchanged =
+                    identity_matches(
+                        true,
+                        destination_device,
+                        destination_inode,
+                        intent.staged_device,
+                        intent.staged_inode) &&
+                    identity_matches(
+                        true,
+                        staged_device,
+                        staged_inode,
+                        intent.destination_device,
+                        intent.destination_inode);
+                if (exchanged) {
+                    std::string exchange_error;
+                    if (!exchange_paths(
+                            intent.staged,
+                            intent.destination,
+                            exchange_error)) {
+                        error =
+                            "Unable to recover interrupted Cinnamon Spice exchange: " +
+                            exchange_error;
+                        return false;
+                    }
+                } else if (!untouched) {
                     error =
-                        "Unable to recover interrupted Cinnamon Spice exchange: " +
-                        exchange_error;
+                        "Cinnamon Spice transaction identities are ambiguous; refusing unsafe recovery.";
                     return false;
                 }
+
                 fs::remove_all(intent.staged, ec);
                 if (ec) {
                     error =
@@ -1681,13 +1856,36 @@ bool recover_spice_journal(
                         ec.message();
                     return false;
                 }
+            } else if (!intent.staged.empty()) {
+                error =
+                    "Cinnamon Spice recovery cannot prove whether an interrupted replacement was published.";
+                return false;
             } else if (!destination_exists) {
                 error =
-                    "Cinnamon Spice recovery cannot locate either the live path or its rollback copy.";
+                    "Cinnamon Spice recovery cannot locate the original live path.";
+                return false;
+            } else if (!identity_matches(
+                           true,
+                           destination_device,
+                           destination_inode,
+                           intent.destination_device,
+                           intent.destination_inode)) {
+                error =
+                    "Cinnamon Spice live path identity changed during interrupted deletion recovery.";
                 return false;
             }
         } else {
             if (destination_exists) {
+                if (!identity_matches(
+                        true,
+                        destination_device,
+                        destination_inode,
+                        intent.staged_device,
+                        intent.staged_inode)) {
+                    error =
+                        "Cinnamon Spice new path identity changed; refusing unsafe recovery.";
+                    return false;
+                }
                 fs::remove_all(intent.destination, ec);
                 if (ec) {
                     error =
@@ -1697,6 +1895,16 @@ bool recover_spice_journal(
                 }
             }
             if (staged_exists) {
+                if (!identity_matches(
+                        true,
+                        staged_device,
+                        staged_inode,
+                        intent.staged_device,
+                        intent.staged_inode)) {
+                    error =
+                        "Cinnamon Spice staged path identity changed; refusing unsafe recovery.";
+                    return false;
+                }
                 fs::remove_all(intent.staged, ec);
                 if (ec) {
                     error =
@@ -1711,7 +1919,7 @@ bool recover_spice_journal(
     return clear_spice_journal(journal, error);
 }
 
-void rollback_published_paths(
+bool rollback_published_paths(
     std::vector<PublishedPath> &published,
     std::string &error)
 {
@@ -1754,21 +1962,36 @@ void rollback_published_paths(
         error +=
             "Cinnamon Spice rollback was incomplete: " +
             rollback_error;
+        return false;
     }
+    return true;
 }
 
-void discard_backups(
-    const std::vector<PublishedPath> &published) noexcept
+bool discard_backups(
+    const std::vector<PublishedPath> &published,
+    std::string &error)
 {
-    std::error_code ignored;
+    std::error_code ec;
     for (const PublishedPath &change : published) {
-        if (change.had_existing) {
-            fs::remove_all(
-                change.backup,
-                ignored);
-            ignored.clear();
+        if (!change.had_existing) {
+            continue;
+        }
+        fs::remove_all(change.backup, ec);
+        if (ec) {
+            error =
+                "Unable to discard completed Cinnamon Spice rollback copy " +
+                change.backup.string() + ": " +
+                ec.message();
+            return false;
+        }
+        if (!sync_directory_path(
+                change.backup.parent_path())) {
+            error =
+                "Unable to synchronize Cinnamon Spice destination directory after rollback cleanup.";
+            return false;
         }
     }
+    return true;
 }
 
 bool install_extracted(
@@ -1916,9 +2139,11 @@ bool install_extracted(
                 journal,
                 published,
                 error)) {
-            rollback_published_paths(published, error);
+            const bool rolled_back =
+                rollback_published_paths(published, error);
             std::string journal_error;
-            if (!clear_spice_journal(journal, journal_error) &&
+            if (rolled_back &&
+                !clear_spice_journal(journal, journal_error) &&
                 !journal_error.empty()) {
                 if (!error.empty()) error += " ";
                 error += journal_error;
@@ -1947,9 +2172,11 @@ bool install_extracted(
                     journal,
                     published,
                     error)) {
-                rollback_published_paths(published, error);
+                const bool rolled_back =
+                    rollback_published_paths(published, error);
                 std::string journal_error;
-                if (!clear_spice_journal(journal, journal_error) &&
+                if (rolled_back &&
+                    !clear_spice_journal(journal, journal_error) &&
                     !journal_error.empty()) {
                     if (!error.empty()) error += " ";
                     error += journal_error;
@@ -1974,9 +2201,11 @@ bool install_extracted(
                         journal,
                         published,
                         error)) {
-                    rollback_published_paths(published, error);
+                    const bool rolled_back =
+                        rollback_published_paths(published, error);
                     std::string journal_error;
-                    if (!clear_spice_journal(journal, journal_error) &&
+                    if (rolled_back &&
+                        !clear_spice_journal(journal, journal_error) &&
                         !journal_error.empty()) {
                         if (!error.empty()) error += " ";
                         error += journal_error;
@@ -1998,9 +2227,11 @@ bool install_extracted(
                 journal,
                 published,
                 error)) {
-            rollback_published_paths(published, error);
+            const bool rolled_back =
+                rollback_published_paths(published, error);
             std::string journal_error;
-            if (!clear_spice_journal(journal, journal_error) &&
+            if (rolled_back &&
+                !clear_spice_journal(journal, journal_error) &&
                 !journal_error.empty()) {
                 if (!error.empty()) error += " ";
                 error += journal_error;
@@ -2012,7 +2243,18 @@ bool install_extracted(
     }
 
     fs::remove_all(stage_root, ec);
-    discard_backups(published);
+    if (!write_spice_journal(
+            journal,
+            published,
+            true,
+            error)) {
+        return false;
+    }
+    if (!discard_backups(
+            published,
+            error)) {
+        return false;
+    }
     if (!clear_spice_journal(journal, error)) {
         return false;
     }
