@@ -373,6 +373,14 @@ void check_worker(
     EngineClient engine;
     if (data != nullptr && data->refresh_metadata) {
         (void)engine.refresh(result->error);
+    } else {
+        /*
+         * Reconcile authoritative dpkg state before reading the cached
+         * candidate generation.  Root automatic updates use a separate
+         * resolver database, so the tray must not keep advertising packages
+         * that were already installed outside this user service.
+         */
+        (void)engine.refresh_installed(result->error);
     }
     if (result->error.empty()) {
         (void)engine.list_updates(
