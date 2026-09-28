@@ -6121,11 +6121,30 @@ void set_update_runtime_state(const std::string_view value)
         return;
     }
 
-    std::ofstream output(path, std::ios::trunc);
+    const std::filesystem::path temporary =
+        path.string() + ".tmp." +
+        std::to_string(
+            static_cast<unsigned long long>(getpid()));
+    std::ofstream output(
+        temporary,
+        std::ios::out | std::ios::trunc);
     if (!output) {
         return;
     }
     output << value << '\n';
+    output.close();
+    if (!output) {
+        std::filesystem::remove(temporary, ec);
+        return;
+    }
+
+    std::filesystem::rename(
+        temporary,
+        path,
+        ec);
+    if (ec) {
+        std::filesystem::remove(temporary, ec);
+    }
 }
 
 const char *update_icon_name(const PackageRecord &package)
