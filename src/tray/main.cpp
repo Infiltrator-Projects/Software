@@ -123,15 +123,6 @@ std::string read_override()
     return value;
 }
 
-std::filesystem::path transaction_history_path()
-{
-    const std::string path =
-        infiltrator::software::user_transaction_history_path();
-    return path.empty()
-        ? std::filesystem::path{}
-        : std::filesystem::path(path);
-}
-
 std::int64_t last_successful_update()
 {
     std::int64_t latest = 0;
