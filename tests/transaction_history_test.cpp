@@ -5,6 +5,7 @@
 #include <filesystem>
 #include <sqlite3.h>
 #include <string>
+#include <sys/stat.h>
 
 int main()
 {
@@ -62,6 +63,14 @@ int main()
     assert(newest.size() == 2U);
     assert(!newest[0].success);
     assert(newest[0].message == "Failed.");
+
+    assert(chmod(path.c_str(), 0444) == 0);
+    error.clear();
+    const auto readonly_rows =
+        store.load_recent(20U, error);
+    assert(error.empty());
+    assert(readonly_rows.size() == 4U);
+    assert(chmod(path.c_str(), 0644) == 0);
 
     sqlite3 *database = nullptr;
     assert(sqlite3_open(path.c_str(), &database) == SQLITE_OK);
