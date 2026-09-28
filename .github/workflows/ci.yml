@@ -97,6 +97,7 @@ jobs:
           history_view = Path("src/app/history_view.cpp").read_text()
           installed_controller = Path("src/app/installed_controller.cpp").read_text()
           repository_controller = Path("src/app/repository_controller.cpp").read_text()
+          ui_components = Path("src/app/ui_components.cpp").read_text()
           helper = Path("src/helper/update_helper.cpp").read_text()
           source_helper = Path("src/helper/source_helper.cpp").read_text()
           source_mutation = Path("src/sources/source_mutation.cpp").read_text()
@@ -376,7 +377,7 @@ jobs:
           assert '"Repair is explicit"' not in app
 
           # The graphical redesign target is a checked-in product contract.
-          assert "hero-panel" in app
+          assert "hero-panel" in ui_components
           assert "titlebar-brand" in app
           assert "sidebar-brand" not in app
           assert "discover-icon-well" in app
