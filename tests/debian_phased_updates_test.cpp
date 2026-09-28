@@ -30,7 +30,7 @@ unsigned int bucket_for(
         seed_text.end());
     std::minstd_rand generator(seed);
     std::uniform_int_distribution<unsigned int>
-        distribution(0U, 100U);
+        distribution(0U, 99U);
     return distribution(generator);
 }
 
@@ -63,14 +63,19 @@ int main()
 
     const unsigned int bucket =
         bucket_for("fixture-machine");
-    const auto decision =
-        normal.evaluate(phased_package(50));
-    if (bucket > 50U) {
-        assert(decision.has_value());
-        assert(decision->priority == 1);
-    } else {
-        assert(!decision.has_value());
+    for (const int percentage : {0, 1, 50, 99}) {
+        const auto decision =
+            normal.evaluate(phased_package(percentage));
+        const bool included =
+            bucket < static_cast<unsigned int>(percentage);
+        if (included) {
+            assert(!decision.has_value());
+        } else {
+            assert(decision.has_value());
+            assert(decision->priority == 1);
+        }
     }
+    assert(!normal.evaluate(phased_package(100)).has_value());
 
     return 0;
 }

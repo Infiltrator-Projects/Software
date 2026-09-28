@@ -306,11 +306,11 @@ DebianPhasedUpdatesPolicy::evaluate(
         seed_text.end());
     std::minstd_rand generator(seed);
     std::uniform_int_distribution<unsigned int>
-        distribution(0U, 100U);
+        distribution(0U, 99U);
     const unsigned int bucket =
         distribution(generator);
 
-    if (bucket <=
+    if (bucket <
         static_cast<unsigned int>(
             package.phased_update_percentage)) {
         return std::nullopt;

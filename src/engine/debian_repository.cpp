@@ -15,6 +15,7 @@
 #include <charconv>
 #include <cctype>
 #include <cstdint>
+#include <ctime>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -67,6 +68,152 @@ std::uint64_t parse_u64(const std::string_view value)
         return 0U;
     }
     return parsed_value;
+}
+
+bool parse_release_time(
+    const std::string_view value,
+    const char *field,
+    std::int64_t &result,
+    std::string &error)
+{
+    const std::string clean = trim(value);
+    if (clean.empty()) {
+        error = std::string("Repository Release ") + field +
+            " field is empty.";
+        return false;
+    }
+    const std::time_t parsed = curl_getdate(clean.c_str(), nullptr);
+    if (parsed == static_cast<std::time_t>(-1)) {
+        error = std::string("Repository Release ") + field +
+            " field is not a valid RFC date.";
+        return false;
+    }
+    result = static_cast<std::int64_t>(parsed);
+    return true;
+}
+
+bool add_seconds(
+    const std::int64_t base,
+    const std::uint64_t seconds,
+    std::int64_t &result)
+{
+    if (seconds >
+        static_cast<std::uint64_t>(
+            std::numeric_limits<std::int64_t>::max())) {
+        return false;
+    }
+    const std::int64_t signed_seconds =
+        static_cast<std::int64_t>(seconds);
+    if (base >
+        std::numeric_limits<std::int64_t>::max() -
+            signed_seconds) {
+        return false;
+    }
+    result = base + signed_seconds;
+    return true;
+}
+
+bool validate_release_time(
+    const DebianRepositorySource &source,
+    const DebianReleaseMetadata &release,
+    std::string &error)
+{
+    if (!source.check_date) return true;
+
+    const std::time_t now_value = std::time(nullptr);
+    if (now_value == static_cast<std::time_t>(-1)) {
+        error = "Unable to read the system clock for repository validation.";
+        return false;
+    }
+    const std::int64_t now =
+        static_cast<std::int64_t>(now_value);
+
+    bool have_release_date = false;
+    std::int64_t release_date = 0;
+    if (!release.date.empty()) {
+        if (!parse_release_time(
+                release.date, "Date", release_date, error)) {
+            return false;
+        }
+        have_release_date = true;
+
+        std::int64_t latest_acceptable = 0;
+        if (!add_seconds(
+                now,
+                source.date_max_future_seconds,
+                latest_acceptable)) {
+            latest_acceptable =
+                std::numeric_limits<std::int64_t>::max();
+        }
+        if (release_date > latest_acceptable) {
+            error =
+                "Repository Release metadata is dated too far in the future.";
+            return false;
+        }
+    }
+
+    if (!source.check_valid_until) return true;
+
+    bool have_expiry = false;
+    std::int64_t expiry = 0;
+    if (!release.valid_until.empty()) {
+        if (!parse_release_time(
+                release.valid_until,
+                "Valid-Until",
+                expiry,
+                error)) {
+            return false;
+        }
+        have_expiry = true;
+    }
+
+    if ((source.valid_until_min_seconds != 0U ||
+         source.valid_until_max_seconds != 0U) &&
+        !have_release_date) {
+        error =
+            "Repository freshness overrides require a Release Date field.";
+        return false;
+    }
+
+    if (source.valid_until_min_seconds != 0U) {
+        std::int64_t minimum_expiry = 0;
+        if (!add_seconds(
+                release_date,
+                source.valid_until_min_seconds,
+                minimum_expiry)) {
+            error =
+                "Repository Valid-Until-Min overflows the supported time range.";
+            return false;
+        }
+        if (!have_expiry || expiry < minimum_expiry) {
+            expiry = minimum_expiry;
+            have_expiry = true;
+        }
+    }
+
+    if (source.valid_until_max_seconds != 0U) {
+        std::int64_t maximum_expiry = 0;
+        if (!add_seconds(
+                release_date,
+                source.valid_until_max_seconds,
+                maximum_expiry)) {
+            error =
+                "Repository Valid-Until-Max overflows the supported time range.";
+            return false;
+        }
+        if (!have_expiry || expiry > maximum_expiry) {
+            expiry = maximum_expiry;
+            have_expiry = true;
+        }
+    }
+
+    if (have_expiry && now > expiry) {
+        error =
+            "Repository Release metadata has expired (Valid-Until).";
+        return false;
+    }
+
+    return true;
 }
 
 std::string lower_ascii(std::string value)
@@ -1168,6 +1315,10 @@ DebianReleaseMetadata DebianReleaseMetadata::parse(
             result.suite = value;
         } else if (key == "Codename") {
             result.codename = value;
+        } else if (key == "Date") {
+            result.date = value;
+        } else if (key == "Valid-Until") {
+            result.valid_until = value;
         } else if (key == "NotAutomatic") {
             result.not_automatic =
                 lower_ascii(value) == "yes" ||
@@ -1230,6 +1381,9 @@ DebianRepositorySnapshot DebianRepositoryRefresh::refresh(
     DebianReleaseMetadata release =
         DebianReleaseMetadata::parse(release_content, error);
     if (!error.empty()) {
+        return snapshot;
+    }
+    if (!validate_release_time(source, release, error)) {
         return snapshot;
     }
 

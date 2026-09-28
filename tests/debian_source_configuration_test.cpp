@@ -48,5 +48,66 @@ int main()
     assert(deb822[0].keyrings.size() == 1U);
     assert(deb822[0].architectures.size() == 1U);
 
+    const auto crlf = DebianSourceConfiguration::parse_deb822(
+        "Types: deb\r\n"
+        "URIs: https://one.invalid/debian\r\n"
+        "Suites: stable\r\n"
+        "Components: main\r\n"
+        "\r\n"
+        "Types: deb\r\n"
+        "URIs: https://two.invalid/debian\r\n"
+        "Suites: testing\r\n"
+        "Components: main\r\n",
+        "crlf.sources",
+        error);
+    assert(error.empty());
+    assert(crlf.size() == 2U);
+    assert(crlf[0].suite == "stable");
+    assert(crlf[1].suite == "testing");
+
+    const auto freshness = DebianSourceConfiguration::parse_deb822(
+        "Types: deb\n"
+        "URIs: https://fresh.invalid/debian\n"
+        "Suites: stable\n"
+        "Components: main\n"
+        "Check-Valid-Until: no\n"
+        "Check-Date: yes\n"
+        "Valid-Until-Min: 60\n"
+        "Valid-Until-Max: 3600\n"
+        "Date-Max-Future: 30\n",
+        "fresh.sources",
+        error);
+    assert(error.empty());
+    assert(freshness.size() == 1U);
+    assert(!freshness[0].check_valid_until);
+    assert(freshness[0].check_date);
+    assert(freshness[0].valid_until_min_seconds == 60U);
+    assert(freshness[0].valid_until_max_seconds == 3600U);
+    assert(freshness[0].date_max_future_seconds == 30U);
+
+    const auto fingerprint = DebianSourceConfiguration::parse_deb822(
+        "Types: deb\n"
+        "URIs: https://fingerprint.invalid/debian\n"
+        "Suites: stable\n"
+        "Components: main\n"
+        "Signed-By: /usr/share/keyrings/test.gpg "
+        "0123456789ABCDEF0123456789ABCDEF01234567\n",
+        "fingerprint.sources",
+        error);
+    assert(fingerprint.empty());
+    assert(error.find("fingerprint") != std::string::npos);
+
+    error.clear();
+    const auto modifiers = DebianSourceConfiguration::parse_deb822(
+        "Types: deb\n"
+        "URIs: https://modifier.invalid/debian\n"
+        "Suites: stable\n"
+        "Components: main\n"
+        "Architectures-Add: arm64\n",
+        "modifier.sources",
+        error);
+    assert(modifiers.empty());
+    assert(error.find("add/remove") != std::string::npos);
+
     return 0;
 }

@@ -122,6 +122,55 @@ int main()
         repository / "dists/stable/main/binary-amd64/Packages",
         packages);
 
+    const std::string expired_release =
+        "Date: Wed, 01 Jan 2020 00:00:00 +0000\n"
+        "Valid-Until: Thu, 02 Jan 2020 00:00:00 +0000\n"
+        "Suite: stable\n"
+        "Architectures: amd64\n"
+        "Components: main\n"
+        "SHA256:\n"
+        " 2b1cd1965de07ffaf23ac2fbf5af2a7277ce114f53110a7dd46c40f1f53c8e91 323 main/binary-amd64/Packages\n";
+    write_file(repository / "dists/stable/Release", expired_release);
+    error.clear();
+    const DebianRepositorySnapshot expired =
+        DebianRepositoryRefresh::refresh(
+            source, "amd64", "", error);
+    assert(expired.packages.empty());
+    assert(error.find("expired") != std::string::npos);
+
+    source.check_valid_until = false;
+    error.clear();
+    const DebianRepositorySnapshot expiry_disabled =
+        DebianRepositoryRefresh::refresh(
+            source, "amd64", "", error);
+    assert(error.empty());
+    assert(expiry_disabled.packages.size() == 2U);
+    source.check_valid_until = true;
+
+    const std::string future_release =
+        "Date: Wed, 01 Jan 2099 00:00:00 +0000\n"
+        "Suite: stable\n"
+        "Architectures: amd64\n"
+        "Components: main\n"
+        "SHA256:\n"
+        " 2b1cd1965de07ffaf23ac2fbf5af2a7277ce114f53110a7dd46c40f1f53c8e91 323 main/binary-amd64/Packages\n";
+    write_file(repository / "dists/stable/Release", future_release);
+    error.clear();
+    const DebianRepositorySnapshot future =
+        DebianRepositoryRefresh::refresh(
+            source, "amd64", "", error);
+    assert(future.packages.empty());
+    assert(error.find("future") != std::string::npos);
+
+    source.check_date = false;
+    error.clear();
+    const DebianRepositorySnapshot date_disabled =
+        DebianRepositoryRefresh::refresh(
+            source, "amd64", "", error);
+    assert(error.empty());
+    assert(date_disabled.packages.size() == 2U);
+    source.check_date = true;
+
     const std::string bad_release =
         "Suite: stable\n"
         "Architectures: amd64\n"

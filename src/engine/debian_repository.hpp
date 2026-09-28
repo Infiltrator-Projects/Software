@@ -19,6 +19,11 @@ struct DebianRepositorySource {
     std::vector<std::string> keyrings;
     std::vector<std::string> architectures;
     bool verify_signatures{true};
+    bool check_valid_until{true};
+    bool check_date{true};
+    std::uint64_t valid_until_min_seconds{0};
+    std::uint64_t valid_until_max_seconds{0};
+    std::uint64_t date_max_future_seconds{10};
 };
 
 struct DebianReleaseEntry {
@@ -33,6 +38,8 @@ struct DebianReleaseMetadata {
     std::string version;
     std::string suite;
     std::string codename;
+    std::string date;
+    std::string valid_until;
     bool not_automatic{false};
     bool but_automatic_upgrades{false};
     std::vector<std::string> architectures;
