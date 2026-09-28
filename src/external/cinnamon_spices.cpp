@@ -1485,19 +1485,19 @@ bool publish_path(
     if (staged != nullptr) {
         change.staged = *staged;
     }
-    journalled.destination = destination;
-    journalled.backup =
+    change.destination = destination;
+    change.backup =
         backup_path(
             destination,
             published.size());
-    if (fs::exists(journalled.backup, ec) || ec) {
+    if (fs::exists(change.backup, ec) || ec) {
         error =
             "A stale Cinnamon Spice transaction backup blocks installation: " +
-            journalled.backup.string();
+            change.backup.string();
         return false;
     }
 
-    journalled.had_existing =
+    change.had_existing =
         fs::exists(destination, ec);
     if (ec) {
         error =
@@ -1946,6 +1946,12 @@ bool install_extracted(
                     published,
                     error)) {
                 rollback_published_paths(published, error);
+                std::string journal_error;
+                if (!clear_spice_journal(journal, journal_error) &&
+                    !journal_error.empty()) {
+                    if (!error.empty()) error += " ";
+                    error += journal_error;
+                }
                 fs::remove_all(stage_root, ec);
                 remove_staged_translations(translations);
                 return false;
