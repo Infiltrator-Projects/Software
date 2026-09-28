@@ -96,6 +96,7 @@ jobs:
           history_controller = Path("src/app/history_controller.cpp").read_text()
           history_view = Path("src/app/history_view.cpp").read_text()
           installed_controller = Path("src/app/installed_controller.cpp").read_text()
+          repository_controller = Path("src/app/repository_controller.cpp").read_text()
           helper = Path("src/helper/update_helper.cpp").read_text()
           source_helper = Path("src/helper/source_helper.cpp").read_text()
           source_mutation = Path("src/sources/source_mutation.cpp").read_text()
@@ -163,7 +164,7 @@ jobs:
           assert "load_release_info" in release_upgrader
           assert "build_plan" in release_upgrader
           assert '"apply-plan"' in release_upgrader
-          assert "mint_mirror_status" in app
+          assert "mint_mirror_status" in repository_controller
           assert '"pkexec mintsources"' in app
           assert "fetch_changelog_url" in app
           assert "updates_restart_after_verify" in app
@@ -314,6 +315,12 @@ jobs:
           assert "classify_package_role" in Path("src/core/model.cpp").read_text()
           assert "is_system_component" in Path("src/core/model.cpp").read_text()
           assert '"System changes stay distinct"' not in app
+
+          # Repository inventory owns its asynchronous lifetime outside the
+          # top-level application shell; main retains only cross-page wiring.
+          assert "RepositoryController repositories" in app
+          assert "refresh_repository_controller" in app
+          assert "mint_mirror_status" in repository_controller
 
           # History owns its own controller/view lifetime while the application
           # shell retains only cross-page coordination.

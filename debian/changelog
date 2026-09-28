@@ -1,3 +1,21 @@
+infiltrator-software (0.3.54) unstable; urgency=high
+
+  * Harden native repository authentication with Release freshness checks,
+    fail-closed Signed-By handling, corrected phased-update selection and
+    explicit rejection of unsupported source modifiers.
+  * Bind reviewed Debian, Flatpak and Cinnamon updates to the exact payloads
+    authorized by the user, including repository fingerprints and SHA-256
+    verification at the privileged package boundary.
+  * Keep the package-engine D-Bus service responsive during repository refresh,
+    make interrupted release upgrades resumable and preserve partial external
+    update results accurately.
+  * Complete dependency conflict/Breaks repair paths, deb-src source toggling,
+    install-Recommends propagation and stale repository identity protection.
+  * Extract repository refresh/state ownership from the application monolith
+    into a dedicated controller and update verification contracts accordingly.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Mon, 28 Sep 2026 13:20:00 +1000
+
 infiltrator-software (0.3.53) unstable; urgency=high
 
   * Fix Discover/header search synchronization so each typed character appends
