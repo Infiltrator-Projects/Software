@@ -997,10 +997,144 @@ bool rollback_target_sources(
     return true;
 }
 
+bool recover_pending_release(std::string &error)
+{
+    error.clear();
+
+    ReleaseJournal journal;
+    if (!load_release_journal(
+            journal,
+            error)) {
+        return false;
+    }
+    if (journal.phase.empty()) {
+        return true;
+    }
+    if (geteuid() != 0) {
+        error =
+            "An interrupted release upgrade requires administrator recovery.";
+        return false;
+    }
+
+    const SourcePublication publication =
+        publication_from_journal(journal);
+    const auto current =
+        read_assignments("/etc/linuxmint/info");
+    const auto codename =
+        current.find("CODENAME");
+    const std::string active_codename =
+        codename == current.end()
+            ? std::string{}
+            : codename->second;
+
+    /*
+     * Once the target release identity is active, never roll repositories
+     * backward.  The package transition reached the target side of the
+     * compatibility boundary; only stale recovery artifacts need removal.
+     */
+    if (active_codename == journal.target_codename ||
+        journal.phase == "complete") {
+        if (!cleanup_release_artifacts(
+                publication,
+                error)) {
+            error =
+                "Target release is active, but stale release-upgrade "
+                "recovery artifacts could not be removed: " +
+                error;
+            return false;
+        }
+        return true;
+    }
+
+    if (journal.phase == "packages-applying") {
+        error =
+            "A release upgrade was interrupted while packages were being "
+            "mutated. Recovery state has been preserved; refusing to roll "
+            "repositories backward across a possibly partial package upgrade.";
+        return false;
+    }
+
+    if (active_codename != journal.current_codename) {
+        error =
+            "Release-upgrade recovery state does not match the active "
+            "Linux Mint release; refusing to guess.";
+        return false;
+    }
+
+    if (!rollback_target_sources(
+            publication,
+            error,
+            true)) {
+        error =
+            "Unable to recover the interrupted release-upgrade repository "
+            "configuration: " + error;
+        return false;
+    }
+
+    ReleaseJournal rolled_back = journal;
+    rolled_back.phase = "rolled-back";
+    std::string journal_error;
+    if (!write_release_journal(
+            rolled_back,
+            journal_error)) {
+        error =
+            "Previous repositories were restored, but recovery state could "
+            "not be marked complete: " +
+            journal_error;
+        return false;
+    }
+
+    if (!cleanup_release_artifacts(
+            publication,
+            error)) {
+        error =
+            "Previous repositories were restored, but recovery artifacts "
+            "could not be removed: " +
+            error;
+        return false;
+    }
+    return true;
+}
+
+bool ensure_release_recovered_for_plan(
+    std::string &error)
+{
+    std::error_code ec;
+    if (!std::filesystem::exists(
+            kReleaseJournal,
+            ec)) {
+        if (ec) {
+            error =
+                "Unable to inspect release-upgrade recovery state: " +
+                ec.message();
+            return false;
+        }
+        return true;
+    }
+
+    if (geteuid() == 0) {
+        return recover_pending_release(error);
+    }
+
+    return run_command(
+        {
+            "pkexec",
+            "/usr/bin/infiltrator-software-release-upgrade",
+            "recover"
+        },
+        error);
+}
+
+
 int plan_command()
 {
     ReleaseInfo release;
     std::string error;
+    if (!ensure_release_recovered_for_plan(
+            error)) {
+        std::cerr << error << "\n";
+        return 1;
+    }
     if (!load_release_info(release,error)) {
         std::cerr<<error<<"\n";
         return 1;
