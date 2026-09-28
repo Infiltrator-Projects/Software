@@ -82,9 +82,9 @@ constexpr const char *kIntrospectionXml = R"XML(
 )XML";
 
 struct ServiceState {
-    explicit ServiceState(std::string database_path)
-        : core(database_path),
-          database_path(std::move(database_path))
+    explicit ServiceState(std::string state_database_path)
+        : core(state_database_path),
+          database_path(std::move(state_database_path))
     {
     }
 
