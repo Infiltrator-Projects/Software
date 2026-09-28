@@ -58,6 +58,14 @@ bool apply_flatpak_updates_selected(
     std::string &error,
     ExternalProgressCallback progress = {});
 
+bool set_flatpak_application_installed(
+    std::string_view application_id,
+    std::string_view remote,
+    bool user_installation,
+    bool installed,
+    std::string &error,
+    ExternalProgressCallback progress = {});
+
 bool apply_cinnamon_updates(
     std::string &error,
     ExternalProgressCallback progress = {});
