@@ -746,12 +746,25 @@ bool extract_zip_safely(
         const std::uint32_t permissions =
             unix_mode & 0777U;
         if (permissions != 0U) {
+            /*
+             * Spice archives are remote content. Preserve whether a file is
+             * executable, but never allow an archive to publish group/world
+             * writable payloads or strip the owner's read/write access.
+             */
+            const std::uint32_t safe_permissions =
+                (permissions & 0111U) != 0U
+                    ? 0755U
+                    : 0644U;
             fs::permissions(
                 target,
-                static_cast<fs::perms>(permissions),
+                static_cast<fs::perms>(safe_permissions),
                 fs::perm_options::replace,
                 ec);
-            ec.clear();
+            if (ec) {
+                error =
+                    "Unable to apply safe Cinnamon Spice file permissions.";
+                return false;
+            }
         }
         cursor += record_size;
     }
