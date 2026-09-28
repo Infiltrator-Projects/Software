@@ -3,7 +3,6 @@
 
 #include <algorithm>
 #include <cctype>
-#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <random>
@@ -283,8 +282,7 @@ DebianPhasedUpdatesPolicy::evaluate(
             "Phased update is held until rollout reaches 100%."};
     }
 
-    if (machine_id_.empty() ||
-        std::getenv("SOURCE_DATE_EPOCH") != nullptr) {
+    if (machine_id_.empty()) {
         return std::nullopt;
     }
 
