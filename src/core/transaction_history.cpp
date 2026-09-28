@@ -2,6 +2,7 @@
 #include "core/transaction_history.hpp"
 
 #include <chrono>
+#include <cstdlib>
 #include <filesystem>
 #include <sqlite3.h>
 #include <string>
@@ -175,6 +176,34 @@ std::string column_text(
 }
 
 } // namespace
+
+std::string user_transaction_history_path()
+{
+    const char *xdg =
+        std::getenv("XDG_DATA_HOME");
+    if (xdg != nullptr && *xdg != '\0') {
+        return (
+            std::filesystem::path(xdg) /
+            "infiltrator-software" /
+            "history.sqlite3").string();
+    }
+
+    const char *home =
+        std::getenv("HOME");
+    if (home != nullptr && *home != '\0') {
+        return (
+            std::filesystem::path(home) /
+            ".local/share" /
+            "infiltrator-software" /
+            "history.sqlite3").string();
+    }
+    return {};
+}
+
+std::string system_transaction_history_path()
+{
+    return "/var/lib/infiltrator/software/history.sqlite3";
+}
 
 TransactionHistoryStore::TransactionHistoryStore(
     std::string path)
