@@ -23,8 +23,10 @@ using namespace infiltrator::software;
 
 constexpr const char *kPreferences =
     "/etc/infiltrator-software/automatic-updates.conf";
-constexpr const char *kStamp =
+constexpr const char *kSuccessStamp =
     "/var/lib/infiltrator/software/automatic-updates.last";
+constexpr const char *kAttemptStamp =
+    "/var/lib/infiltrator/software/automatic-updates.attempt";
 
 std::int64_t now_unix()
 {
@@ -33,15 +35,18 @@ std::int64_t now_unix()
             std::chrono::system_clock::now().time_since_epoch()).count());
 }
 
-std::int64_t read_stamp()
+std::int64_t read_stamp(const char *path)
 {
-    std::ifstream input(kStamp);
+    std::ifstream input(path);
     std::int64_t value=0;
     if (input) input>>value;
     return value;
 }
 
-bool write_stamp(std::string &error)
+bool write_stamp(
+    const char *path,
+    const char *label,
+    std::string &error)
 {
     static constexpr const char *kDirectory =
         "/var/lib/infiltrator/software";
@@ -58,7 +63,7 @@ bool write_stamp(std::string &error)
 
     std::string pattern =
         std::string(kDirectory) +
-        "/.automatic-updates.last-XXXXXX";
+        "/.automatic-updates-stamp-XXXXXX";
     std::vector<char> writable(
         pattern.begin(),
         pattern.end());
@@ -66,7 +71,8 @@ bool write_stamp(std::string &error)
     const int fd = mkstemp(writable.data());
     if (fd < 0) {
         error =
-            "Unable to stage the automatic-update timestamp.";
+            std::string("Unable to stage the automatic-update ") +
+            label + " timestamp.";
         return false;
     }
 
@@ -99,10 +105,11 @@ bool write_stamp(std::string &error)
     const std::filesystem::path temporary(
         writable.data());
     if (!ok ||
-        rename(temporary.c_str(), kStamp) != 0) {
+        rename(temporary.c_str(), path) != 0) {
         std::filesystem::remove(temporary, ec);
         error =
-            "Unable to durably publish the automatic-update timestamp.";
+            std::string("Unable to durably publish the automatic-update ") +
+            label + " timestamp.";
         return false;
     }
 
@@ -112,7 +119,8 @@ bool write_stamp(std::string &error)
             O_RDONLY | O_DIRECTORY | O_CLOEXEC);
     if (directory_fd < 0) {
         error =
-            "Unable to verify automatic-update timestamp durability.";
+            std::string("Unable to verify automatic-update ") +
+            label + " timestamp durability.";
         return false;
     }
     const bool synced =
@@ -121,7 +129,8 @@ bool write_stamp(std::string &error)
         close(directory_fd) == 0;
     if (!synced || !closed) {
         error =
-            "Unable to durably publish the automatic-update timestamp.";
+            std::string("Unable to durably publish the automatic-update ") +
+            label + " timestamp.";
         return false;
     }
     error.clear();
@@ -130,7 +139,10 @@ bool write_stamp(std::string &error)
 
 bool due(const SoftwarePreferences &prefs)
 {
-    const std::int64_t last=read_stamp();
+    const std::int64_t last =
+        std::max(
+            read_stamp(kSuccessStamp),
+            read_stamp(kAttemptStamp));
     if (last<=0) {
         std::ifstream uptime("/proc/uptime");
         double seconds_since_boot = 0.0;
@@ -230,6 +242,20 @@ int main()
         return 0;
     }
 
+    /*
+     * Persist an attempt before doing network or package work.  The timer
+     * wakes every five minutes, but due() uses the newer of success/attempt
+     * timestamps, so a persistent failure observes the configured recurring
+     * interval instead of hammering repositories on every timer activation.
+     */
+    if (!write_stamp(
+            kAttemptStamp,
+            "attempt",
+            error)) {
+        g_printerr("%s\n", error.c_str());
+        return 1;
+    }
+
     EngineServiceCore core(default_package_state_path());
     if (!core.refresh(error)) {
         g_printerr("Unable to refresh automatic update state: %s\n",error.c_str());
@@ -240,7 +266,7 @@ int main()
     updates.erase(std::remove_if(updates.begin(),updates.end(),
         [&](const PackageRecord &p){return update_is_ignored(p,prefs);}),updates.end());
     if (updates.empty()) {
-        if (!write_stamp(error)) {
+        if (!write_stamp(kSuccessStamp, "success", error)) {
             g_printerr("%s\n", error.c_str());
             return 1;
         }
@@ -294,7 +320,7 @@ int main()
             error.c_str());
         return 1;
     }
-    if (!write_stamp(error)) {
+    if (!write_stamp(kSuccessStamp, "success", error)) {
         g_printerr("%s\n", error.c_str());
         return 1;
     }
