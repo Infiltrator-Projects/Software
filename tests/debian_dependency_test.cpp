@@ -170,6 +170,40 @@ int main()
         "safe-choice"));
     assert(backtracked.remove_installed.empty());
 
+    DebianPackageVersion transitive_owner =
+        package("transitive-owner", "1.0");
+    transitive_owner.depends =
+        "first-branch | second-branch";
+    DebianPackageVersion first_branch =
+        package("first-branch", "1.0");
+    first_branch.depends =
+        "missing-transitive (>= 9.0)";
+    DebianPackageVersion second_branch =
+        package("second-branch", "1.0");
+    second_branch.depends =
+        "available-transitive";
+    const DebianResolution transitive_backtrack =
+        DebianDependencyResolver::resolve(
+            {transitive_owner},
+            {},
+            {
+                first_branch,
+                second_branch,
+                package("available-transitive", "1.0")
+            },
+            "amd64",
+            {});
+    assert(transitive_backtrack.complete());
+    assert(!contains(
+        transitive_backtrack.selected,
+        "first-branch"));
+    assert(contains(
+        transitive_backtrack.selected,
+        "second-branch"));
+    assert(contains(
+        transitive_backtrack.selected,
+        "available-transitive"));
+
     DebianPackageVersion conflict = package("new-tool", "2.0");
     conflict.conflicts = "old-tool (<< 2.0)";
     const DebianResolution conflicting =
