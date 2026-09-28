@@ -28,6 +28,7 @@ struct ExternalUpdate {
     std::string version;
     std::string detail;
     std::string ref;
+    std::string commit;
     bool user_installation{false};
     std::uint64_t download_bytes{0U};
     std::int64_t remote_revision{0};
@@ -56,7 +57,8 @@ bool apply_flatpak_updates(
 bool apply_flatpak_updates_selected(
     const std::vector<ExternalUpdate> &selected,
     std::string &error,
-    ExternalProgressCallback progress = {});
+    ExternalProgressCallback progress = {},
+    std::vector<ExternalUpdate> *completed = nullptr);
 
 bool set_flatpak_application_installed(
     std::string_view application_id,
@@ -73,7 +75,8 @@ bool apply_cinnamon_updates(
 bool apply_cinnamon_updates_selected(
     const std::vector<ExternalUpdate> &selected,
     std::string &error,
-    ExternalProgressCallback progress = {});
+    ExternalProgressCallback progress = {},
+    std::vector<ExternalUpdate> *completed = nullptr);
 
 } // namespace infiltrator::software
 

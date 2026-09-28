@@ -832,6 +832,53 @@ int report_download(
     return 0;
 }
 
+bool reviewed_spice_is_current(
+    const ExternalUpdate &reviewed,
+    std::string &error)
+{
+    const SpiceDescriptor *descriptor =
+        descriptor_for(reviewed.kind);
+    if (descriptor == nullptr) {
+        error = "Unknown Cinnamon Spice type.";
+        return false;
+    }
+
+    std::string json;
+    if (!fetch_text(
+            std::string(kSpiceRoot) + descriptor->index_path,
+            json,
+            error)) {
+        return false;
+    }
+
+    std::vector<ExternalUpdate> current;
+    if (!parse_index(*descriptor, json, current, error)) {
+        return false;
+    }
+
+    const auto found = std::find_if(
+        current.begin(), current.end(),
+        [&](const ExternalUpdate &candidate) {
+            return candidate.id == reviewed.id;
+        });
+    if (found == current.end()) {
+        error =
+            "Cinnamon Spice metadata changed after review for " +
+            reviewed.id + ".";
+        return false;
+    }
+
+    if (found->remote_revision != reviewed.remote_revision ||
+        found->ref != reviewed.ref ||
+        found->download_bytes != reviewed.download_bytes) {
+        error =
+            "Cinnamon Spice metadata changed after review for " +
+            reviewed.id + "; review the refreshed update before installing it.";
+        return false;
+    }
+    return true;
+}
+
 bool download_archive(
     const ExternalUpdate &update,
     const std::size_t index,
@@ -915,6 +962,13 @@ bool download_archive(
     const std::uintmax_t bytes = fs::file_size(target, ec);
     if (ec || bytes == 0U || bytes > kMaxArchiveBytes) {
         error = "Downloaded Cinnamon Spice archive has an invalid size.";
+        return false;
+    }
+    if (update.download_bytes > 0U &&
+        bytes != update.download_bytes) {
+        error =
+            "Downloaded Cinnamon Spice archive size no longer matches the "
+            "reviewed metadata.";
         return false;
     }
     return true;
@@ -1803,9 +1857,11 @@ bool discover_native_cinnamon_updates(
 bool apply_native_cinnamon_updates_selected(
     const std::vector<ExternalUpdate> &selected,
     std::string &error,
-    ExternalProgressCallback progress)
+    ExternalProgressCallback progress,
+    std::vector<ExternalUpdate> *completed)
 {
     error.clear();
+    if (completed != nullptr) completed->clear();
     if (selected.empty()) {
         return true;
     }
@@ -1819,6 +1875,18 @@ bool apply_native_cinnamon_updates_selected(
             !safe_component(update.id) ||
             update.remote_revision <= 0) {
             error = "Invalid Cinnamon Spice update selection.";
+            return false;
+        }
+
+        if (!reviewed_spice_is_current(update, error)) {
+            if (restart_needed) {
+                std::string restart_error;
+                if (!restart_cinnamon_if_needed(
+                        true, restart_error) &&
+                    !restart_error.empty()) {
+                    error += " " + restart_error;
+                }
+            }
             return false;
         }
 
@@ -1884,7 +1952,18 @@ bool apply_native_cinnamon_updates_selected(
         std::error_code ec;
         fs::remove_all(root, ec);
         if (!success) {
+            if (restart_needed) {
+                std::string restart_error;
+                if (!restart_cinnamon_if_needed(
+                        true, restart_error) &&
+                    !restart_error.empty()) {
+                    error += " " + restart_error;
+                }
+            }
             return false;
+        }
+        if (completed != nullptr) {
+            completed->push_back(update);
         }
     }
 

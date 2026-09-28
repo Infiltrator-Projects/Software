@@ -133,6 +133,21 @@ bool run_command(
 }
 
 
+constexpr std::size_t kMaximumCapturedOutput = 64U * 1024U;
+
+void append_bounded(
+    std::string &destination,
+    const char *data,
+    const std::size_t size)
+{
+    destination.append(data, size);
+    if (destination.size() > kMaximumCapturedOutput) {
+        destination.erase(
+            0U,
+            destination.size() - kMaximumCapturedOutput);
+    }
+}
+
 bool run_command_streaming(
     const std::vector<std::string> &arguments,
     std::string &output,
@@ -195,10 +210,12 @@ bool run_command_streaming(
             break;
         }
 
-        output.append(
+        append_bounded(
+            output,
             buffer.data(),
             static_cast<std::size_t>(bytes));
-        pending.append(
+        append_bounded(
+            pending,
             buffer.data(),
             static_cast<std::size_t>(bytes));
         for (;;) {
@@ -283,6 +300,17 @@ std::uint64_t parse_size(std::string text)
     return 0U;
 }
 
+bool valid_flatpak_commit(
+    const std::string_view commit)
+{
+    return commit.size() == 64U &&
+        std::all_of(
+            commit.begin(), commit.end(),
+            [](const unsigned char ch) {
+                return std::isxdigit(ch) != 0;
+            });
+}
+
 ExternalUpdateKind flatpak_kind(
     const std::string_view ref)
 {
@@ -291,11 +319,13 @@ ExternalUpdateKind flatpak_kind(
         : ExternalUpdateKind::flatpak_application;
 }
 
-void parse_flatpak_output(
+bool parse_flatpak_output(
     const std::string &output,
     const std::string_view installation,
+    const bool has_download_size,
     std::vector<ExternalUpdate> &updates,
-    std::set<std::string> &seen)
+    std::set<std::string> &seen,
+    std::string &error)
 {
     std::size_t start = 0U;
     while (start <= output.size()) {
@@ -321,10 +351,24 @@ void parse_flatpak_output(
                 if (fields.size() > 2U) {
                     update.version = trim(fields[2]);
                 }
-                if (fields.size() > 3U) {
+                const std::size_t commit_index =
+                    has_download_size ? 4U : 3U;
+                if (has_download_size &&
+                    fields.size() > 3U) {
                     update.download_bytes =
                         parse_size(
                             std::string(fields[3]));
+                }
+                if (fields.size() <= commit_index) {
+                    error =
+                        "Flatpak update metadata did not include a commit identity.";
+                    return false;
+                }
+                update.commit = trim(fields[commit_index]);
+                if (!valid_flatpak_commit(update.commit)) {
+                    error =
+                        "Flatpak update metadata returned an invalid commit identity.";
+                    return false;
                 }
 
                 const std::string ref =
@@ -357,6 +401,7 @@ void parse_flatpak_output(
         }
         start = newline + 1U;
     }
+    return true;
 }
 
 bool discover_flatpak_installation(
@@ -369,7 +414,7 @@ bool discover_flatpak_installation(
         "flatpak",
         "remote-ls",
         "--updates",
-        "--columns=application,ref,version,download-size"
+        "--columns=application,ref,version,download-size,commit"
     };
     if (user) {
         command.insert(
@@ -393,7 +438,7 @@ bool discover_flatpak_installation(
          * installation as unavailable.
          */
         command.back() =
-            "--columns=application,ref,version";
+            "--columns=application,ref,version,commit";
         if (!run_command(
                 command,
                 output,
@@ -403,13 +448,28 @@ bool discover_flatpak_installation(
             }
             return false;
         }
+        if (!parse_flatpak_output(
+                output,
+                user ? "User" : "System",
+                false,
+                updates,
+                seen,
+                error)) {
+            return false;
+        }
+        error.clear();
+        return true;
     }
 
-    parse_flatpak_output(
-        output,
-        user ? "User" : "System",
-        updates,
-        seen);
+    if (!parse_flatpak_output(
+            output,
+            user ? "User" : "System",
+            true,
+            updates,
+            seen,
+            error)) {
+        return false;
+    }
     error.clear();
     return true;
 }
@@ -730,10 +790,11 @@ bool apply_cinnamon_updates(
 bool apply_cinnamon_updates_selected(
     const std::vector<ExternalUpdate> &selected,
     std::string &error,
-    ExternalProgressCallback progress)
+    ExternalProgressCallback progress,
+    std::vector<ExternalUpdate> *completed)
 {
     return apply_native_cinnamon_updates_selected(
-        selected, error, std::move(progress));
+        selected, error, std::move(progress), completed);
 }
 
 bool set_flatpak_application_installed(
@@ -803,9 +864,11 @@ bool set_flatpak_application_installed(
 bool apply_flatpak_updates_selected(
     const std::vector<ExternalUpdate> &selected,
     std::string &error,
-    ExternalProgressCallback progress)
+    ExternalProgressCallback progress,
+    std::vector<ExternalUpdate> *completed)
 {
     error.clear();
+    if (completed != nullptr) completed->clear();
     if (selected.empty()) return true;
     if (!program_available("flatpak")) {
         error="Flatpak is unavailable; selected updates were not installed.";
@@ -815,8 +878,9 @@ bool apply_flatpak_updates_selected(
         if (update.backend != "Flatpak" ||
             (update.ref.rfind("app/",0U) != 0U &&
              update.ref.rfind("runtime/",0U) != 0U) ||
-            update.ref.find_first_of(" \t\r\n") != std::string::npos) {
-            error="Invalid Flatpak update selection.";
+            update.ref.find_first_of(" \t\r\n") != std::string::npos ||
+            !valid_flatpak_commit(update.commit)) {
+            error="Invalid or unpinned Flatpak update selection.";
             return false;
         }
     }
@@ -840,6 +904,7 @@ bool apply_flatpak_updates_selected(
         std::vector<std::string> command{
             "flatpak","update","-y","--noninteractive",
             update.user_installation ? "--user" : "--system",
+            "--commit=" + update.commit,
             "--", update.ref};
         std::string output;
         if (!run_command_streaming(
@@ -855,6 +920,9 @@ bool apply_flatpak_updates_selected(
                     }
                 })) {
             return false;
+        }
+        if (completed != nullptr) {
+            completed->push_back(update);
         }
         if (progress) {
             progress(

@@ -58,8 +58,8 @@ int main()
       echo 'System Flatpak repository is unavailable' >&2
       exit 1
     fi
-    printf 'org.example.App\tapp/org.example.App/x86_64/stable\t2.0\t1234\n'
-    printf 'org.example.Runtime\truntime/org.example.Runtime/x86_64/24.08\t24.08\t2345\n'
+    printf 'org.example.App\tapp/org.example.App/x86_64/stable\t2.0\t1234\t1111111111111111111111111111111111111111111111111111111111111111\n'
+    printf 'org.example.Runtime\truntime/org.example.Runtime/x86_64/24.08\t24.08\t2345\t2222222222222222222222222222222222222222222222222222222222222222\n'
     exit 0
     ;;
   *uninstall*--unused*)
@@ -126,11 +126,18 @@ exit 0
     assert(selected.size() == 2U);
     assert(selected[0].ref.rfind("app/",0U) == 0U);
     assert(selected[1].ref.rfind("runtime/",0U) == 0U);
-    assert(apply_flatpak_updates_selected(selected, error));
+    assert(selected[0].commit == "1111111111111111111111111111111111111111111111111111111111111111");
+    assert(selected[1].commit == "2222222222222222222222222222222222222222222222222222222222222222");
+    std::vector<ExternalUpdate> completed;
+    assert(apply_flatpak_updates_selected(
+        selected, error, {}, &completed));
+    assert(completed.size() == 2U);
     const std::string selected_trace = read_all(trace);
-    assert(selected_trace.find("--system -- app/org.example.App/") !=
+    assert(selected_trace.find(
+        "--system --commit=1111111111111111111111111111111111111111111111111111111111111111 -- app/org.example.App/") !=
         std::string::npos);
-    assert(selected_trace.find("--user -- runtime/org.example.Runtime/") !=
+    assert(selected_trace.find(
+        "--user --commit=2222222222222222222222222222222222222222222222222222222222222222 -- runtime/org.example.Runtime/") !=
         std::string::npos);
     assert(selected_trace.find("flatpak-uninstall") == std::string::npos);
     ExternalUpdate invalid = selected.front();

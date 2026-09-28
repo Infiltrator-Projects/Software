@@ -16,7 +16,8 @@ bool discover_native_cinnamon_updates(
 bool apply_native_cinnamon_updates_selected(
     const std::vector<ExternalUpdate> &selected,
     std::string &error,
-    ExternalProgressCallback progress = {});
+    ExternalProgressCallback progress = {},
+    std::vector<ExternalUpdate> *completed = nullptr);
 
 } // namespace infiltrator::software
 

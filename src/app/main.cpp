@@ -7583,6 +7583,7 @@ struct ExternalApplyResult {
     bool flatpak{false};
     bool success{false};
     std::vector<ExternalUpdate> selected;
+    std::vector<ExternalUpdate> completed;
     std::string error;
 };
 
@@ -7641,7 +7642,8 @@ void external_apply_worker(
                 result->error,
                 [task](std::string_view message) {
                     publish_external_progress(task, message);
-                });
+                },
+                &result->completed);
     } else {
         result->selected = data->selected;
         result->success =
@@ -7650,7 +7652,8 @@ void external_apply_worker(
                 result->error,
                 [task](std::string_view message) {
                     publish_external_progress(task, message);
-                });
+                },
+                &result->completed);
     }
 
     g_task_return_pointer(
@@ -7694,9 +7697,9 @@ void external_apply_complete(
         gtk_widget_set_visible(state->external_updates_spinner, false);
     }
 
-    if (result->success) {
+    if (!result->completed.empty()) {
         TransactionPlan history_plan;
-        for (const ExternalUpdate &update : result->selected) {
+        for (const ExternalUpdate &update : result->completed) {
             TransactionItem item;
             item.package_id =
                 update.backend + ":" + update.id;
@@ -7710,15 +7713,17 @@ void external_apply_complete(
             history_plan.items.emplace_back(
                 std::move(item));
         }
-        if (!history_plan.items.empty()) {
-            record_transaction_history(
-                history_plan,
-                true,
-                result->flatpak
+        record_transaction_history(
+            history_plan,
+            true,
+            result->success
+                ? (result->flatpak
                     ? "Selected Flatpak updates completed successfully."
-                    : "Selected Cinnamon and Nemo updates completed successfully.");
-        }
+                    : "Selected Cinnamon and Nemo updates completed successfully.")
+                : "External update batch stopped after partially successful work; completed items are recorded here.");
+    }
 
+    if (result->success) {
         if (state->external_updates_status != nullptr) {
             gtk_label_set_text(
                 GTK_LABEL(
@@ -7747,7 +7752,7 @@ void external_apply_complete(
             message.c_str());
     }
     delete result;
-    rebuild_external_updates(state);
+    refresh_updates(state, false);
 }
 
 void begin_external_apply(WindowState *state, const bool flatpak)
