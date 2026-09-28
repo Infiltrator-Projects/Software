@@ -125,37 +125,43 @@ std::string read_override()
 
 std::filesystem::path transaction_history_path()
 {
-    const char *data = g_get_user_data_dir();
-    if (data == nullptr || *data == '\0') {
-        return {};
-    }
-    return std::filesystem::path(data) /
-           "infiltrator-software" /
-           "history.sqlite3";
+    const std::string path =
+        infiltrator::software::user_transaction_history_path();
+    return path.empty()
+        ? std::filesystem::path{}
+        : std::filesystem::path(path);
 }
 
 std::int64_t last_successful_update()
 {
-    const std::filesystem::path path =
-        transaction_history_path();
-    if (path.empty() ||
-        !std::filesystem::exists(path)) {
-        return 0;
-    }
-
-    TransactionHistoryStore store(path.string());
-    std::string error;
-    const auto items =
-        store.load_recent(100U, error);
     std::int64_t latest = 0;
-    for (const auto &item : items) {
-        if (item.success) {
-            latest =
-                std::max(
-                    latest,
-                    item.completed_at_unix);
-        }
-    }
+    const auto consume =
+        [&](const std::string &path) {
+            if (path.empty() ||
+                !std::filesystem::exists(path)) {
+                return;
+            }
+            TransactionHistoryStore store(path);
+            std::string error;
+            const auto items =
+                store.load_recent(100U, error);
+            if (!error.empty()) {
+                return;
+            }
+            for (const auto &item : items) {
+                if (item.success) {
+                    latest =
+                        std::max(
+                            latest,
+                            item.completed_at_unix);
+                }
+            }
+        };
+
+    consume(
+        infiltrator::software::user_transaction_history_path());
+    consume(
+        infiltrator::software::system_transaction_history_path());
     return latest;
 }
 
