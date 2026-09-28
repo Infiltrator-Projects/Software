@@ -594,16 +594,20 @@ bool relation_hits_package(
     const DebianDependencyAlternative &relation,
     const DebianPackageVersion &package)
 {
-    return relation.package == package.package &&
-           version_matches(package.version, relation);
+    return
+        (relation.package == package.package &&
+         version_matches(package.version, relation)) ||
+        candidate_provides(package, relation);
 }
 
 bool relation_hits_installed(
     const DebianDependencyAlternative &relation,
     const PackageRecord &package)
 {
-    return base_package(package.package_name) == relation.package &&
-           version_matches(package.installed_version, relation);
+    return
+        (base_package(package.package_name) == relation.package &&
+         version_matches(package.installed_version, relation)) ||
+        installed_provides(package, relation, {});
 }
 
 const DebianPackageVersion *best_conflict_resolution_candidate(
