@@ -7,6 +7,7 @@
 #include "catalogue/system_catalogue.hpp"
 #include "client/engine_client.hpp"
 #include "core/model.hpp"
+#include "core/exact_transaction_spec.hpp"
 #include "core/transaction_history.hpp"
 #include "core/update_freshness.hpp"
 #include "core/update_policy.hpp"
@@ -578,50 +579,6 @@ std::string display_disk_delta(const std::int64_t bytes)
             ? static_cast<std::uint64_t>(-(bytes + 1)) + 1U
             : static_cast<std::uint64_t>(bytes);
     return std::string(negative ? "−" : "+") + display_size(magnitude);
-}
-
-bool exact_plan_specs(
-    const TransactionPlan &plan,
-    std::vector<std::string> &specs,
-    std::string &error)
-{
-    specs.clear();
-    error.clear();
-    if (plan.items.empty()) {
-        error = "The resolved transaction is empty.";
-        return false;
-    }
-    specs.reserve(plan.items.size());
-    for (const auto &item : plan.items) {
-        if (item.package_id.empty()) {
-            error =
-                "The resolved transaction contains a package without a stable "
-                "identity.";
-            specs.clear();
-            return false;
-        }
-        if (item.action == TransactionAction::remove) {
-            if (item.from_version.empty()) {
-                error =
-                    "The resolved removal contains a package without its exact "
-                    "installed version.";
-                specs.clear();
-                return false;
-            }
-            specs.emplace_back(
-                "remove:" + item.package_id + "=" + item.from_version);
-            continue;
-        }
-        if (item.to_version.empty()) {
-            error =
-                "The resolved transaction contains a package without an exact "
-                "target version.";
-            specs.clear();
-            return false;
-        }
-        specs.emplace_back(item.package_id + "=" + item.to_version);
-    }
-    return true;
 }
 
 std::string transaction_item_text(
@@ -5816,7 +5773,7 @@ void start_discover_install_operation(
 
     std::vector<std::string> specs;
     std::string plan_error;
-    if (!exact_plan_specs(operation->plan, specs, plan_error)) {
+    if (!exact_transaction_specs(operation->plan, specs, plan_error)) {
         if (operation->status != nullptr) {
             gtk_label_set_text(
                 GTK_LABEL(operation->status),
@@ -8683,7 +8640,7 @@ void begin_apply_updates(WindowState *state)
 
     std::vector<std::string> specs;
     std::string plan_error;
-    if (!exact_plan_specs(
+    if (!exact_transaction_specs(
             *state->pending_update_plan, specs, plan_error)) {
         state->updates_busy = false;
         state->pending_update_plan.reset();
