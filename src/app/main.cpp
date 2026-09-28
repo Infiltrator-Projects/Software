@@ -3,6 +3,7 @@
 #include "app/kernel_manager.hpp"
 #include "app/history_controller.hpp"
 #include "app/history_view.hpp"
+#include "app/installed_inventory.hpp"
 #include "backends/apt/apt_backend.hpp"
 #include "catalogue/repository_catalogue.hpp"
 #include "catalogue/catalogue_snapshot_store.hpp"
@@ -82,6 +83,7 @@ using infiltrator::software::HistoryController;
 using infiltrator::software::create_history_controller_page;
 using infiltrator::software::history_timestamp;
 using infiltrator::software::refresh_history_controller;
+using infiltrator::software::read_installed_packages;
 
 struct WindowState {
     GtkWindow *window{};
@@ -2012,54 +2014,6 @@ std::string package_key(std::string value)
         value.erase(colon);
     }
     return value;
-}
-
-/*
- * Read installed state from the shared package engine first. The compatibility
- * fallback is deliberately limited to AptBackend::list_installed(), which is
- * already an in-process /var/lib/dpkg/status parser and therefore does not
- * spawn an APT process.
- */
-std::vector<PackageRecord> read_installed_packages(
-    std::string &error,
-    bool *from_engine = nullptr)
-{
-    if (from_engine != nullptr) {
-        *from_engine = false;
-    }
-
-    EngineClient engine;
-    std::vector<PackageRecord> packages;
-    std::string engine_error;
-    if (engine.list_installed(packages, engine_error)) {
-        for (PackageRecord &package : packages) {
-            infiltrator::software::classify_package_role(package);
-        }
-        if (from_engine != nullptr) {
-            *from_engine = true;
-        }
-        error.clear();
-        return packages;
-    }
-
-    AptBackend fallback;
-    std::string fallback_error;
-    packages = fallback.list_installed(fallback_error);
-    if (fallback_error.empty()) {
-        for (PackageRecord &package : packages) {
-            infiltrator::software::classify_package_role(package);
-        }
-        error.clear();
-        return packages;
-    }
-
-    error = fallback_error;
-    if (!engine_error.empty()) {
-        error =
-            "Shared engine unavailable: " + engine_error +
-            " Direct Debian-state fallback failed: " + fallback_error;
-    }
-    return {};
 }
 
 void discover_worker(
