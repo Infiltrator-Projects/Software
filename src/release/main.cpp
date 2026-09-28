@@ -6,6 +6,7 @@
 #include <glib.h>
 
 #include <algorithm>
+#include <charconv>
 #include <cerrno>
 #include <cstring>
 #include <cstdio>
@@ -609,6 +610,7 @@ struct ReleaseJournal {
     std::string current_codename;
     std::string target_codename;
     std::string phase;
+    std::vector<std::string> approved_specs;
     bool destination_existed{false};
     bool obsolete_existed{false};
 };
@@ -628,14 +630,28 @@ bool write_release_journal(
 {
     std::ostringstream content;
     content
-        << "VERSION=1\n"
+        << "VERSION=2\n"
         << "CURRENT=" << journal.current_codename << "\n"
         << "TARGET=" << journal.target_codename << "\n"
         << "PHASE=" << journal.phase << "\n"
         << "DESTINATION_EXISTED="
         << (journal.destination_existed ? "1" : "0") << "\n"
         << "OBSOLETE_EXISTED="
-        << (journal.obsolete_existed ? "1" : "0") << "\n";
+        << (journal.obsolete_existed ? "1" : "0") << "\n"
+        << "PLAN_COUNT=" << journal.approved_specs.size() << "\n";
+    for (std::size_t index = 0U;
+         index < journal.approved_specs.size();
+         ++index) {
+        const std::string &spec =
+            journal.approved_specs[index];
+        if (spec.empty() ||
+            spec.find_first_of("\r\n") != std::string::npos) {
+            error =
+                "Release-upgrade recovery plan contains an invalid package specification.";
+            return false;
+        }
+        content << "SPEC_" << index << "=" << spec << "\n";
+    }
     return durable_write_text(
         kReleaseJournal,
         content.str(),
@@ -672,7 +688,8 @@ bool load_release_journal(
     const auto obsolete =
         values.find("OBSOLETE_EXISTED");
     if (version == values.end() ||
-        version->second != "1" ||
+        (version->second != "1" &&
+         version->second != "2") ||
         current == values.end() ||
         target == values.end() ||
         phase == values.end() ||
@@ -700,6 +717,48 @@ bool load_release_journal(
         destination->second == "1";
     journal.obsolete_existed =
         obsolete->second == "1";
+
+    if (version->second == "2") {
+        const auto count = values.find("PLAN_COUNT");
+        if (count == values.end() ||
+            count->second.empty()) {
+            error =
+                "Release-upgrade recovery plan is missing its package count.";
+            return false;
+        }
+
+        std::size_t plan_count = 0U;
+        const char *first = count->second.data();
+        const char *last = first + count->second.size();
+        const auto parsed =
+            std::from_chars(first, last, plan_count);
+        if (parsed.ec != std::errc{} ||
+            parsed.ptr != last ||
+            plan_count > 100000U) {
+            error =
+                "Release-upgrade recovery plan has an invalid package count.";
+            return false;
+        }
+
+        journal.approved_specs.clear();
+        journal.approved_specs.reserve(plan_count);
+        for (std::size_t index = 0U;
+             index < plan_count;
+             ++index) {
+            const auto spec =
+                values.find(
+                    "SPEC_" + std::to_string(index));
+            if (spec == values.end() ||
+                spec->second.empty() ||
+                spec->second.find_first_of("\r\n") !=
+                    std::string::npos) {
+                error =
+                    "Release-upgrade recovery plan is incomplete or malformed.";
+                return false;
+            }
+            journal.approved_specs.push_back(spec->second);
+        }
+    }
     return true;
 }
 
@@ -731,7 +790,8 @@ SourcePublication publication_from_journal(
 ReleaseJournal make_release_journal(
     const ReleaseInfo &release,
     const SourcePublication &publication,
-    const std::string_view phase)
+    const std::string_view phase,
+    std::vector<std::string> approved_specs = {})
 {
     ReleaseJournal journal;
     journal.current_codename =
@@ -740,6 +800,8 @@ ReleaseJournal make_release_journal(
         release.target_codename;
     journal.phase =
         std::string(phase);
+    journal.approved_specs =
+        std::move(approved_specs);
     journal.destination_existed =
         publication.destination_existed;
     journal.obsolete_existed =
@@ -1087,7 +1149,7 @@ bool recover_pending_release(std::string &error)
         read_assignments("/etc/linuxmint/info");
     const auto codename =
         current.find("CODENAME");
-    const std::string active_codename =
+    std::string active_codename =
         codename == current.end()
             ? std::string{}
             : codename->second;
@@ -1106,23 +1168,70 @@ bool recover_pending_release(std::string &error)
     }
 
     /*
-     * apply-plan can fail or the machine can die after dpkg has changed an
-     * unknown subset of the approved transaction.  Never infer safety from
-     * /etc/linuxmint/info alone while the journal still says mutation was in
-     * progress.
+     * A packages-applying journal from format 2 carries the exact reviewed
+     * package plan. The privileged helper is deliberately idempotent: it
+     * inspects dpkg first, removes already-satisfied items from its validation
+     * set, revalidates the remaining exact versions against refreshed metadata,
+     * and applies only a plan that still matches. That makes interruption
+     * recovery deterministic without ever rolling repositories backward across
+     * a possibly partial dpkg transaction.
+     *
+     * Format-1 journals predate persisted plans. They remain fail-closed
+     * because there is no safe basis for reconstructing the approved mutation.
      */
     if (journal.phase == "packages-applying") {
-        error =
-            "A release upgrade was interrupted while packages were being "
-            "mutated. Recovery state has been preserved; refusing to roll "
-            "repositories backward or discard evidence across a possibly "
-            "partial package upgrade.";
-        return false;
+        if (journal.approved_specs.empty()) {
+            error =
+                "A legacy release upgrade was interrupted while packages were "
+                "being mutated. Its recovery journal does not contain the exact "
+                "approved package plan, so automatic recovery cannot safely "
+                "guess the remaining work.";
+            return false;
+        }
+
+        std::vector<std::string> command{
+            "/usr/libexec/infiltrator-software-update-helper",
+            "apply-plan"};
+        command.insert(
+            command.end(),
+            journal.approved_specs.begin(),
+            journal.approved_specs.end());
+        std::string resume_error;
+        if (!run_command(
+                std::move(command),
+                resume_error)) {
+            error =
+                "The interrupted release package plan is still incomplete: " +
+                resume_error +
+                " Recovery state and target repositories were preserved for "
+                "another deterministic retry.";
+            return false;
+        }
+
+        journal.phase = "packages-applied";
+        if (!write_release_journal(
+                journal,
+                error)) {
+            error =
+                "The interrupted release package plan completed, but recovery "
+                "state could not be advanced to packages-applied: " +
+                error;
+            return false;
+        }
+
+        const auto resumed =
+            read_assignments("/etc/linuxmint/info");
+        const auto resumed_codename =
+            resumed.find("CODENAME");
+        active_codename =
+            resumed_codename == resumed.end()
+                ? std::string{}
+                : resumed_codename->second;
     }
 
     /*
      * packages-applied is written only after the exact helper returned
-     * success.  Resume idempotent finalization after a crash, then advance to
+     * success. Resume idempotent finalization after a crash, then advance to
      * complete before deleting recovery evidence.
      */
     if (journal.phase == "packages-applied") {
@@ -1310,7 +1419,8 @@ int apply_inhibited_command(int argc,char **argv)
             make_release_journal(
                 release,
                 publication,
-                "packages-applying"),
+                "packages-applying",
+                approved),
             error)) {
         const std::string journal_error = error;
         std::string rollback_error;
@@ -1364,7 +1474,8 @@ int apply_inhibited_command(int argc,char **argv)
             make_release_journal(
                 release,
                 publication,
-                "packages-applied"),
+                "packages-applied",
+                approved),
             error)) {
         std::cerr
             << "Release packages were applied, but durable recovery state "
