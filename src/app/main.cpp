@@ -3418,7 +3418,9 @@ struct InstalledResult {
     unsigned int generation{0U};
     std::vector<PackageRecord> records;
     std::string error;
+    std::string flatpak_warning;
     bool from_engine{false};
+    std::size_t flatpak_count{0U};
 };
 
 struct InstalledTaskData {
@@ -3438,6 +3440,31 @@ void installed_worker(
         read_installed_packages(
             result->error,
             &result->from_engine);
+
+    SystemCatalogue system_catalogue;
+    std::string flatpak_error;
+    std::vector<PackageRecord> flatpaks =
+        system_catalogue.installed_flatpaks(
+            flatpak_error);
+    result->flatpak_count = flatpaks.size();
+    result->flatpak_warning =
+        flatpak_error;
+    result->records.insert(
+        result->records.end(),
+        std::make_move_iterator(
+            flatpaks.begin()),
+        std::make_move_iterator(
+            flatpaks.end()));
+    std::sort(
+        result->records.begin(),
+        result->records.end(),
+        [](const PackageRecord &left,
+           const PackageRecord &right) {
+            if (left.name != right.name) {
+                return left.name < right.name;
+            }
+            return left.source < right.source;
+        });
 
     g_task_return_pointer(
         task,
@@ -3502,10 +3529,16 @@ void installed_complete(
         } else {
             message
                 << result->records.size()
-                << " installed packages read "
+                << " installed software items read from "
                 << (result->from_engine
-                        ? "from the shared native package engine."
-                        : "directly from Debian package state while the shared engine state is unavailable.");
+                        ? "the shared native package engine"
+                        : "Debian package state")
+                << " and Flatpak.";
+            if (!result->flatpak_warning.empty()) {
+                message
+                    << " Flatpak inventory warning: "
+                    << result->flatpak_warning;
+            }
         }
         gtk_label_set_text(
             GTK_LABEL(state->installed_status),
@@ -3521,8 +3554,12 @@ void installed_complete(
         gtk_label_set_text(
             GTK_LABEL(state->installed_backend),
             result->from_engine
-                ? "Native engine"
-                : "Debian state");
+                ? (result->flatpak_count > 0U
+                       ? "Native + Flatpak"
+                       : "Native engine")
+                : (result->flatpak_count > 0U
+                       ? "Debian + Flatpak"
+                       : "Debian state"));
     }
     if (state->backend_state != nullptr) {
         gtk_label_set_text(
