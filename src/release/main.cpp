@@ -839,14 +839,42 @@ bool publish_target_sources(
         return false;
     }
 
+    if (!write_release_journal(
+            make_release_journal(
+                release,
+                publication,
+                "prepared"),
+            error)) {
+        error =
+            "Unable to journal the release-upgrade source transition: " +
+            error;
+        return false;
+    }
+
     if (!durable_copy_file(
             release.repositories,
             publication.destination,
             0644,
             error)) {
-        error =
+        const std::string publish_error =
             "Unable to activate target Mint repositories: " +
             error;
+        std::string rollback_error;
+        if (rollback_target_sources(
+                publication,
+                rollback_error,
+                false)) {
+            std::string cleanup_error;
+            (void)cleanup_release_artifacts(
+                publication,
+                cleanup_error);
+            error = publish_error;
+        } else {
+            error =
+                publish_error +
+                "; rollback also failed: " +
+                rollback_error;
+        }
         return false;
     }
 
@@ -864,10 +892,46 @@ bool publish_target_sources(
                 "; rollback also failed: " +
                 rollback_error;
         } else {
+            std::string cleanup_error;
+            (void)cleanup_release_artifacts(
+                publication,
+                cleanup_error);
             error =
                 "Unable to retire legacy Mint source repositories: " +
                 remove_error +
                 "; previous repository configuration was restored.";
+        }
+        return false;
+    }
+
+    if (!write_release_journal(
+            make_release_journal(
+                release,
+                publication,
+                "sources-switched"),
+            error)) {
+        const std::string journal_error = error;
+        std::string rollback_error;
+        if (rollback_target_sources(
+                publication,
+                rollback_error,
+                true)) {
+            std::string cleanup_error;
+            (void)cleanup_release_artifacts(
+                publication,
+                cleanup_error);
+            error =
+                "Target repositories were activated, but the durable "
+                "release-upgrade journal could not be advanced: " +
+                journal_error +
+                "; previous repositories were restored.";
+        } else {
+            error =
+                "Target repositories were activated, but the durable "
+                "release-upgrade journal could not be advanced: " +
+                journal_error +
+                "; rollback also failed: " +
+                rollback_error;
         }
         return false;
     }
