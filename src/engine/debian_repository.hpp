@@ -17,7 +17,11 @@ struct DebianRepositorySource {
     std::string suite;
     std::vector<std::string> components;
     std::vector<std::string> keyrings;
+    std::vector<std::string> inline_keys;
+    std::vector<std::string> allowed_fingerprints;
     std::vector<std::string> architectures;
+    std::vector<std::string> architecture_additions;
+    std::vector<std::string> architecture_removals;
     bool verify_signatures{true};
     bool check_valid_until{true};
     bool check_date{true};
