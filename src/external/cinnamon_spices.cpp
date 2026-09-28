@@ -1245,11 +1245,182 @@ bool compile_translations(
 }
 
 struct PublishedPath {
+    fs::path staged;
     fs::path destination;
     fs::path backup;
     bool had_existing{false};
     bool new_present{false};
 };
+
+bool write_all_fd(
+    const int fd,
+    const std::string_view content)
+{
+    std::size_t offset = 0U;
+    while (offset < content.size()) {
+        const ssize_t written =
+            write(
+                fd,
+                content.data() + offset,
+                content.size() - offset);
+        if (written > 0) {
+            offset += static_cast<std::size_t>(written);
+            continue;
+        }
+        if (written < 0 && errno == EINTR) {
+            continue;
+        }
+        return false;
+    }
+    return true;
+}
+
+bool sync_directory_path(
+    const fs::path &directory)
+{
+    const int fd =
+        open(
+            directory.c_str(),
+            O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+    if (fd < 0) {
+        return false;
+    }
+    const bool synced = fsync(fd) == 0;
+    const bool closed = close(fd) == 0;
+    return synced && closed;
+}
+
+bool write_spice_journal(
+    const fs::path &journal,
+    const std::vector<PublishedPath> &intents,
+    std::string &error)
+{
+    std::ostringstream content;
+    content << "INFLTR-SPICE-JOURNAL 1\n";
+    for (const PublishedPath &intent : intents) {
+        content
+            << std::quoted(intent.destination.string()) << ' '
+            << std::quoted(intent.backup.string()) << ' '
+            << std::quoted(intent.staged.string()) << ' '
+            << (intent.had_existing ? 1 : 0) << '\n';
+    }
+
+    std::string pattern =
+        (journal.parent_path() /
+         ".infiltrator-spice-journal-XXXXXX").string();
+    std::vector<char> writable(
+        pattern.begin(),
+        pattern.end());
+    writable.push_back('\0');
+    const int fd = mkstemp(writable.data());
+    if (fd < 0) {
+        error = "Unable to create Cinnamon Spice recovery journal.";
+        return false;
+    }
+
+    const fs::path temporary(writable.data());
+    const std::string bytes = content.str();
+    bool ok =
+        fchmod(fd, 0600) == 0 &&
+        write_all_fd(fd, bytes) &&
+        fsync(fd) == 0;
+    if (close(fd) != 0) {
+        ok = false;
+    }
+    if (!ok ||
+        rename(temporary.c_str(), journal.c_str()) != 0 ||
+        !sync_directory_path(journal.parent_path())) {
+        std::error_code ignored;
+        fs::remove(temporary, ignored);
+        error =
+            "Unable to durably publish Cinnamon Spice recovery journal.";
+        return false;
+    }
+    return true;
+}
+
+bool clear_spice_journal(
+    const fs::path &journal,
+    std::string &error)
+{
+    std::error_code ec;
+    if (!fs::exists(journal, ec)) {
+        if (ec) {
+            error =
+                "Unable to inspect Cinnamon Spice recovery journal: " +
+                ec.message();
+            return false;
+        }
+        return true;
+    }
+    if (!fs::remove(journal, ec) || ec) {
+        error =
+            "Unable to remove completed Cinnamon Spice recovery journal: " +
+            ec.message();
+        return false;
+    }
+    if (!sync_directory_path(journal.parent_path())) {
+        error =
+            "Cinnamon Spice recovery journal was removed, but its directory could not be synchronized.";
+        return false;
+    }
+    return true;
+}
+
+bool load_spice_journal(
+    const fs::path &journal,
+    std::vector<PublishedPath> &intents,
+    std::string &error)
+{
+    intents.clear();
+    std::error_code ec;
+    if (!fs::exists(journal, ec)) {
+        if (ec) {
+            error =
+                "Unable to inspect Cinnamon Spice recovery journal: " +
+                ec.message();
+            return false;
+        }
+        return true;
+    }
+
+    std::ifstream input(journal, std::ios::binary);
+    if (!input) {
+        error = "Unable to read Cinnamon Spice recovery journal.";
+        return false;
+    }
+    std::string header;
+    std::getline(input, header);
+    if (header != "INFLTR-SPICE-JOURNAL 1") {
+        error =
+            "Cinnamon Spice recovery journal has an unsupported format.";
+        return false;
+    }
+
+    while (input) {
+        std::string destination;
+        std::string backup;
+        std::string staged;
+        int had_existing = 0;
+        if (!(input >> std::quoted(destination))) {
+            break;
+        }
+        if (!(input >> std::quoted(backup) >>
+              std::quoted(staged) >> had_existing) ||
+            (had_existing != 0 && had_existing != 1)) {
+            error = "Cinnamon Spice recovery journal is malformed.";
+            intents.clear();
+            return false;
+        }
+        PublishedPath intent;
+        intent.destination = destination;
+        intent.backup = backup;
+        intent.staged = staged;
+        intent.had_existing = had_existing != 0;
+        intents.emplace_back(std::move(intent));
+    }
+    return true;
+}
 
 fs::path backup_path(
     const fs::path &destination,
@@ -1296,6 +1467,7 @@ bool exchange_paths(
 bool publish_path(
     const fs::path *staged,
     const fs::path &destination,
+    const fs::path &journal,
     std::vector<PublishedPath> &published,
     std::string &error)
 {
@@ -1310,27 +1482,41 @@ bool publish_path(
     }
 
     PublishedPath change;
-    change.destination = destination;
-    change.backup =
+    if (staged != nullptr) {
+        change.staged = *staged;
+    }
+    journalled.destination = destination;
+    journalled.backup =
         backup_path(
             destination,
             published.size());
-    if (fs::exists(change.backup, ec) || ec) {
+    if (fs::exists(journalled.backup, ec) || ec) {
         error =
             "A stale Cinnamon Spice transaction backup blocks installation: " +
-            change.backup.string();
+            journalled.backup.string();
         return false;
     }
 
-    change.had_existing =
+    journalled.had_existing =
         fs::exists(destination, ec);
     if (ec) {
         error =
             "Unable to inspect the existing Cinnamon Spice installation.";
         return false;
     }
+
+    published.emplace_back(change);
+    if (!write_spice_journal(
+            journal,
+            published,
+            error)) {
+        published.pop_back();
+        return false;
+    }
+    PublishedPath &journalled = published.back();
+
     if (staged != nullptr) {
-        if (change.had_existing) {
+        if (journalled.had_existing) {
             /*
              * Linux renameat2(RENAME_EXCHANGE) keeps one complete version at
              * the live destination throughout the replacement. A crash can
@@ -1348,7 +1534,7 @@ bool publish_path(
 
             fs::rename(
                 *staged,
-                change.backup,
+                journalled.backup,
                 ec);
             if (ec) {
                 const std::string backup_error =
@@ -1384,11 +1570,11 @@ bool publish_path(
                 return false;
             }
         }
-        change.new_present = true;
-    } else if (change.had_existing) {
+        journalled.new_present = true;
+    } else if (journalled.had_existing) {
         fs::rename(
             destination,
-            change.backup,
+            journalled.backup,
             ec);
         if (ec) {
             error =
@@ -1398,9 +1584,129 @@ bool publish_path(
         }
     }
 
-    published.emplace_back(
-        std::move(change));
     return true;
+}
+
+bool recover_spice_journal(
+    const fs::path &journal,
+    std::string &error)
+{
+    std::vector<PublishedPath> intents;
+    if (!load_spice_journal(
+            journal,
+            intents,
+            error)) {
+        return false;
+    }
+    if (intents.empty()) {
+        return true;
+    }
+
+    std::error_code ec;
+    for (auto iterator = intents.rbegin();
+         iterator != intents.rend();
+         ++iterator) {
+        PublishedPath &intent = *iterator;
+        const bool backup_exists =
+            fs::exists(intent.backup, ec);
+        if (ec) {
+            error =
+                "Unable to inspect Cinnamon Spice rollback copy: " +
+                ec.message();
+            return false;
+        }
+
+        const bool destination_exists =
+            fs::exists(intent.destination, ec);
+        if (ec) {
+            error =
+                "Unable to inspect Cinnamon Spice live path during recovery: " +
+                ec.message();
+            return false;
+        }
+
+        const bool staged_exists =
+            !intent.staged.empty() &&
+            fs::exists(intent.staged, ec);
+        if (ec) {
+            error =
+                "Unable to inspect Cinnamon Spice staged path during recovery: " +
+                ec.message();
+            return false;
+        }
+
+        if (intent.had_existing) {
+            if (backup_exists) {
+                if (destination_exists) {
+                    fs::remove_all(intent.destination, ec);
+                    if (ec) {
+                        error =
+                            "Unable to remove partially published Cinnamon Spice path during recovery: " +
+                            ec.message();
+                        return false;
+                    }
+                }
+                fs::rename(
+                    intent.backup,
+                    intent.destination,
+                    ec);
+                if (ec) {
+                    error =
+                        "Unable to restore Cinnamon Spice rollback copy: " +
+                        ec.message();
+                    return false;
+                }
+            } else if (staged_exists && destination_exists) {
+                /*
+                 * A crash may occur after RENAME_EXCHANGE but before the old
+                 * live tree is renamed to its backup. In that narrow window
+                 * the staged path contains the previous live copy.
+                 */
+                std::string exchange_error;
+                if (!exchange_paths(
+                        intent.staged,
+                        intent.destination,
+                        exchange_error)) {
+                    error =
+                        "Unable to recover interrupted Cinnamon Spice exchange: " +
+                        exchange_error;
+                    return false;
+                }
+                fs::remove_all(intent.staged, ec);
+                if (ec) {
+                    error =
+                        "Unable to remove recovered Cinnamon Spice staging path: " +
+                        ec.message();
+                    return false;
+                }
+            } else if (!destination_exists) {
+                error =
+                    "Cinnamon Spice recovery cannot locate either the live path or its rollback copy.";
+                return false;
+            }
+        } else {
+            if (destination_exists) {
+                fs::remove_all(intent.destination, ec);
+                if (ec) {
+                    error =
+                        "Unable to remove partially published Cinnamon Spice path during recovery: " +
+                        ec.message();
+                    return false;
+                }
+            }
+            if (staged_exists) {
+                fs::remove_all(intent.staged, ec);
+                if (ec) {
+                    error =
+                        "Unable to remove stale Cinnamon Spice staged path during recovery: " +
+                        ec.message();
+                    return false;
+                }
+            }
+        }
+    }
+
+    return clear_spice_journal(journal, error);
 }
 
 void rollback_published_paths(
@@ -1505,6 +1811,16 @@ bool install_extracted(
         return false;
     }
 
+    const fs::path journal =
+        destination_root /
+        (".infiltrator-spice-" + update.id + ".journal");
+    if (!recover_spice_journal(
+            journal,
+            error)) {
+        remove_staged_translations(translations);
+        return false;
+    }
+
     const fs::path stage_root =
         destination_root /
         (".infiltrator-stage-" +
@@ -1595,9 +1911,16 @@ bool install_extracted(
                 &staged,
                 destination_root /
                     staged.filename(),
+                journal,
                 published,
                 error)) {
             rollback_published_paths(published, error);
+            std::string journal_error;
+            if (!clear_spice_journal(journal, journal_error) &&
+                !journal_error.empty()) {
+                if (!error.empty()) error += " ";
+                error += journal_error;
+            }
             fs::remove_all(stage_root, ec);
             remove_staged_translations(translations);
             return false;
@@ -1619,6 +1942,7 @@ bool install_extracted(
                 !publish_path(
                     nullptr,
                     duplicate,
+                    journal,
                     published,
                     error)) {
                 rollback_published_paths(published, error);
@@ -1639,6 +1963,7 @@ bool install_extracted(
                     !publish_path(
                         nullptr,
                         action,
+                        journal,
                         published,
                         error)) {
                     rollback_published_paths(published, error);
@@ -1656,9 +1981,16 @@ bool install_extracted(
         if (!publish_path(
                 &artifact.staged,
                 artifact.destination,
+                journal,
                 published,
                 error)) {
             rollback_published_paths(published, error);
+            std::string journal_error;
+            if (!clear_spice_journal(journal, journal_error) &&
+                !journal_error.empty()) {
+                if (!error.empty()) error += " ";
+                error += journal_error;
+            }
             fs::remove_all(stage_root, ec);
             remove_staged_translations(translations);
             return false;
@@ -1667,6 +1999,9 @@ bool install_extracted(
 
     fs::remove_all(stage_root, ec);
     discard_backups(published);
+    if (!clear_spice_journal(journal, error)) {
+        return false;
+    }
     return true;
 }
 
