@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "client/engine_client.hpp"
+#include "core/exact_transaction_spec.hpp"
 #include "core/update_policy.hpp"
 #include "core/model.hpp"
 #include "core/transaction_history.hpp"
@@ -112,19 +113,6 @@ bool matches(const PackageRecord &p, const Options &o, const SoftwarePreferences
     return !update_is_ignored(p, prefs);
 }
 
-std::vector<std::string> exact_specs(const TransactionPlan &plan)
-{
-    std::vector<std::string> result;
-    result.reserve(plan.items.size());
-    for (const TransactionItem &item : plan.items) {
-        if (item.action==TransactionAction::remove)
-            result.push_back("remove:"+item.package_id+"="+item.from_version);
-        else
-            result.push_back(item.package_id+"="+item.to_version);
-    }
-    return result;
-}
-
 void record_cli_history(
     const TransactionPlan &plan,
     const bool success,
@@ -158,7 +146,10 @@ bool execute_plan(const TransactionPlan &plan, const Options &o, std::string &er
     };
     if (o.keep_configuration) args.emplace_back("--force-confold");
     if (o.replace_configuration) args.emplace_back("--force-confnew");
-    const auto specs=exact_specs(plan);
+    std::vector<std::string> specs;
+    if (!exact_transaction_specs(plan, specs, error)) {
+        return false;
+    }
     args.insert(args.end(), specs.begin(), specs.end());
 
     std::vector<gchar*> argv;
