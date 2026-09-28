@@ -1033,7 +1033,8 @@ bool recover_pending_release(std::string &error)
      * compatibility boundary; only stale recovery artifacts need removal.
      */
     if (active_codename == journal.target_codename ||
-        journal.phase == "complete") {
+        journal.phase == "complete" ||
+        journal.phase == "rolled-back") {
         if (!cleanup_release_artifacts(
                 publication,
                 error)) {
@@ -1046,11 +1047,16 @@ bool recover_pending_release(std::string &error)
         return true;
     }
 
-    if (journal.phase == "packages-applying") {
+    if (journal.phase == "packages-applying" ||
+        journal.phase == "packages-applied") {
         error =
-            "A release upgrade was interrupted while packages were being "
-            "mutated. Recovery state has been preserved; refusing to roll "
-            "repositories backward across a possibly partial package upgrade.";
+            journal.phase == "packages-applying"
+                ? "A release upgrade was interrupted while packages were being "
+                  "mutated. Recovery state has been preserved; refusing to roll "
+                  "repositories backward across a possibly partial package upgrade."
+                : "Release packages were applied but the target release identity "
+                  "was not confirmed. Recovery state has been preserved; refusing "
+                  "to roll repositories backward across an applied package upgrade.";
         return false;
     }
 
