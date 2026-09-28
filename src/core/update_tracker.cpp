@@ -115,9 +115,13 @@ bool load_tracker(
 
         if (fields[0] == "last-notified" &&
             fields.size() == 2U) {
-            (void)parse_i64(
-                fields[1],
-                state.last_notified_unix);
+            if (!parse_i64(
+                    fields[1],
+                    state.last_notified_unix)) {
+                error =
+                    "Invalid last-notified value in update notification tracker.";
+                return false;
+            }
             continue;
         }
 
