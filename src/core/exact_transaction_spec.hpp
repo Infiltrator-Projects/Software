@@ -18,10 +18,12 @@ struct ExactTransactionSpec {
     std::string source;
     std::string filename;
     std::string sha256;
+    std::string source_fingerprint;
 };
 
 bool encode_exact_transaction_spec(
     const TransactionItem &item,
+    std::string_view source_fingerprint,
     std::string &spec,
     std::string &error);
 
