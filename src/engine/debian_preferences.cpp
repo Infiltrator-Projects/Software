@@ -111,8 +111,10 @@ bool package_pattern_matches(
     std::string_view pattern,
     const DebianPackageVersion &package)
 {
+    bool source_pattern = false;
     if (pattern.rfind("src:", 0U) == 0U) {
-        return false;
+        source_pattern = true;
+        pattern.remove_prefix(4U);
     }
 
     std::string_view architecture;
@@ -129,7 +131,12 @@ bool package_pattern_matches(
         return false;
     }
 
-    return pattern_match(pattern, package.package);
+    const std::string_view identity =
+        source_pattern
+            ? std::string_view(package.source_package)
+            : std::string_view(package.package);
+    return !identity.empty() &&
+           pattern_match(pattern, identity);
 }
 
 bool package_rule_matches(
@@ -359,6 +366,11 @@ bool parse_pin(
         rule.kind = DebianPinKind::origin;
         if (value == "\"\"" || value == "''") {
             rule.pattern.clear();
+        } else if (value.size() >= 2U &&
+                   ((value.front() == '"' && value.back() == '"') ||
+                    (value.front() == '\'' && value.back() == '\''))) {
+            rule.pattern =
+                value.substr(1U, value.size() - 2U);
         } else {
             rule.pattern = value;
         }
@@ -448,18 +460,33 @@ DebianAptPreferences DebianAptPreferences::parse(
     DebianAptPreferences result;
     error.clear();
 
+    std::string normalized;
+    normalized.reserve(content.size());
+    for (std::size_t index = 0U; index < content.size(); ++index) {
+        if (content[index] == '\r') {
+            if (index + 1U < content.size() &&
+                content[index + 1U] == '\n') {
+                continue;
+            }
+            normalized.push_back('\n');
+            continue;
+        }
+        normalized.push_back(content[index]);
+    }
+    const std::string_view records(normalized);
+
     std::size_t start = 0U;
     std::size_t record_number = 0U;
-    while (start < content.size()) {
-        std::size_t end = content.find("\n\n", start);
+    while (start < records.size()) {
+        std::size_t end = records.find("\n\n", start);
         if (end == std::string_view::npos) {
-            end = content.size();
+            end = records.size();
         }
         const std::string_view block =
-            content.substr(start, end - start);
+            records.substr(start, end - start);
         start =
-            end == content.size()
-                ? content.size()
+            end == records.size()
+                ? records.size()
                 : end + 2U;
         ++record_number;
 
