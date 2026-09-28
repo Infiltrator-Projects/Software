@@ -189,8 +189,18 @@ int main()
             "snapshot-8",
             policy,
             error);
-    assert(!conflict_plan.has_value());
-    assert(error.find("conflict") != std::string::npos);
+    assert(conflict_plan.has_value());
+    assert(error.empty());
+    assert(conflict_plan->items.size() == 2U);
+    const TransactionItem *new_tool_item =
+        find_item(*conflict_plan, "new-tool");
+    const TransactionItem *old_tool_item =
+        find_item(*conflict_plan, "old-tool");
+    assert(new_tool_item != nullptr);
+    assert(old_tool_item != nullptr);
+    assert(new_tool_item->action == TransactionAction::install);
+    assert(old_tool_item->action == TransactionAction::remove);
+    assert(old_tool_item->from_version == "1.5");
 
     DebianCandidatePolicy held_policy = policy;
     held_policy.held_packages.insert("app");
