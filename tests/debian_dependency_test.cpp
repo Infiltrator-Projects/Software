@@ -149,9 +149,43 @@ int main()
             {},
             "amd64",
             {});
-    assert(!conflicting.complete());
-    assert(conflicting.problems.size() == 1U);
-    assert(conflicting.problems[0].package == "new-tool");
+    assert(conflicting.complete());
+    assert(conflicting.remove_installed.size() == 1U);
+    assert(conflicting.remove_installed.front() == "old-tool");
+
+    DebianPackageVersion breaking = package("new-suite", "3.0");
+    breaking.breaks = "old-tool (<< 2.0)";
+    const DebianResolution repaired_break =
+        DebianDependencyResolver::resolve(
+            {breaking},
+            {installed("old-tool", "1.5")},
+            {package("old-tool", "2.1")},
+            "amd64",
+            {});
+    assert(repaired_break.complete());
+    assert(repaired_break.remove_installed.empty());
+    assert(contains(repaired_break.selected, "old-tool"));
+    const auto repaired_old_tool = std::find_if(
+        repaired_break.selected.begin(),
+        repaired_break.selected.end(),
+        [](const DebianPackageVersion &candidate) {
+            return candidate.package == "old-tool";
+        });
+    assert(repaired_old_tool != repaired_break.selected.end());
+    assert(repaired_old_tool->version == "2.1");
+
+    PackageRecord old_tool = installed("old-tool", "1.5");
+    PackageRecord old_tool_consumer =
+        installed("old-tool-consumer", "1.0");
+    old_tool_consumer.depends = "old-tool (= 1.5)";
+    const DebianResolution unsafe_conflict_removal =
+        DebianDependencyResolver::resolve(
+            {conflict},
+            {old_tool, old_tool_consumer},
+            {},
+            "amd64",
+            {});
+    assert(!unsafe_conflict_removal.complete());
 
     DebianPackageVersion replacement =
         package("infiltrator-software", "0.3.53");
