@@ -1348,6 +1348,23 @@ DebianResolution DebianDependencyResolver::resolve(
     DebianResolution result;
     std::unordered_map<std::string, DebianPackageVersion> selected;
     std::unordered_set<std::string> planned_removals;
+
+    for (const DebianPackageVersion &root : roots) {
+        const std::string key = selected_key(root);
+        const auto existing = selected.find(key);
+        if (existing == selected.end()) {
+            selected.emplace(key, root);
+        } else if (
+            existing->second.version != root.version ||
+            existing->second.source != root.source ||
+            existing->second.filename != root.filename) {
+            result.problems.push_back({
+                root.package,
+                root.version,
+                "Transaction roots select incompatible versions of the same package architecture."});
+        }
+    }
+
     DebianResolutionProblem dependency_problem;
     if (!resolve_dependencies_backtracking(
             selected,
