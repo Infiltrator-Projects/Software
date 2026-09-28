@@ -269,6 +269,7 @@ add_executable(infiltrator-software
     src/app/main.cpp
     src/app/history_controller.cpp
     src/app/history_view.cpp
+    src/app/installed_controller.cpp
     src/app/installed_inventory.cpp
     src/app/kernel_manager.cpp
     src/app/theme.cpp
