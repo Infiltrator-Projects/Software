@@ -298,7 +298,9 @@ jobs:
           assert "make_history_page(state)" in app
           assert '"Durable transaction history"' not in app
           assert "TransactionHistoryStore" in app
-          assert '"history.sqlite3"' in app
+          assert "user_transaction_history_path" in app
+          assert "system_transaction_history_path" in app
+          assert '"history.sqlite3"' in history
           assert "CREATE TABLE IF NOT EXISTS transactions" in history
           assert "CREATE TABLE IF NOT EXISTS transaction_items" in history
           assert "updates_progress" in app
