@@ -3,6 +3,7 @@
 
 #include <cassert>
 #include <filesystem>
+#include <fstream>
 #include <string>
 #include <unistd.h>
 
@@ -79,6 +80,26 @@ int main()
         error));
     assert(!result.notify);
     assert(result.relevant_updates == 0U);
+
+    {
+        std::ofstream corrupt(path, std::ios::trunc);
+        assert(corrupt);
+        corrupt
+            << "version\t1\n"
+            << "last-notified\tnot-a-number\n";
+    }
+    error.clear();
+    assert(!evaluate_update_notification(
+        {security},
+        preferences,
+        86400 * 5,
+        0,
+        path.string(),
+        result,
+        error));
+    assert(
+        error.find("last-notified") !=
+        std::string::npos);
 
     std::filesystem::remove(path);
     return 0;
