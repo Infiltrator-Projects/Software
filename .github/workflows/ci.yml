@@ -170,8 +170,8 @@ jobs:
           # Discover never feeds Flatpak application IDs into the Debian solver.
           assert "set_flatpak_application_installed" in app
           assert "set_flatpak_application_installed" in external_updates
-          assert '"flatpak:user:"' in system_catalogue
-          assert '"flatpak:system:"' in system_catalogue
+          assert 'std::string("flatpak:")' in system_catalogue
+          assert '(user ? "user:" : "system:")' in system_catalogue
           assert "installed_flatpaks" in system_catalogue
           assert "g_get_user_data_dir" in system_catalogue
 
