@@ -271,7 +271,8 @@ add_executable(infiltrator-software
     src/app/history_view.cpp
     src/app/installed_inventory.cpp
     src/app/kernel_manager.cpp
-    src/app/theme.cpp)
+    src/app/theme.cpp
+    src/app/ui_components.cpp)
 
 target_link_libraries(infiltrator-software PRIVATE
     software-core software-history software-client software-apt
