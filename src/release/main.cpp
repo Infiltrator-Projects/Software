@@ -209,6 +209,77 @@ bool sync_directory(
     return true;
 }
 
+bool durable_write_text(
+    const std::filesystem::path &destination,
+    const std::string_view content,
+    const mode_t mode,
+    std::string &error)
+{
+    std::error_code ec;
+    std::filesystem::create_directories(
+        destination.parent_path(), ec);
+    if (ec) {
+        error =
+            "Unable to create " +
+            destination.parent_path().string() + ": " +
+            ec.message();
+        return false;
+    }
+
+    std::string pattern =
+        (destination.parent_path() /
+         (".infiltrator-release-state-XXXXXX")).string();
+    std::vector<char> writable(
+        pattern.begin(), pattern.end());
+    writable.push_back('\0');
+
+    const int fd = mkstemp(writable.data());
+    if (fd < 0) {
+        error =
+            "Unable to stage " + destination.string() + ": " +
+            std::string(std::strerror(errno));
+        return false;
+    }
+
+    const std::filesystem::path temporary(
+        writable.data());
+    bool ok =
+        write_all(fd, content) &&
+        fchmod(fd, mode) == 0 &&
+        fsync(fd) == 0;
+    if (close(fd) != 0) {
+        ok = false;
+    }
+    if (!ok) {
+        const std::string detail =
+            std::strerror(errno);
+        std::filesystem::remove(
+            temporary, ec);
+        error =
+            "Unable to durably stage " +
+            destination.string() + ": " +
+            detail;
+        return false;
+    }
+
+    if (rename(
+            temporary.c_str(),
+            destination.c_str()) != 0) {
+        const std::string detail =
+            std::strerror(errno);
+        std::filesystem::remove(
+            temporary, ec);
+        error =
+            "Unable to atomically publish " +
+            destination.string() + ": " +
+            detail;
+        return false;
+    }
+    return sync_directory(
+        destination.parent_path(),
+        error);
+}
+
 bool durable_copy_file(
     const std::filesystem::path &source,
     const std::filesystem::path &destination,
