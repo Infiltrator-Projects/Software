@@ -98,10 +98,24 @@ bool find_deb822_field(
                 : newline;
         std::string_view line =
             without_cr(block.substr(start, end - start));
-        if (line.rfind(field, 0U) == 0U) {
-            value_start = start;
-            line_end = end;
-            return true;
+        if (line.size() >= field.size()) {
+            bool matches = true;
+            for (std::size_t index = 0U;
+                 index < field.size();
+                 ++index) {
+                if (std::tolower(
+                        static_cast<unsigned char>(line[index])) !=
+                    std::tolower(
+                        static_cast<unsigned char>(field[index]))) {
+                    matches = false;
+                    break;
+                }
+            }
+            if (matches) {
+                value_start = start;
+                line_end = end;
+                return true;
+            }
         }
         if (newline == std::string_view::npos) {
             break;
