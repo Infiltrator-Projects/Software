@@ -492,6 +492,10 @@ bool build_plan(const ReleaseInfo &release,TransactionPlan &combined,std::string
         !environment.set(
             "INFILTRATOR_SOFTWARE_SOURCES_FILE",
             release.repositories.string(),
+            error) ||
+        !environment.set(
+            "INFILTRATOR_SOFTWARE_SOURCES_ORIGIN",
+            "/etc/apt/sources.list.d/official-package-repositories.list",
             error)) {
         return false;
     }
@@ -1188,6 +1192,23 @@ bool recover_pending_release(std::string &error)
             return false;
         }
 
+        ScopedEnvironment recovery_environment;
+        std::string recovery_environment_error;
+        if (!recovery_environment.set(
+                "INFILTRATOR_SOFTWARE_SOURCES_FILE",
+                "/etc/apt/sources.list.d/official-package-repositories.list",
+                recovery_environment_error) ||
+            !recovery_environment.set(
+                "INFILTRATOR_SOFTWARE_SOURCES_ORIGIN",
+                "/etc/apt/sources.list.d/official-package-repositories.list",
+                recovery_environment_error)) {
+            error =
+                "Unable to restore the release repository identity for "
+                "deterministic package recovery: " +
+                recovery_environment_error;
+            return false;
+        }
+
         std::vector<std::string> command{
             "/usr/libexec/infiltrator-software-update-helper",
             "apply-plan"};
@@ -1456,6 +1477,21 @@ int apply_inhibited_command(int argc,char **argv)
                 << rollback_error
                 << "\n";
         }
+        return 1;
+    }
+
+    ScopedEnvironment apply_environment;
+    if (!apply_environment.set(
+            "INFILTRATOR_SOFTWARE_SOURCES_FILE",
+            publication.destination.string(),
+            error) ||
+        !apply_environment.set(
+            "INFILTRATOR_SOFTWARE_SOURCES_ORIGIN",
+            publication.destination.string(),
+            error)) {
+        std::cerr
+            << "Unable to preserve the reviewed release repository identity: "
+            << error << "\n";
         return 1;
     }
 
