@@ -100,10 +100,8 @@ using infiltrator::software::configure_repository_controller;
 using infiltrator::software::refresh_repository_controller;
 using infiltrator::software::make_icon;
 using infiltrator::software::make_label;
-using infiltrator::soflse};
-    bool system_loaded{false};
-    bool repair_loaded{false};
-};
+using infiltrator::software::make_page_intro;
+using infiltrator::software::make_stat_card;
 
 void refresh_updates(WindowState *state, bool refresh_metadata = false);
 void refresh_discover(WindowState *state, bool force_refresh);
