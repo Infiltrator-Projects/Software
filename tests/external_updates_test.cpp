@@ -140,6 +140,36 @@ exit 0
     assert(read_all(trace) == selected_trace);
     selected.pop_back();
 
+    assert(set_flatpak_application_installed(
+        "org.example.App",
+        "flathub",
+        true,
+        true,
+        error));
+    assert(error.empty());
+    assert(set_flatpak_application_installed(
+        "org.example.App",
+        "",
+        false,
+        false,
+        error));
+    assert(error.empty());
+    const std::string action_trace =
+        read_all(trace);
+    assert(action_trace.find(
+        "install -y --noninteractive --user -- flathub org.example.App") !=
+        std::string::npos);
+    assert(action_trace.find(
+        "uninstall -y --noninteractive --system -- org.example.App") !=
+        std::string::npos);
+
+    assert(!set_flatpak_application_installed(
+        "--unsafe",
+        "flathub",
+        true,
+        true,
+        error));
+
     (void)setenv("FAIL_SYSTEM_SCAN", "1", 1);
     flatpak.clear();
     assert(!discover_flatpak_updates(flatpak, error));
