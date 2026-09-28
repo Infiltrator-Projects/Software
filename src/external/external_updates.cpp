@@ -17,6 +17,9 @@
 namespace infiltrator::software {
 namespace {
 
+bool flatpak_installation_absent(
+    std::string_view error) noexcept;
+
 std::string trim(const std::string_view value)
 {
     std::size_t first = 0U;
