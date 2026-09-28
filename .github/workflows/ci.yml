@@ -189,6 +189,7 @@ jobs:
           assert '"packages-applying"' in release_upgrader
           assert '"packages-applied"' in release_upgrader
           assert "recover_pending_release" in release_upgrader
+          assert "Target repositories and recovery state were preserved because" in release_upgrader
           assert "RENAME_EXCHANGE" in cinnamon_native
 
           ui_vision = Path("docs/UI_VISION.md").read_text()
