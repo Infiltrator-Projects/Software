@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "app/theme.hpp"
 #include "app/kernel_manager.hpp"
+#include "app/history_controller.hpp"
 #include "app/history_view.hpp"
 #include "backends/apt/apt_backend.hpp"
 #include "catalogue/repository_catalogue.hpp"
@@ -77,9 +78,10 @@ using infiltrator::software::apply_cinnamon_updates;
 using infiltrator::software::apply_cinnamon_updates_selected;
 using infiltrator::software::source_kind_name;
 using infiltrator::software::update_metadata_refresh_due;
-using infiltrator::software::create_history_page;
+using infiltrator::software::HistoryController;
+using infiltrator::software::create_history_controller_page;
 using infiltrator::software::history_timestamp;
-using infiltrator::software::rebuild_history_view;
+using infiltrator::software::refresh_history_controller;
 
 struct WindowState {
     GtkWindow *window{};
@@ -184,13 +186,7 @@ struct WindowState {
     unsigned int system_generation{0U};
     bool system_busy{false};
 
-    GtkListBox *history_list{};
-    GtkWidget *history_status{};
-    GtkWidget *history_count{};
-    GtkWidget *history_refresh{};
-    std::vector<TransactionHistoryItem> history_records;
-    unsigned int history_generation{0U};
-    bool history_busy{false};
+    HistoryController history;
 
     GtkListBox *repair_list{};
     GtkWidget *repair_status{};
@@ -214,7 +210,6 @@ struct WindowState {
     bool updates_loaded{false};
     bool system_loaded{false};
     bool repositories_loaded{false};
-    bool history_loaded{false};
     bool repair_loaded{false};
 };
 
@@ -1396,7 +1391,7 @@ void rebuild_discover_activity_preview(
     clear_box_children(
         state->discover_activity_preview);
 
-    if (state->history_records.empty()) {
+    if (state->history.records.empty()) {
         gtk_box_append(
             GTK_BOX(
                 state->discover_activity_preview),
@@ -1411,15 +1406,15 @@ void rebuild_discover_activity_preview(
     std::size_t index = 0U;
     std::size_t shown = 0U;
     while (index <
-               state->history_records.size() &&
+               state->history.records.size() &&
            shown < 4U) {
         const TransactionHistoryItem &head =
-            state->history_records[index];
+            state->history.records[index];
         std::size_t end = index + 1U;
         while (
             end <
-                state->history_records.size() &&
-            state->history_records[end]
+                state->history.records.size() &&
+            state->history.records[end]
                     .transaction_id ==
                 head.transaction_id) {
             ++end;
@@ -4080,7 +4075,7 @@ void kernel_manager_changed(gpointer user_data)
     if (state->installed_loaded) {
         refresh_installed(state);
     }
-    if (state->history_loaded) {
+    if (state->history.loaded) {
         refresh_history(state);
     }
 }
@@ -5374,7 +5369,7 @@ void discover_flatpak_complete(
                     refresh_updates(state, false);
                 }
             }
-            if (state->history_loaded) {
+            if (state->history.loaded) {
                 refresh_history(state);
             }
         }
@@ -5697,7 +5692,7 @@ void discover_install_process_complete(
                     G_OBJECT(operation->main_window),
                     "infiltrator-window-state"));
             if (history_state != nullptr &&
-                history_state->history_loaded) {
+                history_state->history.loaded) {
                 refresh_history(history_state);
             }
         }
@@ -5793,7 +5788,7 @@ void start_discover_install_operation(
                     G_OBJECT(operation->main_window),
                     "infiltrator-window-state"));
             if (history_state != nullptr &&
-                history_state->history_loaded) {
+                history_state->history.loaded) {
                 refresh_history(history_state);
             }
         }
@@ -5850,7 +5845,7 @@ void start_discover_install_operation(
                     G_OBJECT(operation->main_window),
                     "infiltrator-window-state"));
             if (history_state != nullptr &&
-                history_state->history_loaded) {
+                history_state->history.loaded) {
                 refresh_history(history_state);
             }
         }
@@ -8458,7 +8453,7 @@ void update_process_complete(
             }
             record_transaction_history(
                 run->plan, success, history_message);
-            if (state->history_loaded) {
+            if (state->history.loaded) {
                 refresh_history(state);
             }
         }
@@ -8602,7 +8597,7 @@ void start_update_process(
         if (!plan.items.empty()) {
             record_transaction_history(
                 plan, false, message);
-            if (state->history_loaded) {
+            if (state->history.loaded) {
                 refresh_history(state);
             }
         }
@@ -10745,223 +10740,16 @@ GtkWidget *make_repositories_page(WindowState *state)
 }
 
 
-struct HistoryResult {
-    unsigned int generation{0U};
-    std::vector<TransactionHistoryItem> records;
-    std::string error;
-};
-
-struct HistoryTaskData {
-    unsigned int generation{0U};
-};
-
-void history_worker(
-    GTask *task,
-    gpointer,
-    gpointer task_data,
-    GCancellable *)
+void history_controller_changed(gpointer user_data)
 {
-    auto *data =
-        static_cast<HistoryTaskData *>(task_data);
-    auto *result = new HistoryResult{};
-    result->generation =
-        data == nullptr ? 0U : data->generation;
-
-    const std::filesystem::path path =
-        transaction_history_path();
-    if (path.empty()) {
-        result->error =
-            "The user data directory is unavailable.";
-    } else {
-        TransactionHistoryStore store(path.string());
-        std::string user_error;
-        result->records =
-            store.load_recent(100U, user_error);
-        if (!user_error.empty()) {
-            result->error =
-                "User history: " + user_error;
-        }
-
-        const std::string system_path =
-            infiltrator::software::system_transaction_history_path();
-        if (std::filesystem::exists(system_path)) {
-            TransactionHistoryStore system_store(
-                system_path);
-            std::string system_error;
-            std::vector<TransactionHistoryItem> system_records =
-                system_store.load_recent(
-                    100U,
-                    system_error);
-            if (system_error.empty()) {
-                for (TransactionHistoryItem &entry :
-                     system_records) {
-                    /*
-                     * User and system SQLite databases each allocate IDs from
-                     * one.  Negative IDs namespace root-owned transactions so
-                     * the UI never groups unrelated records together.
-                     */
-                    entry.transaction_id =
-                        -entry.transaction_id;
-                }
-                result->records.insert(
-                    result->records.end(),
-                    std::make_move_iterator(
-                        system_records.begin()),
-                    std::make_move_iterator(
-                        system_records.end()));
-            } else {
-                if (!result->error.empty()) {
-                    result->error += " ";
-                }
-                result->error +=
-                    "System history: " +
-                    system_error;
-            }
-        }
-
-        std::stable_sort(
-            result->records.begin(),
-            result->records.end(),
-            [](const TransactionHistoryItem &left,
-               const TransactionHistoryItem &right) {
-                if (left.completed_at_unix !=
-                    right.completed_at_unix) {
-                    return left.completed_at_unix >
-                        right.completed_at_unix;
-                }
-                if (left.transaction_id !=
-                    right.transaction_id) {
-                    return left.transaction_id >
-                        right.transaction_id;
-                }
-                return false;
-            });
-        if (result->records.size() > 200U) {
-            result->records.resize(200U);
-        }
-    }
-
-    g_task_return_pointer(
-        task,
-        result,
-        [](gpointer pointer) {
-            delete static_cast<HistoryResult *>(pointer);
-        });
-}
-
-void history_complete(
-    GObject *source_object,
-    GAsyncResult *async_result,
-    gpointer)
-{
-    auto *window = GTK_WINDOW(source_object);
-    auto *state = static_cast<WindowState *>(
-        g_object_get_data(
-            G_OBJECT(window), "infiltrator-window-state"));
-    auto *result = static_cast<HistoryResult *>(
-        g_task_propagate_pointer(
-            G_TASK(async_result), nullptr));
-
-    if (state == nullptr || result == nullptr) {
-        delete result;
-        return;
-    }
-    if (result->generation != state->history_generation) {
-        delete result;
-        return;
-    }
-
-    state->history_busy = false;
-    state->history_records =
-        std::move(result->records);
-    const std::string error = result->error;
-    delete result;
-
-    rebuild_history_view(
-        state->history_list,
-        state->history_count,
-        state->history_records);
-    rebuild_discover_activity_preview(state);
-
-    if (state->history_status != nullptr) {
-        if (!error.empty()) {
-            const std::string message =
-                "Unable to read transaction history: " +
-                one_line(error);
-            gtk_label_set_text(
-                GTK_LABEL(state->history_status),
-                message.c_str());
-        } else if (state->history_records.empty()) {
-            gtk_label_set_text(
-                GTK_LABEL(state->history_status),
-                "No completed software transactions have been recorded yet.");
-        } else {
-            std::unordered_set<std::int64_t> transactions;
-            for (const TransactionHistoryItem &entry :
-                 state->history_records) {
-                transactions.insert(entry.transaction_id);
-            }
-            const std::string message =
-                std::to_string(transactions.size()) +
-                (transactions.size() == 1U
-                     ? " recent transaction loaded."
-                     : " recent transactions loaded.");
-            gtk_label_set_text(
-                GTK_LABEL(state->history_status),
-                message.c_str());
-        }
-    }
-
-    if (state->history_refresh != nullptr) {
-        gtk_widget_set_sensitive(
-            state->history_refresh, true);
-    }
+    rebuild_discover_activity_preview(
+        static_cast<WindowState *>(user_data));
 }
 
 void refresh_history(WindowState *state)
 {
-    if (state == nullptr || state->window == nullptr ||
-        state->history_list == nullptr || state->history_busy) {
-        return;
-    }
-
-    state->history_loaded = true;
-    state->history_busy = true;
-    ++state->history_generation;
-
-    if (state->history_status != nullptr) {
-        gtk_label_set_text(
-            GTK_LABEL(state->history_status),
-            "Reading durable transaction history…");
-    }
-    if (state->history_refresh != nullptr) {
-        gtk_widget_set_sensitive(
-            state->history_refresh, false);
-    }
-
-    auto *data = new HistoryTaskData{
-        state->history_generation};
-    GTask *task = g_task_new(
-        G_OBJECT(state->window),
-        nullptr,
-        history_complete,
-        nullptr);
-    g_task_set_task_data(
-        task,
-        data,
-        [](gpointer pointer) {
-            delete static_cast<HistoryTaskData *>(pointer);
-        });
-    g_task_run_in_thread(task, history_worker);
-    g_object_unref(task);
-}
-
-void history_refresh_clicked(
-    GtkButton *,
-    gpointer user_data)
-{
-    refresh_history(
-        static_cast<WindowState *>(user_data));
+    if (state == nullptr) return;
+    refresh_history_controller(&state->history);
 }
 
 struct RepairResult {
@@ -12151,7 +11939,7 @@ void refresh_page_if_needed(WindowState *state, const int index)
         if (!state->repositories_loaded) {
             refresh_repositories(state);
         }
-        if (!state->history_loaded) {
+        if (!state->history.loaded) {
             refresh_history(state);
         }
         if (!state->repair_loaded) {
@@ -12184,7 +11972,7 @@ void refresh_page_if_needed(WindowState *state, const int index)
         }
         break;
     case 5:
-        if (!state->history_loaded) {
+        if (!state->history.loaded) {
             refresh_history(state);
         }
         break;
@@ -13802,12 +13590,10 @@ void activate(GtkApplication *application, gpointer)
         "repositories");
     gtk_stack_add_named(
         state->stack,
-        create_history_page(
-            &state->history_list,
-            &state->history_status,
-            &state->history_count,
-            &state->history_refresh,
-            G_CALLBACK(history_refresh_clicked),
+        create_history_controller_page(
+            &state->history,
+            GTK_WINDOW(window),
+            history_controller_changed,
             state),
         "history");
     gtk_stack_add_named(
