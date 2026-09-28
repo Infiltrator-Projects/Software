@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "core/update_policy.hpp"
+#include "core/transaction_history.hpp"
 #include "engine/engine_service_core.hpp"
 
 #include <glib.h>
@@ -201,6 +202,37 @@ bool run_command(std::vector<std::string> args,std::string &error)
     return ok;
 }
 
+void record_system_history(
+    const TransactionPlan &plan,
+    const bool success,
+    const std::string_view message)
+{
+    if (plan.items.empty()) {
+        return;
+    }
+
+    const std::string path =
+        system_transaction_history_path();
+    TransactionHistoryStore store(path);
+    std::string history_error;
+    if (!store.append(
+            plan,
+            success,
+            message,
+            history_error)) {
+        g_warning(
+            "Unable to record automatic-update history: %s",
+            history_error.c_str());
+        return;
+    }
+
+    if (chmod(path.c_str(), 0644) != 0) {
+        g_warning(
+            "Automatic-update history was written but could not be made "
+            "world-readable for Software history display.");
+    }
+}
+
 bool create_snapshot(std::string &error)
 {
     gchar *path=g_find_program_in_path("timeshift");
@@ -288,6 +320,10 @@ int main()
 
     if (prefs.snapshot_before_system_updates && plan->touches_system &&
         !create_snapshot(error)) {
+        record_system_history(
+            *plan,
+            false,
+            "Automatic update stopped before mutation: " + error);
         g_printerr("Automatic update stopped before mutation: %s\n",error.c_str());
         return 1;
     }
@@ -309,17 +345,31 @@ int main()
     const auto specs=exact_specs(*plan);
     command.insert(command.end(),specs.begin(),specs.end());
     if (!run_command(std::move(command),error)) {
+        record_system_history(
+            *plan,
+            false,
+            "Automatic system update failed: " + error);
         g_printerr("Automatic system update failed: %s\n",error.c_str());
         return 1;
     }
 
     if (!core.refresh_installed(error)) {
+        record_system_history(
+            *plan,
+            false,
+            "Packages were applied, but final installed-state verification failed: " +
+                error);
         g_printerr(
             "Packages were applied, but the resulting installed state "
             "could not be verified: %s\n",
             error.c_str());
         return 1;
     }
+
+    record_system_history(
+        *plan,
+        true,
+        "Automatic system update completed and final installed state was verified.");
     if (!write_stamp(kSuccessStamp, "success", error)) {
         g_printerr("%s\n", error.c_str());
         return 1;
