@@ -103,6 +103,8 @@ jobs:
           source_policy_path = Path("data/net.ssmith.infiltrator.software.policy")
           policy = update_policy_path.read_text()
           external_updates = Path("src/external/external_updates.cpp").read_text()
+          system_catalogue = Path("src/catalogue/system_catalogue.cpp").read_text()
+          cinnamon_native = Path("src/external/cinnamon_spices.cpp").read_text()
           session_updater = Path("src/session/main.cpp").read_text()
           auto_updater = Path("src/automation/main.cpp").read_text()
           maintenance = Path("src/automation/maintenance.cpp").read_text()
@@ -130,7 +132,6 @@ jobs:
           assert "apply_flatpak_updates" in app
           assert "apply_cinnamon_updates_selected" in app
           assert "selected_cinnamon_refs" in app
-          cinnamon_native = Path("src/external/cinnamon_spices.cpp").read_text()
           assert "discover_native_cinnamon_updates" in cinnamon_native
           assert '"/json/actions.json"' in cinnamon_native
           assert "apply_native_cinnamon_updates_selected" in cinnamon_native
@@ -164,6 +165,31 @@ jobs:
           assert "updates_restart_after_verify" in app
           assert "create_snapshot_before_update" in app
           assert "package_diagnostics" in app or "diagnostic" in app.lower()
+
+          # Flatpak catalogue actions preserve installation scope end to end:
+          # Discover never feeds Flatpak application IDs into the Debian solver.
+          assert "set_flatpak_application_installed" in app
+          assert "set_flatpak_application_installed" in external_updates
+          assert '"flatpak:user:"' in system_catalogue
+          assert '"flatpak:system:"' in system_catalogue
+          assert "installed_flatpaks" in system_catalogue
+          assert "g_get_user_data_dir" in system_catalogue
+
+          # Background update state remains convergent across root/user
+          # processes and persistent failures observe configured backoff.
+          assert "kAttemptStamp" in auto_updater
+          assert "read_stamp(kAttemptStamp)" in auto_updater
+          assert "engine.refresh_installed(result->error)" in tray
+          assert "system_transaction_history_path()" in auto_updater
+          assert "system_transaction_history_path()" in maintenance
+
+          # Release and Cinnamon mutation paths retain crash-recovery evidence
+          # instead of depending only on in-process rollback.
+          assert "kReleaseJournal" in release_upgrader
+          assert '"packages-applying"' in release_upgrader
+          assert '"packages-applied"' in release_upgrader
+          assert "recover_pending_release" in release_upgrader
+          assert "RENAME_EXCHANGE" in cinnamon_native
 
           ui_vision = Path("docs/UI_VISION.md").read_text()
           assert Path("docs/design/software-ui-target.jpg").is_file()
