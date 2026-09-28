@@ -2,6 +2,7 @@
 #include "app/kernel_manager.hpp"
 
 #include "client/engine_client.hpp"
+#include "core/exact_transaction_spec.hpp"
 #include "core/transaction_history.hpp"
 #include "engine/kernel_inventory.hpp"
 
@@ -936,25 +937,6 @@ void plan_worker(
         });
 }
 
-std::vector<std::string> exact_specs(
-    const TransactionPlan &plan)
-{
-    std::vector<std::string> specs;
-    specs.reserve(plan.items.size());
-    for (const TransactionItem &item : plan.items) {
-        if (item.action == TransactionAction::remove) {
-            specs.push_back(
-                "remove:" + item.package_id +
-                "=" + item.from_version);
-        } else {
-            specs.push_back(
-                item.package_id +
-                "=" + item.to_version);
-        }
-    }
-    return specs;
-}
-
 /*
  * GtkDialog is retained for the supported GTK 4.6 baseline. Scope the
  * deprecation suppression to this compatibility dialog only.
@@ -1126,12 +1108,15 @@ void start_apply(
         return;
     }
 
-    const std::vector<std::string> specs =
-        exact_specs(plan);
-    if (specs.empty()) {
+    std::vector<std::string> specs;
+    std::string spec_error;
+    if (!exact_transaction_specs(
+            plan, specs, spec_error)) {
         set_status(
             context,
-            "Kernel transaction contains no exact package changes.");
+            spec_error.empty()
+                ? "Kernel transaction contains no exact package changes."
+                : spec_error.c_str());
         return;
     }
 
