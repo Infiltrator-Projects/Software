@@ -140,6 +140,36 @@ int main()
     assert(unresolved.problems.size() == 1U);
     assert(unresolved.problems[0].package == "broken");
 
+    DebianPackageVersion alternative_owner =
+        package("alternative-owner", "1.0");
+    alternative_owner.depends =
+        "dangerous-choice | safe-choice";
+    DebianPackageVersion dangerous_choice =
+        package("dangerous-choice", "1.0");
+    dangerous_choice.conflicts =
+        "protected-runtime";
+    DebianPackageVersion safe_choice =
+        package("safe-choice", "1.0");
+    PackageRecord protected_runtime =
+        installed("protected-runtime", "1.0");
+    protected_runtime.essential = true;
+
+    const DebianResolution backtracked =
+        DebianDependencyResolver::resolve(
+            {alternative_owner},
+            {protected_runtime},
+            {dangerous_choice, safe_choice},
+            "amd64",
+            {});
+    assert(backtracked.complete());
+    assert(!contains(
+        backtracked.selected,
+        "dangerous-choice"));
+    assert(contains(
+        backtracked.selected,
+        "safe-choice"));
+    assert(backtracked.remove_installed.empty());
+
     DebianPackageVersion conflict = package("new-tool", "2.0");
     conflict.conflicts = "old-tool (<< 2.0)";
     const DebianResolution conflicting =
