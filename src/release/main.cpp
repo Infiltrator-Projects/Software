@@ -1241,38 +1241,20 @@ int apply_inhibited_command(int argc,char **argv)
         "apply-plan"};
     command.insert(command.end(),approved.begin(),approved.end());
     if (!run_command(std::move(command),error)) {
-        const std::string transaction_error = error;
-        std::string rollback_error;
-        if (!rollback_target_sources(
-                publication,
-                rollback_error,
-                true)) {
-            std::cerr
-                << transaction_error
-                << "\nRelease upgrade also failed to restore the previous "
-                   "repository configuration: "
-                << rollback_error
-                << "\nRecovery journal and backups were preserved.\n";
-        } else {
-            ReleaseJournal rolled_back =
-                make_release_journal(
-                    release,
-                    publication,
-                    "rolled-back");
-            std::string state_error;
-            if (write_release_journal(
-                    rolled_back,
-                    state_error)) {
-                std::string cleanup_error;
-                (void)cleanup_release_artifacts(
-                    publication,
-                    cleanup_error);
-            }
-            std::cerr
-                << transaction_error
-                << "\nPrevious repository configuration was restored.\n";
-        }
-        return 1;
+        /*
+         * apply-plan may have failed after dpkg changed part of the approved
+         * transaction.  Once package mutation has begun, rolling repositories
+         * back to the old release can make that partial state less recoverable.
+         * Preserve the target repositories, backups and packages-applying
+         * journal so a subsequent recovery run fails closed until the package
+         * state is inspected/resumed.
+         */
+        std::cerr
+            << error
+            << "\nRelease package application did not complete successfully. "
+               "Target repositories and recovery state were preserved because "
+               "packages may already have been partially changed.\n";
+        return 3;
     }
 
     if (!write_release_journal(
