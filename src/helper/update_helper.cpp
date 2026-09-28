@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "apt_plan_guard.hpp"
 #include "core/exact_transaction_spec.hpp"
+#include "engine/debian_reconcile.hpp"
+#include "engine/engine_service_core.hpp"
+#include "engine/package_state_store.hpp"
 
 #include <glib.h>
 
@@ -909,6 +912,94 @@ bool make_transaction_archive_directory(
     return true;
 }
 
+bool verify_reviewed_repository_state(
+    const std::vector<infiltrator::software::ExactTransactionSpec> &artifacts,
+    std::string &error)
+{
+    error.clear();
+    if (artifacts.empty()) return true;
+
+    const std::string &expected =
+        artifacts.front().source_fingerprint;
+    if (expected.empty()) {
+        error =
+            "The reviewed package transaction has no repository fingerprint.";
+        return false;
+    }
+    for (const auto &artifact : artifacts) {
+        if (artifact.source_fingerprint != expected) {
+            error =
+                "The reviewed package transaction contains inconsistent "
+                "repository fingerprints.";
+            return false;
+        }
+    }
+
+    std::string pattern =
+        "/tmp/infiltrator-software-source-check-XXXXXX";
+    std::vector<char> writable(
+        pattern.begin(), pattern.end());
+    writable.push_back('\0');
+    char *created = mkdtemp(writable.data());
+    if (created == nullptr) {
+        error =
+            "Unable to create repository verification workspace: " +
+            std::string(std::strerror(errno));
+        return false;
+    }
+
+    const std::filesystem::path root(created);
+    const auto cleanup = [&root]() {
+        std::error_code ignored;
+        std::filesystem::remove_all(root, ignored);
+    };
+
+    infiltrator::software::PackageStateStore store(
+        (root / "packages.db").string());
+    const std::string architecture =
+        infiltrator::software::native_debian_architecture();
+    if (architecture.empty()) {
+        cleanup();
+        error =
+            "Unable to determine the native Debian architecture while "
+            "verifying the reviewed repository state.";
+        return false;
+    }
+
+    std::uint64_t generation = 0U;
+    std::string reconcile_error;
+    if (!infiltrator::software::DebianReconciler::reconcile(
+            store,
+            architecture,
+            (root / "repositories").string(),
+            generation,
+            reconcile_error)) {
+        cleanup();
+        error =
+            "Unable to reproduce the reviewed trusted repository state: " +
+            reconcile_error;
+        return false;
+    }
+
+    std::string load_error;
+    const auto snapshot =
+        store.load_current(load_error);
+    cleanup();
+    if (!snapshot.has_value()) {
+        error =
+            "Unable to read the independently verified repository state: " +
+            load_error;
+        return false;
+    }
+    if (snapshot->source_fingerprint != expected) {
+        error =
+            "Trusted repository state changed after review; refusing to "
+            "apply package payloads until the transaction is reviewed again.";
+        return false;
+    }
+    return true;
+}
+
 int execute_dpkg_configure()
 {
     const char *path =
@@ -1064,7 +1155,7 @@ int main(int argc, char **argv)
             bool removal = false;
 
             if (resolved_plan &&
-                approved.rfind("x2|", 0U) == 0U) {
+                approved.rfind("x3|", 0U) == 0U) {
                 std::string decode_error;
                 if (!infiltrator::software::decode_exact_transaction_spec(
                         approved, reviewed, decode_error)) {
@@ -1089,7 +1180,7 @@ int main(int argc, char **argv)
                 /*
                  * Old apply-plan removal specs are retained for the automatic
                  * maintenance path because removals have no repository payload
-                 * to bind. Install/upgrade plans must use x2 artifact specs.
+                 * to bind. Install/upgrade plans must use x3 repository-bound artifact specs.
                  */
                 if (resolved_plan && !removal) {
                     std::fprintf(
@@ -1227,6 +1318,24 @@ int main(int argc, char **argv)
                 stderr,
                 "Unable to refresh system package metadata before install.\n");
             return refresh_status;
+        }
+
+        if (!pending_artifacts.empty()) {
+            std::string repository_error;
+            write_progress(
+                progress_path,
+                progress_token,
+                "validate",
+                "Verifying that trusted repository state still matches review.");
+            if (!verify_reviewed_repository_state(
+                    pending_artifacts,
+                    repository_error)) {
+                std::fprintf(
+                    stderr,
+                    "%s\n",
+                    repository_error.c_str());
+                return 71;
+            }
         }
 
         /*
