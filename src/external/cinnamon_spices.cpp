@@ -22,6 +22,8 @@
 #include <string>
 #include <string_view>
 #include <system_error>
+#include <fcntl.h>
+#include <sys/syscall.h>
 #include <unistd.h>
 #include <utility>
 #include <vector>
@@ -1192,6 +1194,37 @@ fs::path backup_path(
         "-" + std::to_string(ordinal);
 }
 
+bool exchange_paths(
+    const fs::path &left,
+    const fs::path &right,
+    std::string &error)
+{
+#if defined(SYS_renameat2)
+#ifndef RENAME_EXCHANGE
+#define RENAME_EXCHANGE (1U << 1U)
+#endif
+    if (syscall(
+            SYS_renameat2,
+            AT_FDCWD,
+            left.c_str(),
+            AT_FDCWD,
+            right.c_str(),
+            RENAME_EXCHANGE) == 0) {
+        return true;
+    }
+    error =
+        "Unable to atomically exchange Cinnamon Spice paths: " +
+        std::string(std::strerror(errno));
+    return false;
+#else
+    (void)left;
+    (void)right;
+    error =
+        "This Linux runtime does not provide renameat2 path exchange.";
+    return false;
+#endif
+}
+
 bool publish_path(
     const fs::path *staged,
     const fs::path &destination,
@@ -1228,7 +1261,63 @@ bool publish_path(
             "Unable to inspect the existing Cinnamon Spice installation.";
         return false;
     }
-    if (change.had_existing) {
+    if (staged != nullptr) {
+        if (change.had_existing) {
+            /*
+             * Linux renameat2(RENAME_EXCHANGE) keeps one complete version at
+             * the live destination throughout the replacement. A crash can
+             * therefore leave either the old or new complete tree live, but
+             * never the empty rename window created by move-old-then-move-new.
+             */
+            std::string exchange_error;
+            if (!exchange_paths(
+                    *staged,
+                    destination,
+                    exchange_error)) {
+                error = exchange_error;
+                return false;
+            }
+
+            fs::rename(
+                *staged,
+                change.backup,
+                ec);
+            if (ec) {
+                const std::string backup_error =
+                    ec.message();
+                std::string restore_error;
+                if (!exchange_paths(
+                        *staged,
+                        destination,
+                        restore_error)) {
+                    error =
+                        "Cinnamon Spice replacement was exchanged but its "
+                        "rollback copy could not be retained (" +
+                        backup_error +
+                        "); restoring the previous live copy also failed: " +
+                        restore_error;
+                } else {
+                    error =
+                        "Cinnamon Spice replacement was rolled back because "
+                        "its previous copy could not be retained: " +
+                        backup_error;
+                }
+                return false;
+            }
+        } else {
+            fs::rename(
+                *staged,
+                destination,
+                ec);
+            if (ec) {
+                error =
+                    "Unable to atomically publish the Cinnamon Spice update: " +
+                    ec.message();
+                return false;
+            }
+        }
+        change.new_present = true;
+    } else if (change.had_existing) {
         fs::rename(
             destination,
             change.backup,
@@ -1239,34 +1328,6 @@ bool publish_path(
                 ec.message();
             return false;
         }
-    }
-
-    if (staged != nullptr) {
-        fs::rename(
-            *staged,
-            destination,
-            ec);
-        if (ec) {
-            const std::string publish_error = ec.message();
-            std::string restore_detail;
-            if (change.had_existing) {
-                std::error_code restore_error;
-                fs::rename(
-                    change.backup,
-                    destination,
-                    restore_error);
-                if (restore_error) {
-                    restore_detail =
-                        " Restoring the previous copy also failed: " +
-                        restore_error.message() + ".";
-                }
-            }
-            error =
-                "Unable to atomically publish the Cinnamon Spice update: " +
-                publish_error + "." + restore_detail;
-            return false;
-        }
-        change.new_present = true;
     }
 
     published.emplace_back(
