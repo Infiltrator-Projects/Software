@@ -237,19 +237,19 @@ target_link_libraries(infiltrator-software-session-updater PRIVATE
 add_executable(infiltrator-software-cli
     src/cli/main.cpp)
 target_link_libraries(infiltrator-software-cli PRIVATE
-    software-core software-client PkgConfig::GLIB)
+    software-core software-history software-client PkgConfig::GLIB)
 target_compile_definitions(infiltrator-software-cli PRIVATE
     INFILTRATOR_SOFTWARE_VERSION="${PROJECT_VERSION}")
 
 add_executable(infiltrator-software-auto-updater
     src/automation/main.cpp)
 target_link_libraries(infiltrator-software-auto-updater PRIVATE
-    software-core software-engine PkgConfig::GLIB)
+    software-core software-history software-engine PkgConfig::GLIB)
 
 add_executable(infiltrator-software-maintenance
     src/automation/maintenance.cpp)
 target_link_libraries(infiltrator-software-maintenance PRIVATE
-    software-core software-engine PkgConfig::GLIB)
+    software-core software-history software-engine PkgConfig::GLIB)
 
 add_executable(infiltrator-software-release-upgrade
     src/release/main.cpp)
