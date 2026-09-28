@@ -803,6 +803,8 @@ bool verify_gpg(
     const std::string_view signed_content,
     const std::string_view detached_signature,
     const std::vector<std::string> &configured_keyrings,
+    const std::vector<std::string> &inline_keys,
+    const std::vector<std::string> &allowed_fingerprints,
     const bool detached,
     std::string &error)
 {
@@ -820,10 +822,10 @@ bool verify_gpg(
     }
 
     std::vector<std::string> keyrings = configured_keyrings;
-    if (keyrings.empty()) {
+    if (keyrings.empty() && inline_keys.empty()) {
         keyrings = default_keyrings();
     }
-    if (keyrings.empty()) {
+    if (keyrings.empty() && inline_keys.empty()) {
         error =
             "Repository signature verification has no trusted keyring.";
         return false;
@@ -846,7 +848,27 @@ bool verify_gpg(
         return false;
     }
 
-    std::vector<std::string> arguments{"gpgv", "--quiet"};
+    for (const std::string &armored : inline_keys) {
+        std::string binary;
+        if (!dearmor_public_keys(armored, binary, error)) {
+            error =
+                "Unable to prepare inline Signed-By public key: " +
+                error;
+            return false;
+        }
+        TemporaryFile file;
+        if (!create_temporary_file(binary, file, error)) {
+            error =
+                "Unable to materialise inline Signed-By public key: " +
+                error;
+            return false;
+        }
+        prepared_keyrings.emplace_back(file.path);
+        temporary_keyrings.emplace_back(std::move(file));
+    }
+
+    std::vector<std::string> arguments{
+        "gpgv", "--quiet", "--status-fd", "1"};
     for (const std::string &keyring : prepared_keyrings) {
         arguments.emplace_back("--keyring");
         arguments.emplace_back(keyring);
@@ -909,6 +931,57 @@ bool verify_gpg(
         g_free(standard_output);
         g_free(standard_error);
         return false;
+    }
+
+    if (!allowed_fingerprints.empty()) {
+        const std::string status =
+            standard_output == nullptr
+                ? std::string{}
+                : std::string(standard_output);
+        bool matched = false;
+        std::istringstream lines(status);
+        std::string line;
+        while (!matched && std::getline(lines, line)) {
+            constexpr std::string_view prefix =
+                "[GNUPG:] VALIDSIG ";
+            if (line.rfind(prefix, 0U) != 0U) {
+                continue;
+            }
+            const std::vector<std::string> fields =
+                split_words(
+                    std::string_view(line).substr(
+                        prefix.size()));
+            if (fields.empty()) {
+                continue;
+            }
+            const std::string signing =
+                lower_ascii(fields.front());
+            const std::string primary =
+                fields.size() > 9U
+                    ? lower_ascii(fields[9U])
+                    : signing;
+            for (std::string allowed : allowed_fingerprints) {
+                bool exact_signer = false;
+                if (!allowed.empty() &&
+                    allowed.back() == '!') {
+                    exact_signer = true;
+                    allowed.pop_back();
+                }
+                allowed = lower_ascii(std::move(allowed));
+                if (signing == allowed ||
+                    (!exact_signer && primary == allowed)) {
+                    matched = true;
+                    break;
+                }
+            }
+        }
+        if (!matched) {
+            error =
+                "Repository signature was valid, but it was not made by an allowed Signed-By fingerprint.";
+            g_free(standard_output);
+            g_free(standard_error);
+            return false;
+        }
     }
 
     g_free(standard_output);
@@ -986,7 +1059,13 @@ bool load_release(
             inrelease,
             inrelease_error)) {
         if (!verify_gpg(
-                inrelease, {}, source.keyrings, false, error)) {
+                inrelease,
+                {},
+                source.keyrings,
+                source.inline_keys,
+                source.allowed_fingerprints,
+                false,
+                error)) {
             return false;
         }
         return extract_inrelease(inrelease, release, error);
@@ -1011,6 +1090,8 @@ bool load_release(
         release,
         detached_signature,
         source.keyrings,
+        source.inline_keys,
+        source.allowed_fingerprints,
         true,
         error);
 }
