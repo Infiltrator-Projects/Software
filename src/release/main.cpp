@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+#include "core/exact_transaction_spec.hpp"
 #include "engine/engine_service_core.hpp"
 #include "engine/debian_candidate.hpp"
 #include "release/release_metadata.hpp"
@@ -461,18 +462,16 @@ std::string base(std::string value)
     return value;
 }
 
-std::vector<std::string> specs_for(const TransactionPlan &plan)
+bool specs_for(
+    const TransactionPlan &plan,
+    std::vector<std::string> &result,
+    std::string &error)
 {
-    std::vector<std::string> result;
-    result.reserve(plan.items.size());
-    for (const TransactionItem &item:plan.items) {
-        if (item.action==TransactionAction::remove)
-            result.push_back("remove:"+item.package_id+"="+item.from_version);
-        else
-            result.push_back(item.package_id+"="+item.to_version);
+    if (!exact_transaction_specs(plan, result, error)) {
+        return false;
     }
-    std::sort(result.begin(),result.end());
-    return result;
+    std::sort(result.begin(), result.end());
+    return true;
 }
 
 bool build_plan(const ReleaseInfo &release,TransactionPlan &combined,std::string &error)
@@ -1375,7 +1374,14 @@ int plan_command()
             <<"\t"<<(item.system_critical ? "1" : "0")
             <<"\n";
     }
-    for (const std::string &spec:specs_for(plan)) std::cout<<"SPEC\t"<<spec<<"\n";
+    std::vector<std::string> reviewed_specs;
+    if (!specs_for(plan, reviewed_specs, error)) {
+        std::cerr << error << "\n";
+        return 1;
+    }
+    for (const std::string &spec : reviewed_specs) {
+        std::cout << "SPEC\t" << spec << "\n";
+    }
     std::cout<<"SUMMARY\t"<<plan.items.size()<<"\t"<<plan.download_bytes<<"\n";
     return 0;
 }
@@ -1400,7 +1406,11 @@ int apply_inhibited_command(int argc,char **argv)
     std::vector<std::string> approved;
     for (int i=2;i<argc;++i) approved.emplace_back(argv[i]);
     std::sort(approved.begin(),approved.end());
-    const auto current=specs_for(plan);
+    std::vector<std::string> current;
+    if (!specs_for(plan, current, error)) {
+        std::cerr << error << "\n";
+        return 1;
+    }
     if (approved!=current) {
         std::cerr<<"The target release package plan changed after review; nothing was modified.\n";
         return 2;
