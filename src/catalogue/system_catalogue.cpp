@@ -2,6 +2,7 @@
 #include "catalogue/system_catalogue.hpp"
 
 #include <appstream.h>
+#include <glib.h>
 
 #include <algorithm>
 #include <array>
@@ -88,35 +89,82 @@ bool supported_kind(const AsComponentKind kind) noexcept
            kind == AS_COMPONENT_KIND_WEB_APP;
 }
 
-std::unordered_set<std::string> flatpak_installed_ids()
+std::filesystem::path flatpak_app_root(const bool user)
 {
-    std::unordered_set<std::string> ids;
-
-    const auto collect = [&ids](const std::filesystem::path &root) {
-        std::error_code ec;
-        if (!std::filesystem::is_directory(root, ec)) {
-            return;
-        }
-
-        for (const auto &entry :
-             std::filesystem::directory_iterator(root, ec)) {
-            if (ec || !entry.is_directory()) {
-                continue;
-            }
-            ids.insert(entry.path().filename().string());
-        }
-    };
-
-    collect("/var/lib/flatpak/app");
-
-    const char *home = std::getenv("HOME");
-    if (home != nullptr && *home != '\0') {
-        collect(
-            std::filesystem::path(home) /
-            ".local/share/flatpak/app");
+    if (!user) {
+        return "/var/lib/flatpak/app";
     }
 
+    const char *data = g_get_user_data_dir();
+    if (data == nullptr || *data == '\0') {
+        return {};
+    }
+    return std::filesystem::path(data) / "flatpak/app";
+}
+
+std::unordered_set<std::string> flatpak_installed_ids(
+    const bool user)
+{
+    std::unordered_set<std::string> ids;
+    const std::filesystem::path root =
+        flatpak_app_root(user);
+    if (root.empty()) {
+        return ids;
+    }
+
+    std::error_code ec;
+    if (!std::filesystem::is_directory(root, ec) || ec) {
+        return ids;
+    }
+
+    for (const auto &entry :
+         std::filesystem::directory_iterator(root, ec)) {
+        if (ec) {
+            break;
+        }
+        if (entry.is_directory()) {
+            ids.insert(entry.path().filename().string());
+        }
+    }
     return ids;
+}
+
+std::vector<PackageRecord> flatpak_installed_records()
+{
+    std::vector<PackageRecord> result;
+    for (const bool user : {false, true}) {
+        const auto installed =
+            flatpak_installed_ids(user);
+        for (const std::string &id : installed) {
+            PackageRecord record;
+            record.id =
+                std::string("flatpak:") +
+                (user ? "user:" : "system:") +
+                id;
+            record.name = id;
+            record.package_name = id;
+            record.category = "Flatpak";
+            record.kind = PackageKind::application;
+            record.channel = Channel::stable;
+            record.state = InstallState::installed;
+            record.installed_version = "Flatpak";
+            record.source =
+                user ? "Flatpak User" : "Flatpak System";
+            result.emplace_back(std::move(record));
+        }
+    }
+
+    std::sort(
+        result.begin(),
+        result.end(),
+        [](const PackageRecord &left,
+           const PackageRecord &right) {
+            if (left.name != right.name) {
+                return left.name < right.name;
+            }
+            return left.source < right.source;
+        });
+    return result;
 }
 
 
@@ -230,7 +278,11 @@ void append_flatpak_remote_records(
             !fields[0].empty() &&
             !fields[1].empty()) {
             PackageRecord record;
-            record.id = "flatpak:" + std::string(fields[0]);
+            const bool user = installation == "User";
+            record.id =
+                std::string("flatpak:") +
+                (user ? "user:" : "system:") +
+                std::string(fields[0]);
             record.package_name.assign(fields[0]);
             record.name.assign(fields[1]);
             record.description.assign(fields[2]);
@@ -239,6 +291,7 @@ void append_flatpak_remote_records(
             record.source =
                 "Flatpak " + std::string(installation);
             if (!fields[4].empty()) {
+                record.repository_origin.assign(fields[4]);
                 record.source +=
                     " · " + std::string(fields[4]);
             }
@@ -266,15 +319,21 @@ void append_flatpak_remote_records(
     }
 }
 
-std::vector<PackageRecord> flatpak_remote_records()
+std::vector<PackageRecord> flatpak_remote_records(
+    std::string &warning)
 {
+    warning.clear();
     std::vector<PackageRecord> result;
     if (access("/usr/bin/flatpak", X_OK) != 0 &&
         access("/bin/flatpak", X_OK) != 0) {
         return result;
     }
 
-    const auto installed = flatpak_installed_ids();
+    const auto system_installed =
+        flatpak_installed_ids(false);
+    const auto user_installed =
+        flatpak_installed_ids(true);
+
     std::string system_output;
     std::string user_output;
     const bool system_ok =
@@ -286,20 +345,30 @@ std::vector<PackageRecord> flatpak_remote_records()
         append_flatpak_remote_records(
             system_output,
             "System",
-            installed,
+            system_installed,
             result);
+    } else {
+        warning =
+            "System Flatpak catalogue is unavailable.";
     }
     if (user_ok) {
         append_flatpak_remote_records(
             user_output,
             "User",
-            installed,
+            user_installed,
             result);
+    } else {
+        if (!warning.empty()) {
+            warning += " ";
+        }
+        warning +=
+            "User Flatpak catalogue is unavailable.";
     }
 
     /*
-     * A ref can be exposed by both installations. Keep the first (system)
-     * record for duplicates while retaining user-only remotes/applications.
+     * System and user installations are separate targets.  Keep both when
+     * the same application is available in each scope, and only collapse
+     * accidental duplicates within the same scoped identity.
      */
     std::unordered_set<std::string> seen;
     result.erase(
@@ -383,60 +452,66 @@ CatalogueSnapshot SystemCatalogue::refresh(std::string &error)
     CatalogueSnapshot snapshot;
     snapshot.source = "System AppStream + Flatpak CLI";
 
+    std::unordered_set<std::string> seen;
     AsPool *pool = as_pool_new();
     if (pool == nullptr) {
         error = "Unable to create the system AppStream pool.";
-        return snapshot;
-    }
+    } else {
+        as_pool_set_flags(
+            pool,
+            static_cast<AsPoolFlags>(
+                AS_POOL_FLAG_LOAD_OS_CATALOG |
+                AS_POOL_FLAG_LOAD_OS_METAINFO));
 
-    as_pool_set_flags(
-        pool,
-        static_cast<AsPoolFlags>(
-            AS_POOL_FLAG_LOAD_OS_CATALOG |
-            AS_POOL_FLAG_LOAD_OS_METAINFO));
+        GError *load_error = nullptr;
+        if (!as_pool_load(pool, nullptr, &load_error)) {
+            error = load_error != nullptr
+                ? load_error->message
+                : "Unable to load system AppStream metadata.";
+            g_clear_error(&load_error);
+        } else {
+            AsComponentBox *components =
+                as_pool_get_components(pool);
+            if (components != nullptr) {
+                const guint count =
+                    as_component_box_get_size(components);
+                snapshot.records.reserve(
+                    static_cast<std::size_t>(count));
 
-    GError *load_error = nullptr;
-    if (!as_pool_load(pool, nullptr, &load_error)) {
-        error = load_error != nullptr
-            ? load_error->message
-            : "Unable to load system AppStream metadata.";
-        g_clear_error(&load_error);
-        g_object_unref(pool);
-        return snapshot;
-    }
-
-    AsComponentBox *components = as_pool_get_components(pool);
-    if (components == nullptr) {
-        g_object_unref(pool);
-        return snapshot;
-    }
-
-    std::unordered_set<std::string> seen;
-    const guint count = as_component_box_get_size(components);
-    snapshot.records.reserve(static_cast<std::size_t>(count));
-
-    for (guint i = 0U; i < count; ++i) {
-        AsComponent *component =
-            as_component_box_index_safe(components, i);
-        PackageRecord record =
-            convert_component(component);
-        if (!valid_identity(record) || record.package_name.empty()) {
-            continue;
+                for (guint i = 0U; i < count; ++i) {
+                    AsComponent *component =
+                        as_component_box_index_safe(
+                            components, i);
+                    PackageRecord record =
+                        convert_component(component);
+                    if (!valid_identity(record) ||
+                        record.package_name.empty()) {
+                        continue;
+                    }
+                    if (!seen.insert(record.id).second) {
+                        continue;
+                    }
+                    snapshot.records.emplace_back(
+                        std::move(record));
+                }
+            }
         }
-        if (!seen.insert(record.id).second) {
-            continue;
-        }
-        snapshot.records.emplace_back(std::move(record));
+        g_object_unref(pool);
     }
 
-    g_object_unref(pool);
-
+    std::string flatpak_warning;
     std::vector<PackageRecord> flatpaks =
-        flatpak_remote_records();
+        flatpak_remote_records(flatpak_warning);
     for (PackageRecord &record : flatpaks) {
         if (seen.insert(record.id).second) {
             snapshot.records.emplace_back(std::move(record));
         }
+    }
+    if (!flatpak_warning.empty()) {
+        if (!error.empty()) {
+            error += " ";
+        }
+        error += flatpak_warning;
     }
 
     std::sort(
@@ -450,6 +525,14 @@ CatalogueSnapshot SystemCatalogue::refresh(std::string &error)
         });
 
     return snapshot;
+}
+
+std::vector<PackageRecord>
+SystemCatalogue::installed_flatpaks(
+    std::string &error) const
+{
+    error.clear();
+    return flatpak_installed_records();
 }
 
 } // namespace infiltrator::software
