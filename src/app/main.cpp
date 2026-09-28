@@ -3032,9 +3032,7 @@ GtkWidget *make_discover_page(WindowState *state)
 void refresh_installed(WindowState *state)
 {
     if (state == nullptr) return;
-    refresh_installed_cone), card);
-
-    return page;
+    refresh_installed_controller(&state->installed);
 }
 
 struct UpdatesResult {
@@ -7888,7 +7886,7 @@ GtkWidget *make_updates_page(WindowState *state)
 
     gtk_box_append(
         GTK_BOX(page),
-        ext      state);
+        external_card);
 
     return page;
 }
@@ -7903,9 +7901,7 @@ void history_controller_changed(gpointer user_data)
 void refresh_history(WindowState *state)
 {
     if (state == nullptr) return;
-    refresh_history_c, scroll);
-
-    return page;
+    refresh_history_controller(&state->history);
 }
 
 GtkWidget *make_nav_row(
