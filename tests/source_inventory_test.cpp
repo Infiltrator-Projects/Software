@@ -3,7 +3,11 @@
 #include "sources/source_mutation.hpp"
 
 #include <cassert>
+#include <cstdlib>
+#include <filesystem>
+#include <fstream>
 #include <string>
+#include <unistd.h>
 
 using infiltrator::software::SourceInventory;
 
@@ -154,6 +158,70 @@ int main()
         assert(records.size() == 2U);
         assert(!records[0].enabled);
         assert(records[1].enabled);
+    }
+
+    {
+        namespace fs = std::filesystem;
+        const fs::path root =
+            fs::temp_directory_path() /
+            ("software-source-xdg-test-" +
+             std::to_string(
+                 static_cast<unsigned long long>(
+                     getpid())));
+        const fs::path data =
+            root / "xdg-data";
+        const fs::path config =
+            data / "flatpak/repo/config";
+        fs::create_directories(
+            config.parent_path());
+        {
+            std::ofstream output(config);
+            assert(output);
+            output
+                << "[remote \"user-test\"]\n"
+                << "url=https://flatpak.example.invalid/repo\n"
+                << "xa.title=User Test Remote\n"
+                << "xa.disable=false\n";
+        }
+
+        const char *old =
+            std::getenv("XDG_DATA_HOME");
+        const std::string old_value =
+            old == nullptr ? std::string{} : std::string(old);
+        (void)setenv(
+            "XDG_DATA_HOME",
+            data.c_str(),
+            1);
+
+        SourceInventory inventory;
+        std::string error;
+        const auto records =
+            inventory.list(error);
+        assert(error.empty());
+        bool found = false;
+        for (const auto &record : records) {
+            if (record.kind ==
+                    infiltrator::software::SourceKind::flatpak &&
+                record.scope == "User" &&
+                record.name == "user-test") {
+                found = true;
+                assert(
+                    record.location ==
+                    "https://flatpak.example.invalid/repo");
+            }
+        }
+        assert(found);
+
+        if (old != nullptr) {
+            (void)setenv(
+                "XDG_DATA_HOME",
+                old_value.c_str(),
+                1);
+        } else {
+            (void)unsetenv(
+                "XDG_DATA_HOME");
+        }
+        fs::remove_all(root);
     }
 
     return 0;
