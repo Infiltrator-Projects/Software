@@ -215,7 +215,7 @@ target_link_libraries(infiltrator-software-helper PRIVATE
 add_executable(infiltrator-software-update-helper
     src/helper/update_helper.cpp)
 target_link_libraries(infiltrator-software-update-helper PRIVATE
-    software-apt-plan-guard software-core PkgConfig::GLIB)
+    software-apt-plan-guard software-engine PkgConfig::GLIB)
 
 add_executable(infiltrator-software-engine
     src/service/main.cpp)
