@@ -355,7 +355,9 @@ jobs:
           assert "finish_update_progress(" in app
 
           assert "GTK_POLICY_ALWAYS" in app
-          assert '"DETAIL",\n            "Exact versions",\n            "stat-info"' in app
+          assert (
+              '"DETAIL",\n            "Exact versions",\n            "stat-info"' in history_view
+          )
 
           # Repair must be a working diagnostics/recovery page, not a milestone
           # placeholder. Its privileged repair action is deliberately narrow.
