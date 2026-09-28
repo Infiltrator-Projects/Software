@@ -171,6 +171,36 @@ int main()
     }
 
     {
+        const std::string mixed_case =
+            "tYpEs: deb\n"
+            "uRiS: https://mixed-case.invalid/debian\n"
+            "sUiTeS: stable\n"
+            "cOmPoNeNtS: main\n"
+            "eNaBlEd: yes\n";
+        const auto records =
+            SourceInventory::parse_apt_deb822(
+                mixed_case,
+                "/etc/apt/sources.list.d/mixed.sources");
+        assert(records.size() == 1U);
+        assert(records[0].enabled);
+        assert(records[0].location ==
+               "https://mixed-case.invalid/debian");
+
+        std::string updated;
+        std::string error;
+        assert(infiltrator::software::set_apt_deb822_entry_enabled(
+            mixed_case,
+            records[0].entry_index,
+            false,
+            records[0].location,
+            records[0].apt_suites,
+            updated,
+            error));
+        assert(error.empty());
+        assert(updated.find("Enabled: no") != std::string::npos);
+    }
+
+    {
         const std::string source_only =
             "Types: deb-src\n"
             "URIs: https://source-only.invalid/debian\n"
