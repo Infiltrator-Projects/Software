@@ -373,7 +373,7 @@ jobs:
           assert "titlebar-brand" in app
           assert "sidebar-brand" not in app
           assert "discover-icon-well" in app
-          assert "history-transaction-card" in app
+          assert "history-transaction-card" in history_view
           assert "repair-action-panel" in app
           assert ".hero-ribbon-a" in theme
           assert ".nav-icon-well" in theme
