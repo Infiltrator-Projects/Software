@@ -3,6 +3,7 @@
 #include "app/kernel_manager.hpp"
 #include "app/history_controller.hpp"
 #include "app/history_view.hpp"
+#include "app/installed_controller.hpp"
 #include "app/installed_inventory.hpp"
 #include "app/ui_components.hpp"
 #include "backends/apt/apt_backend.hpp"
@@ -85,6 +86,9 @@ using infiltrator::software::create_history_controller_page;
 using infiltrator::software::history_timestamp;
 using infiltrator::software::refresh_history_controller;
 using infiltrator::software::read_installed_packages;
+using infiltrator::software::InstalledController;
+using infiltrator::software::create_installed_page;
+using infiltrator::software::refresh_installed_controller;
 using infiltrator::software::make_icon;
 using infiltrator::software::make_label;
 using infiltrator::software::make_page_intro;
@@ -98,13 +102,7 @@ struct WindowState {
     GtkWidget *maximize_button{};
     GtkWidget *global_search{};
     bool search_syncing{false};
-    GtkStringList *installed_strings{};
-    GtkWidget *installed_status{};
-    GtkWidget *installed_count{};
-    GtkWidget *installed_backend{};
-    GtkWidget *backend_state{};
-    unsigned int installed_generation{0U};
-    bool installed_busy{false};
+    InstalledController installed;
 
     GtkStringList *discover_visible{};
     GtkWidget *discover_search{};
@@ -213,7 +211,6 @@ struct WindowState {
 
     bool window_presented{false};
     bool discover_loaded{false};
-    bool installed_loaded{false};
     bool updates_loaded{false};
     bool system_loaded{false};
     bool repositories_loaded{false};
@@ -3152,309 +3149,11 @@ GtkWidget *make_discover_page(WindowState *state)
     return page_scroll;
 }
 
-void list_item_setup(GtkSignalListItemFactory *, GtkListItem *item, gpointer)
-{
-    GtkWidget *row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
-    gtk_widget_add_css_class(row, "package-row");
-
-    GtkWidget *icon = make_icon("application-x-executable-symbolic", 20);
-    gtk_widget_add_css_class(icon, "package-icon");
-    gtk_box_append(GTK_BOX(row), icon);
-
-    GtkWidget *label = gtk_label_new(nullptr);
-    gtk_label_set_xalign(GTK_LABEL(label), 0.0F);
-    gtk_label_set_ellipsize(GTK_LABEL(label), PANGO_ELLIPSIZE_END);
-    gtk_widget_set_hexpand(label, true);
-    gtk_box_append(GTK_BOX(row), label);
-
-    gtk_list_item_set_child(item, row);
-}
-
-void list_item_bind(GtkSignalListItemFactory *, GtkListItem *item, gpointer)
-{
-    GObject *object = G_OBJECT(gtk_list_item_get_item(item));
-    GtkWidget *row = gtk_list_item_get_child(item);
-    if (object == nullptr || row == nullptr) {
-        return;
-    }
-
-    GtkWidget *label = gtk_widget_get_last_child(row);
-    if (label == nullptr) {
-        return;
-    }
-
-    const char *text = gtk_string_object_get_string(GTK_STRING_OBJECT(object));
-    gtk_label_set_text(GTK_LABEL(label), text);
-}
-
-struct InstalledResult {
-    unsigned int generation{0U};
-    std::vector<PackageRecord> records;
-    std::string error;
-    std::string flatpak_warning;
-    bool from_engine{false};
-    std::size_t flatpak_count{0U};
-};
-
-struct InstalledTaskData {
-    unsigned int generation{0U};
-};
-
-void installed_worker(
-    GTask *task,
-    gpointer,
-    gpointer task_data,
-    GCancellable *)
-{
-    auto *data = static_cast<InstalledTaskData *>(task_data);
-    auto *result = new InstalledResult{};
-    result->generation = data == nullptr ? 0U : data->generation;
-    result->records =
-        read_installed_packages(
-            result->error,
-            &result->from_engine);
-
-    SystemCatalogue system_catalogue;
-    std::string flatpak_error;
-    std::vector<PackageRecord> flatpaks =
-        system_catalogue.installed_flatpaks(
-            flatpak_error);
-    result->flatpak_count = flatpaks.size();
-    result->flatpak_warning =
-        flatpak_error;
-    result->records.insert(
-        result->records.end(),
-        std::make_move_iterator(
-            flatpaks.begin()),
-        std::make_move_iterator(
-            flatpaks.end()));
-    std::sort(
-        result->records.begin(),
-        result->records.end(),
-        [](const PackageRecord &left,
-           const PackageRecord &right) {
-            if (left.name != right.name) {
-                return left.name < right.name;
-            }
-            return left.source < right.source;
-        });
-
-    g_task_return_pointer(
-        task,
-        result,
-        [](gpointer pointer) {
-            delete static_cast<InstalledResult *>(pointer);
-        });
-}
-
-void installed_complete(
-    GObject *source_object,
-    GAsyncResult *async_result,
-    gpointer)
-{
-    auto *window = GTK_WINDOW(source_object);
-    auto *state = static_cast<WindowState *>(
-        g_object_get_data(
-            G_OBJECT(window),
-            "infiltrator-window-state"));
-    auto *result = static_cast<InstalledResult *>(
-        g_task_propagate_pointer(
-            G_TASK(async_result), nullptr));
-
-    if (state == nullptr || result == nullptr) {
-        delete result;
-        return;
-    }
-    if (result->generation != state->installed_generation) {
-        delete result;
-        return;
-    }
-
-    state->installed_busy = false;
-
-    std::vector<std::string> installed_rows;
-    installed_rows.reserve(result->records.size());
-    for (const PackageRecord &package : result->records) {
-        installed_rows.emplace_back(
-            package.name + "    " + package.installed_version);
-    }
-
-    std::vector<const char *> installed_additions;
-    installed_additions.reserve(installed_rows.size() + 1U);
-    for (const std::string &row : installed_rows) {
-        installed_additions.push_back(row.c_str());
-    }
-    installed_additions.push_back(nullptr);
-
-    gtk_string_list_splice(
-        state->installed_strings,
-        0U,
-        g_list_model_get_n_items(
-            G_LIST_MODEL(state->installed_strings)),
-        installed_additions.data());
-
-    if (state->installed_status != nullptr) {
-        std::ostringstream message;
-        if (!result->error.empty()) {
-            message
-                << "Installed inventory unavailable: "
-                << result->error;
-        } else {
-            message
-                << result->records.size()
-                << " installed software items read from "
-                << (result->from_engine
-                        ? "the shared native package engine"
-                        : "Debian package state")
-                << " and Flatpak.";
-            if (!result->flatpak_warning.empty()) {
-                message
-                    << " Flatpak inventory warning: "
-                    << result->flatpak_warning;
-            }
-        }
-        gtk_label_set_text(
-            GTK_LABEL(state->installed_status),
-            message.str().c_str());
-    }
-    if (state->installed_count != nullptr) {
-        const std::string count =
-            std::to_string(result->records.size());
-        gtk_label_set_text(
-            GTK_LABEL(state->installed_count), count.c_str());
-    }
-    if (state->installed_backend != nullptr) {
-        gtk_label_set_text(
-            GTK_LABEL(state->installed_backend),
-            result->from_engine
-                ? (result->flatpak_count > 0U
-                       ? "Native + Flatpak"
-                       : "Native engine")
-                : (result->flatpak_count > 0U
-                       ? "Debian + Flatpak"
-                       : "Debian state"));
-    }
-    if (state->backend_state != nullptr) {
-        gtk_label_set_text(
-            GTK_LABEL(state->backend_state),
-            result->error.empty()
-                ? "Ready"
-                : "Unavailable");
-    }
-
-    delete result;
-}
-
 void refresh_installed(WindowState *state)
 {
-    if (state == nullptr ||
-        state->installed_strings == nullptr ||
-        state->window == nullptr ||
-        state->installed_busy) {
-        return;
-    }
-
-    state->installed_loaded = true;
-    state->installed_busy = true;
-    ++state->installed_generation;
-
-    if (state->installed_status != nullptr) {
-        gtk_label_set_text(
-            GTK_LABEL(state->installed_status),
-            "Loading installed packages from shared state…");
-    }
-    if (state->backend_state != nullptr) {
-        gtk_label_set_text(
-            GTK_LABEL(state->backend_state), "Loading");
-    }
-
-    auto *data = new InstalledTaskData{
-        state->installed_generation};
-    GTask *task = g_task_new(
-        G_OBJECT(state->window),
-        nullptr,
-        installed_complete,
-        nullptr);
-    g_task_set_task_data(
-        task,
-        data,
-        [](gpointer pointer) {
-            delete static_cast<InstalledTaskData *>(pointer);
-        });
-    g_task_run_in_thread(task, installed_worker);
-    g_object_unref(task);
+    if (state == nullptr) return;
+    refresh_installed_controller(&state->installed);
 }
-
-GtkWidget *make_installed_page(WindowState *state)
-{
-    GtkWidget *page = gtk_box_new(GTK_ORIENTATION_VERTICAL, 16);
-    gtk_widget_add_css_class(page, "content");
-    gtk_widget_add_css_class(page, "page-installed");
-
-    gtk_box_append(
-        GTK_BOX(page),
-        make_page_intro(
-            "view-list-symbolic",
-            "Installed",
-            "Software currently present on this system."));
-
-    GtkWidget *stats = gtk_grid_new();
-    gtk_grid_set_column_spacing(GTK_GRID(stats), 10);
-    gtk_grid_set_column_homogeneous(GTK_GRID(stats), true);
-    gtk_grid_attach(
-        GTK_GRID(stats),
-        make_stat_card("PACKAGES", "0", "stat-info", &state->installed_count),
-        0, 0, 1, 1);
-    gtk_grid_attach(
-        GTK_GRID(stats),
-        make_stat_card(
-            "BACKEND", "Loading", "stat-operation",
-            &state->installed_backend),
-        1, 0, 1, 1);
-    gtk_grid_attach(
-        GTK_GRID(stats),
-        make_stat_card("STATE", "Loading", "stat-success", &state->backend_state),
-        2, 0, 1, 1);
-    gtk_box_append(GTK_BOX(page), stats);
-
-    GtkWidget *card = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
-    gtk_widget_add_css_class(card, "card");
-    gtk_widget_add_css_class(card, "card-info");
-    gtk_widget_set_vexpand(card, true);
-
-    GtkWidget *heading = make_label("Installed packages", "card-title");
-    gtk_box_append(GTK_BOX(card), heading);
-
-    state->installed_status = make_label(
-        "Reading installed package inventory…", "card-copy");
-    gtk_label_set_wrap(GTK_LABEL(state->installed_status), true);
-    gtk_box_append(GTK_BOX(card), state->installed_status);
-
-    state->installed_strings = gtk_string_list_new(nullptr);
-
-    GtkListItemFactory *factory = gtk_signal_list_item_factory_new();
-    g_signal_connect(factory, "setup", G_CALLBACK(list_item_setup), nullptr);
-    g_signal_connect(factory, "bind", G_CALLBACK(list_item_bind), nullptr);
-
-    GtkSelectionModel *selection = GTK_SELECTION_MODEL(
-        gtk_single_selection_new(G_LIST_MODEL(state->installed_strings)));
-    GtkWidget *list = gtk_list_view_new(selection, factory);
-    gtk_widget_add_css_class(list, "package-list");
-    gtk_widget_set_vexpand(list, true);
-
-    GtkWidget *scroll = gtk_scrolled_window_new();
-    gtk_widget_set_vexpand(scroll, true);
-    gtk_scrolled_window_set_policy(
-        GTK_SCROLLED_WINDOW(scroll),
-        GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
-    gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(scroll), list);
-    gtk_box_append(GTK_BOX(card), scroll);
-    gtk_box_append(GTK_BOX(page), card);
-
-    return page;
-}
-
-
 
 struct SystemResult {
     unsigned int generation{0U};
@@ -3890,7 +3589,7 @@ void kernel_manager_changed(gpointer user_data)
     if (state->updates_loaded) {
         refresh_updates(state, false);
     }
-    if (state->installed_loaded) {
+    if (state->installed.loaded) {
         refresh_installed(state);
     }
     if (state->history.loaded) {
@@ -5180,7 +4879,7 @@ void discover_flatpak_complete(
         if (state != nullptr) {
             if (success) {
                 refresh_discover(state, true);
-                if (state->installed_loaded) {
+                if (state->installed.loaded) {
                     refresh_installed(state);
                 }
                 if (state->updates_loaded) {
@@ -5571,7 +5270,7 @@ void discover_install_process_complete(
                 "infiltrator-window-state"));
         if (state != nullptr) {
             refresh_discover(state, true);
-            if (state->installed_loaded) refresh_installed(state);
+            if (state->installed.loaded) refresh_installed(state);
             if (state->updates_loaded) refresh_updates(state);
         }
     }
@@ -11191,7 +10890,7 @@ void repair_configure_complete(
             if (state->updates_loaded) {
                 refresh_updates(state, false);
             }
-            if (state->installed_loaded) {
+            if (state->installed.loaded) {
                 refresh_installed(state);
             }
         } else {
@@ -11765,7 +11464,7 @@ void refresh_page_if_needed(WindowState *state, const int index)
         }
         break;
     case 1:
-        if (!state->installed_loaded) {
+        if (!state->installed.loaded) {
             refresh_installed(state);
         }
         break;
@@ -13173,9 +12872,9 @@ void destroy_window_state(gpointer data)
         return;
     }
 
-    if (state->installed_strings != nullptr) {
-        g_object_unref(state->installed_strings);
-        state->installed_strings = nullptr;
+    if (state->installed.strings != nullptr) {
+        g_object_unref(state->installed.strings);
+        state->installed.strings = nullptr;
     }
     if (state->discover_categories != nullptr) {
         g_object_unref(state->discover_categories);
@@ -13392,7 +13091,9 @@ void activate(GtkApplication *application, gpointer)
         "discover");
     gtk_stack_add_named(
         state->stack,
-        make_installed_page(state),
+        create_installed_page(
+            &state->installed,
+            GTK_WINDOW(window)),
         "installed");
     gtk_stack_add_named(
         state->stack,
