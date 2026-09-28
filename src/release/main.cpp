@@ -997,6 +997,71 @@ bool rollback_target_sources(
     return true;
 }
 
+bool finalize_target_release(
+    const std::string_view target_codename,
+    std::string &error)
+{
+    std::vector<std::string> failures;
+
+    if (gchar *program =
+            g_find_program_in_path("update-grub");
+        program != nullptr) {
+        g_free(program);
+        std::string command_error;
+        if (!run_command(
+                {"update-grub"},
+                command_error)) {
+            failures.emplace_back(
+                "update-grub failed: " +
+                command_error);
+        }
+    }
+
+    if (gchar *program =
+            g_find_program_in_path(
+                "ubuntu-system-adjustments");
+        program != nullptr) {
+        g_free(program);
+        std::string command_error;
+        if (!run_command(
+                {
+                    "ubuntu-system-adjustments",
+                    "adjust-grub-title"
+                },
+                command_error)) {
+            failures.emplace_back(
+                "ubuntu-system-adjustments failed: " +
+                command_error);
+        }
+    }
+
+    const auto after =
+        read_assignments(
+            "/etc/linuxmint/info");
+    const auto codename =
+        after.find("CODENAME");
+    if (codename == after.end() ||
+        codename->second != target_codename) {
+        failures.emplace_back(
+            "the target Linux Mint release identity is not confirmed");
+    }
+
+    if (failures.empty()) {
+        error.clear();
+        return true;
+    }
+
+    std::ostringstream message;
+    message <<
+        "Release finalization is incomplete:";
+    for (const std::string &failure :
+         failures) {
+        message << " " << failure << ".";
+    }
+    error = message.str();
+    return false;
+}
+
 bool recover_pending_release(std::string &error)
 {
     error.clear();
@@ -1027,37 +1092,75 @@ bool recover_pending_release(std::string &error)
             ? std::string{}
             : codename->second;
 
-    /*
-     * Once the target release identity is active, never roll repositories
-     * backward.  The package transition reached the target side of the
-     * compatibility boundary; only stale recovery artifacts need removal.
-     */
-    if (active_codename == journal.target_codename ||
-        journal.phase == "complete" ||
+    if (journal.phase == "complete" ||
         journal.phase == "rolled-back") {
         if (!cleanup_release_artifacts(
                 publication,
                 error)) {
             error =
-                "Target release is active, but stale release-upgrade "
-                "recovery artifacts could not be removed: " +
+                "Completed release-upgrade recovery artifacts could not be removed: " +
                 error;
             return false;
         }
         return true;
     }
 
-    if (journal.phase == "packages-applying" ||
-        journal.phase == "packages-applied") {
+    /*
+     * apply-plan can fail or the machine can die after dpkg has changed an
+     * unknown subset of the approved transaction.  Never infer safety from
+     * /etc/linuxmint/info alone while the journal still says mutation was in
+     * progress.
+     */
+    if (journal.phase == "packages-applying") {
         error =
-            journal.phase == "packages-applying"
-                ? "A release upgrade was interrupted while packages were being "
-                  "mutated. Recovery state has been preserved; refusing to roll "
-                  "repositories backward across a possibly partial package upgrade."
-                : "Release packages were applied but the target release identity "
-                  "was not confirmed. Recovery state has been preserved; refusing "
-                  "to roll repositories backward across an applied package upgrade.";
+            "A release upgrade was interrupted while packages were being "
+            "mutated. Recovery state has been preserved; refusing to roll "
+            "repositories backward or discard evidence across a possibly "
+            "partial package upgrade.";
         return false;
+    }
+
+    /*
+     * packages-applied is written only after the exact helper returned
+     * success.  Resume idempotent finalization after a crash, then advance to
+     * complete before deleting recovery evidence.
+     */
+    if (journal.phase == "packages-applied") {
+        if (active_codename !=
+            journal.target_codename) {
+            error =
+                "Release packages were applied but the target release identity "
+                "is not confirmed. Recovery state has been preserved.";
+            return false;
+        }
+        if (!finalize_target_release(
+                journal.target_codename,
+                error)) {
+            return false;
+        }
+
+        ReleaseJournal completed =
+            journal;
+        completed.phase = "complete";
+        if (!write_release_journal(
+                completed,
+                error)) {
+            error =
+                "Recovered release finalization completed, but recovery state "
+                "could not be marked complete: " +
+                error;
+            return false;
+        }
+        if (!cleanup_release_artifacts(
+                publication,
+                error)) {
+            error =
+                "Recovered release finalization completed, but stale recovery "
+                "artifacts could not be removed: " +
+                error;
+            return false;
+        }
+        return true;
     }
 
     if (active_codename != journal.current_codename) {
@@ -1270,42 +1373,13 @@ int apply_inhibited_command(int argc,char **argv)
         return 3;
     }
 
-    std::vector<std::string> finalization_errors;
-    if (gchar *program = g_find_program_in_path("update-grub");
-        program != nullptr) {
-        g_free(program);
-        std::string command_error;
-        if (!run_command({"update-grub"}, command_error)) {
-            finalization_errors.emplace_back(
-                "update-grub failed: " + command_error);
-        }
-    }
-    if (gchar *program =
-            g_find_program_in_path("ubuntu-system-adjustments");
-        program != nullptr) {
-        g_free(program);
-        std::string command_error;
-        if (!run_command(
-                {"ubuntu-system-adjustments", "adjust-grub-title"},
-                command_error)) {
-            finalization_errors.emplace_back(
-                "ubuntu-system-adjustments failed: " +
-                command_error);
-        }
-    }
-
-    const auto after=read_assignments("/etc/linuxmint/info");
-    const auto codename=after.find("CODENAME");
-    if (codename==after.end() || codename->second!=release.target_codename) {
-        std::cerr<<"Packages were upgraded, but the target Mint release identity was not yet confirmed. Reboot and recheck Software.\n";
-        return 3;
-    }
-    if (!finalization_errors.empty()) {
+    if (!finalize_target_release(
+            release.target_codename,
+            error)) {
         std::cerr
-            << "Release packages were applied, but finalization was incomplete:\n";
-        for (const std::string &detail : finalization_errors) {
-            std::cerr << " - " << detail << "\n";
-        }
+            << "Release packages were applied, but "
+            << error
+            << "\nRecovery state was preserved so finalization can be retried.\n";
         return 3;
     }
 
