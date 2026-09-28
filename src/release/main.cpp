@@ -602,6 +602,17 @@ bool run_command(std::vector<std::string> args,std::string &error)
     return ok;
 }
 
+constexpr const char *kReleaseJournal =
+    "/var/lib/infiltrator/software/release-upgrade.pending";
+
+struct ReleaseJournal {
+    std::string current_codename;
+    std::string target_codename;
+    std::string phase;
+    bool destination_existed{false};
+    bool obsolete_existed{false};
+};
+
 struct SourcePublication {
     std::filesystem::path destination;
     std::filesystem::path destination_backup;
@@ -610,6 +621,149 @@ struct SourcePublication {
     std::filesystem::path obsolete_backup;
     bool obsolete_existed{false};
 };
+
+bool write_release_journal(
+    const ReleaseJournal &journal,
+    std::string &error)
+{
+    std::ostringstream content;
+    content
+        << "VERSION=1\n"
+        << "CURRENT=" << journal.current_codename << "\n"
+        << "TARGET=" << journal.target_codename << "\n"
+        << "PHASE=" << journal.phase << "\n"
+        << "DESTINATION_EXISTED="
+        << (journal.destination_existed ? "1" : "0") << "\n"
+        << "OBSOLETE_EXISTED="
+        << (journal.obsolete_existed ? "1" : "0") << "\n";
+    return durable_write_text(
+        kReleaseJournal,
+        content.str(),
+        0600,
+        error);
+}
+
+bool load_release_journal(
+    ReleaseJournal &journal,
+    std::string &error)
+{
+    error.clear();
+    std::error_code ec;
+    if (!std::filesystem::exists(
+            kReleaseJournal, ec)) {
+        if (ec) {
+            error =
+                "Unable to inspect release-upgrade recovery state: " +
+                ec.message();
+            return false;
+        }
+        journal = ReleaseJournal{};
+        return true;
+    }
+
+    const auto values =
+        read_assignments(kReleaseJournal);
+    const auto version = values.find("VERSION");
+    const auto current = values.find("CURRENT");
+    const auto target = values.find("TARGET");
+    const auto phase = values.find("PHASE");
+    const auto destination =
+        values.find("DESTINATION_EXISTED");
+    const auto obsolete =
+        values.find("OBSOLETE_EXISTED");
+    if (version == values.end() ||
+        version->second != "1" ||
+        current == values.end() ||
+        target == values.end() ||
+        phase == values.end() ||
+        destination == values.end() ||
+        obsolete == values.end() ||
+        current->second.empty() ||
+        target->second.empty() ||
+        phase->second.empty() ||
+        (destination->second != "0" &&
+         destination->second != "1") ||
+        (obsolete->second != "0" &&
+         obsolete->second != "1")) {
+        error =
+            "Release-upgrade recovery state is malformed; refusing to guess.";
+        return false;
+    }
+
+    journal.current_codename =
+        current->second;
+    journal.target_codename =
+        target->second;
+    journal.phase =
+        phase->second;
+    journal.destination_existed =
+        destination->second == "1";
+    journal.obsolete_existed =
+        obsolete->second == "1";
+    return true;
+}
+
+SourcePublication publication_from_journal(
+    const ReleaseJournal &journal)
+{
+    SourcePublication publication;
+    publication.destination =
+        "/etc/apt/sources.list.d/official-package-repositories.list";
+    publication.obsolete =
+        "/etc/apt/sources.list.d/official-source-repositories.list";
+    publication.destination_backup =
+        publication.destination.string() +
+        ".infiltrator-" +
+        journal.current_codename +
+        ".bak";
+    publication.obsolete_backup =
+        publication.obsolete.string() +
+        ".infiltrator-" +
+        journal.current_codename +
+        ".bak";
+    publication.destination_existed =
+        journal.destination_existed;
+    publication.obsolete_existed =
+        journal.obsolete_existed;
+    return publication;
+}
+
+ReleaseJournal make_release_journal(
+    const ReleaseInfo &release,
+    const SourcePublication &publication,
+    const std::string_view phase)
+{
+    ReleaseJournal journal;
+    journal.current_codename =
+        release.current_codename;
+    journal.target_codename =
+        release.target_codename;
+    journal.phase =
+        std::string(phase);
+    journal.destination_existed =
+        publication.destination_existed;
+    journal.obsolete_existed =
+        publication.obsolete_existed;
+    return journal;
+}
+
+bool cleanup_release_artifacts(
+    const SourcePublication &publication,
+    std::string &error)
+{
+    if (!durable_remove(
+            publication.destination_backup,
+            error) ||
+        !durable_remove(
+            publication.obsolete_backup,
+            error) ||
+        !durable_remove(
+            kReleaseJournal,
+            error)) {
+        return false;
+    }
+    return true;
+}
 
 bool rollback_target_sources(
     const SourcePublication &publication,
