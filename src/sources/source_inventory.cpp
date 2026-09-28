@@ -151,6 +151,27 @@ bool parse_bool(std::string_view value, const bool fallback)
     return fallback;
 }
 
+std::filesystem::path user_data_home()
+{
+    const char *xdg =
+        std::getenv("XDG_DATA_HOME");
+    if (xdg != nullptr &&
+        *xdg != '\0') {
+        const std::filesystem::path path(xdg);
+        if (path.is_absolute()) {
+            return path;
+        }
+    }
+
+    const char *home =
+        std::getenv("HOME");
+    if (home == nullptr || *home == '\0') {
+        return {};
+    }
+    return std::filesystem::path(home) /
+        ".local/share";
+}
+
 std::vector<SourceRecord> parse_flatpak_config(
     const std::filesystem::path &path,
     const std::string &scope)
@@ -410,13 +431,16 @@ std::vector<SourceRecord> SourceInventory::list(std::string &error) const
         system_flatpak.begin(),
         system_flatpak.end());
 
-    const char *home = std::getenv("HOME");
-    if (home != nullptr && *home != '\0') {
+    const std::filesystem::path data_home =
+        user_data_home();
+    if (!data_home.empty()) {
         const std::filesystem::path user_config =
-            std::filesystem::path(home) /
-            ".local/share/flatpak/repo/config";
+            data_home /
+            "flatpak/repo/config";
         const auto user_flatpak =
-            parse_flatpak_config(user_config, "User");
+            parse_flatpak_config(
+                user_config,
+                "User");
         result.insert(
             result.end(),
             user_flatpak.begin(),
