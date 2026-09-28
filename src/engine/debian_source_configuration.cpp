@@ -122,6 +122,23 @@ std::string normalise_line_endings(const std::string_view content)
     return result;
 }
 
+bool valid_fingerprint_selector(
+    std::string_view value)
+{
+    if (!value.empty() && value.back() == '!') {
+        value.remove_suffix(1U);
+    }
+    if (value.size() != 40U && value.size() != 64U) {
+        return false;
+    }
+    return std::all_of(
+        value.begin(),
+        value.end(),
+        [](const unsigned char character) {
+            return std::isxdigit(character) != 0;
+        });
+}
+
 void append_signed_by(
     DebianRepositorySource &source,
     const std::string_view value,
@@ -129,29 +146,39 @@ void append_signed_by(
 {
     const std::string clean = trim(value);
     if (clean.empty()) return;
-    if (clean.find("BEGIN PGP PUBLIC KEY BLOCK") != std::string::npos) {
-        error =
-            "Inline Signed-By public keys are not yet supported by the "
-            "native repository engine.";
+
+    if (clean.find("-----BEGIN PGP PUBLIC KEY BLOCK-----") !=
+        std::string::npos) {
+        if (clean.find("-----END PGP PUBLIC KEY BLOCK-----") ==
+            std::string::npos) {
+            error =
+                "Inline Signed-By public key is incomplete.";
+            return;
+        }
+        source.inline_keys.emplace_back(clean);
         return;
     }
+
     bool saw_value = false;
     for (const std::string &word : split_words(clean)) {
         for (const std::string &value_part : split_commas(word)) {
             if (value_part.empty()) continue;
             saw_value = true;
-            if (value_part.front() != '/') {
+            if (value_part.front() == '/') {
+                source.keyrings.emplace_back(value_part);
+            } else if (valid_fingerprint_selector(value_part)) {
+                source.allowed_fingerprints.emplace_back(value_part);
+            } else {
                 error =
-                    "Signed-By fingerprint selectors are not yet supported by "
-                    "the native repository engine; refusing to broaden trust.";
+                    "Signed-By contains an unsupported keyring or fingerprint selector.";
                 source.keyrings.clear();
+                source.allowed_fingerprints.clear();
                 return;
             }
-            source.keyrings.emplace_back(value_part);
         }
     }
     if (!saw_value) {
-        error = "Signed-By contains no usable keyring path.";
+        error = "Signed-By contains no usable keyring or fingerprint selector.";
     }
 }
 
@@ -170,11 +197,10 @@ void parse_list_options(
             if (!error.empty()) return;
         } else if (key == "arch") {
             source.architectures = split_commas(value);
-        } else if (key == "arch+" || key == "arch-") {
-            error =
-                "Architecture add/remove modifiers are not yet supported by "
-                "the native repository engine.";
-            return;
+        } else if (key == "arch+") {
+            source.architecture_additions = split_commas(value);
+        } else if (key == "arch-") {
+            source.architecture_removals = split_commas(value);
         } else if (key == "trusted") {
             source.verify_signatures = !parse_yes_no(value, false);
         } else if (key == "check-valid-until") {
@@ -219,7 +245,11 @@ Fields parse_fields(const std::string_view block)
         if (!line.empty() &&
             std::isspace(static_cast<unsigned char>(line.front())) != 0 &&
             !current.empty()) {
-            result[current] += "\n" + trim(line);
+            const std::string continuation = trim(line);
+            result[current] += "\n";
+            if (continuation != ".") {
+                result[current] += continuation;
+            }
             continue;
         }
         const std::size_t colon = line.find(':');
@@ -384,13 +414,15 @@ DebianSourceConfiguration::parse_deb822(
         if (const auto found = fields.find("architectures"); found != fields.end()) {
             architectures = split_words(found->second);
         }
-        if (fields.find("architectures-add") != fields.end() ||
-            fields.find("architectures-remove") != fields.end()) {
-            error = std::string(origin) + ": stanza " +
-                std::to_string(stanza) +
-                ": Architecture add/remove modifiers are not yet supported "
-                "by the native repository engine.";
-            return {};
+        std::vector<std::string> architecture_additions;
+        if (const auto found = fields.find("architectures-add");
+            found != fields.end()) {
+            architecture_additions = split_words(found->second);
+        }
+        std::vector<std::string> architecture_removals;
+        if (const auto found = fields.find("architectures-remove");
+            found != fields.end()) {
+            architecture_removals = split_words(found->second);
         }
 
         bool check_valid_until = true;
@@ -450,6 +482,8 @@ DebianSourceConfiguration::parse_deb822(
                 source.suite = suite;
                 source.components = components;
                 source.architectures = architectures;
+                source.architecture_additions = architecture_additions;
+                source.architecture_removals = architecture_removals;
                 source.verify_signatures = verify_signatures;
                 source.check_valid_until = check_valid_until;
                 source.check_date = check_date;
