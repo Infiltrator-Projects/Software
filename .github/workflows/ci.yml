@@ -92,6 +92,10 @@ jobs:
           repository = Path("src/engine/debian_repository.cpp").read_text()
           state_store = Path("src/engine/package_state_store.cpp").read_text()
           history = Path("src/core/transaction_history.cpp").read_text()
+          exact_spec = Path("src/core/exact_transaction_spec.cpp").read_text()
+          history_controller = Path("src/app/history_controller.cpp").read_text()
+          history_view = Path("src/app/history_view.cpp").read_text()
+          installed_controller = Path("src/app/installed_controller.cpp").read_text()
           helper = Path("src/helper/update_helper.cpp").read_text()
           source_helper = Path("src/helper/source_helper.cpp").read_text()
           source_mutation = Path("src/sources/source_mutation.cpp").read_text()
@@ -209,6 +213,14 @@ jobs:
           assert '"--no-remove"' in helper
           assert '"--no-install-recommends"' in helper
           assert "validate_apt_simulation" in helper
+          # Review-to-mutation identity is bound to both the independently
+          # reproduced repository generation and the exact downloaded bytes.
+          assert '"x3|"' in exact_spec
+          assert "source_fingerprint" in exact_spec
+          assert "verify_reviewed_repository_state" in helper
+          assert "verify_downloaded_artifacts" in helper
+          assert '"--download-only"' in helper
+          assert '"--no-download"' in helper
           assert 'simulation_arguments.insert(simulation_arguments.begin(), "-s")' in helper
           assert "introduced an unapproved change" in guard
           assert "parse_remove_line" in guard
@@ -230,6 +242,8 @@ jobs:
           # plan; the privileged executor must not independently broaden it.
           assert "request.install_recommends" in transaction
           assert "owner.recommends" in dependency
+          assert "planned_removals" in dependency
+          assert "best_conflict_resolution_candidate" in dependency
           assert '"--install-recommends"' in backend
           assert '"--no-install-recommends"' in backend
 
@@ -286,6 +300,13 @@ jobs:
           assert 'return "view-refresh-symbolic";' in app
           assert 'image.package-icon { color:' in theme
 
+          # Installed state now owns its asynchronous GTK lifetime outside
+          # the top-level application controller.
+          assert "InstalledController installed" in app
+          assert "create_installed_page" in app
+          assert "refresh_installed_controller" in app
+          assert "installed_worker" in installed_controller
+
           # System is an operational inventory, not a milestone placeholder.
           assert "make_system_page(state)" in app
           assert '"COMPONENTS", "0"' in app
@@ -294,12 +315,14 @@ jobs:
           assert "is_system_component" in Path("src/core/model.cpp").read_text()
           assert '"System changes stay distinct"' not in app
 
-          # History is durable and update execution must remain visibly active.
-          assert "make_history_page(state)" in app
-          assert '"Durable transaction history"' not in app
-          assert "TransactionHistoryStore" in app
-          assert "user_transaction_history_path" in app
-          assert "system_transaction_history_path" in app
+          # History owns its own controller/view lifetime while the application
+          # shell retains only cross-page coordination.
+          assert "create_history_controller_page" in app
+          assert "HistoryController history" in app
+          assert "TransactionHistoryStore" in history_controller
+          assert "user_transaction_history_path" in history_controller
+          assert "system_transaction_history_path" in history_controller
+          assert "create_history_page" in history_view
           assert '"history.sqlite3"' in history
           assert "CREATE TABLE IF NOT EXISTS transactions" in history
           assert "CREATE TABLE IF NOT EXISTS transaction_items" in history
