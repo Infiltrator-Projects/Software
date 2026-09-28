@@ -425,9 +425,7 @@ bool run_optional_flatpak(
      * Treat the standard "No such installation/no installed refs" class as a
      * no-op only when Flatpak itself is available.
      */
-    if (error.find("No such installation") != std::string::npos ||
-        error.find("Nothing unused to uninstall") != std::string::npos ||
-        error.find("Nothing to do") != std::string::npos) {
+    if (flatpak_installation_absent(error)) {
         error.clear();
         return true;
     }
@@ -460,6 +458,18 @@ std::string current_gtk_theme()
             theme.substr(1U, theme.size() - 2U);
     }
     return theme;
+}
+
+bool flatpak_installation_absent(
+    const std::string_view error) noexcept
+{
+    return
+        error.find("No such installation") !=
+            std::string_view::npos ||
+        error.find("Nothing unused to uninstall") !=
+            std::string_view::npos ||
+        error.find("Nothing to do") !=
+            std::string_view::npos;
 }
 
 bool valid_flatpak_component(
@@ -508,6 +518,11 @@ bool install_matching_theme(
             remotes_command,
             remotes,
             ignored_error)) {
+        if (flatpak_installation_absent(
+                ignored_error)) {
+            error.clear();
+            return true;
+        }
         error =
             "Unable to inspect Flatpak remotes while matching the host theme: " +
             ignored_error;
