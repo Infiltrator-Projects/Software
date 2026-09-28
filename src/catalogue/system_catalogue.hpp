@@ -10,6 +10,8 @@ class SystemCatalogue final : public CatalogueSource {
 public:
     [[nodiscard]] std::string_view name() const noexcept override;
     CatalogueSnapshot refresh(std::string &error) override;
+    std::vector<PackageRecord> installed_flatpaks(
+        std::string &error) const;
 };
 
 } // namespace infiltrator::software
