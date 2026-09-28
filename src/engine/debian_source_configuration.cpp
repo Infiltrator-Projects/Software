@@ -486,6 +486,8 @@ DebianSourceConfiguration::read(std::string &error)
      */
     const char *override_file =
         std::getenv("INFILTRATOR_SOFTWARE_SOURCES_FILE");
+    const char *override_origin =
+        std::getenv("INFILTRATOR_SOFTWARE_SOURCES_ORIGIN");
     if (override_file != nullptr &&
         *override_file != '\0') {
         const std::filesystem::path path{
@@ -532,10 +534,18 @@ DebianSourceConfiguration::read(std::string &error)
     for (const std::filesystem::path &path : files) {
         std::string content;
         if (!read_text(path, content, error)) return {};
+        const std::string origin =
+            override_file != nullptr &&
+            *override_file != '\0' &&
+            path == std::filesystem::path(override_file) &&
+            override_origin != nullptr &&
+            *override_origin != '\0'
+                ? std::string(override_origin)
+                : path.string();
         std::vector<DebianRepositorySource> parsed =
             path.extension() == ".sources"
-                ? parse_deb822(content, path.string(), error)
-                : parse_list(content, path.string(), error);
+                ? parse_deb822(content, origin, error)
+                : parse_list(content, origin, error);
         if (!error.empty()) return {};
         result.insert(
             result.end(),
