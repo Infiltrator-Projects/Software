@@ -28,6 +28,9 @@ int main()
     removal.architecture = "amd64";
 
     TransactionPlan plan;
+    plan.source_fingerprint =
+        "abcdef0123456789abcdef0123456789"
+        "abcdef0123456789abcdef0123456789";
     plan.items = {install, removal};
 
     std::vector<std::string> specs;
@@ -35,8 +38,8 @@ int main()
     assert(exact_transaction_specs(plan, specs, error));
     assert(error.empty());
     assert(specs.size() == 2U);
-    assert(specs[0].rfind("x2|I|", 0U) == 0U);
-    assert(specs[1].rfind("x2|R|", 0U) == 0U);
+    assert(specs[0].rfind("x3|I|", 0U) == 0U);
+    assert(specs[1].rfind("x3|R|", 0U) == 0U);
 
     ExactTransactionSpec decoded;
     assert(decode_exact_transaction_spec(specs[0], decoded, error));
@@ -47,6 +50,8 @@ int main()
     assert(decoded.source == install.source);
     assert(decoded.filename == install.filename);
     assert(decoded.sha256 == install.sha256);
+    assert(decoded.source_fingerprint ==
+           plan.source_fingerprint);
 
     assert(decode_exact_transaction_spec(specs[1], decoded, error));
     assert(decoded.action == TransactionAction::remove);
@@ -55,16 +60,23 @@ int main()
     assert(decoded.source.empty());
     assert(decoded.filename.empty());
     assert(decoded.sha256.empty());
+    assert(decoded.source_fingerprint ==
+           plan.source_fingerprint);
 
     TransactionItem incomplete = install;
     incomplete.sha256.clear();
     std::string rejected;
     assert(!encode_exact_transaction_spec(
-        incomplete, rejected, error));
+        incomplete,
+        plan.source_fingerprint,
+        rejected,
+        error));
     assert(error.find("SHA-256") != std::string::npos);
 
     assert(!decode_exact_transaction_spec(
-        "x2|I|pkg|1.0|amd64|source|file|bad",
+        "x3|I|pkg|1.0|amd64|source|file|bad|"
+        "abcdef0123456789abcdef0123456789"
+        "abcdef0123456789abcdef0123456789",
         decoded,
         error));
 
