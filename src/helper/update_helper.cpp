@@ -935,22 +935,6 @@ int execute_dpkg_configure()
     return 127;
 }
 
-int execute_apt(std::vector<std::string> arguments)
-{
-    const char *path = apt_get_path();
-    if (path == nullptr) {
-        std::fprintf(stderr, "apt-get is not available.\n");
-        return 127;
-    }
-
-    std::vector<char *> argv = apt_argv(arguments);
-    (void)setenv("DEBIAN_FRONTEND", "noninteractive", 1);
-    (void)setenv("LC_ALL", "C", 1);
-    execv(path, argv.data());
-
-    std::perror("Unable to execute apt-get");
-    return 127;
-}
 
 } // namespace
 
