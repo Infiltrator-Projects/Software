@@ -10,6 +10,7 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -546,6 +547,7 @@ bool selected_replaces_installed(
 bool installed_satisfies(
     const std::unordered_map<std::string, DebianPackageVersion> &selected,
     const std::vector<PackageRecord> &installed,
+    const std::unordered_set<std::string> &planned_removals,
     const DebianDependencyAlternative &dependency,
     const std::string_view target_architecture)
 {
@@ -553,7 +555,9 @@ bool installed_satisfies(
         installed.begin(),
         installed.end(),
         [&](const PackageRecord &package) {
-            return !selected_replaces_installed(selected, package) &&
+            return planned_removals.find(package.id) ==
+                       planned_removals.end() &&
+                   !selected_replaces_installed(selected, package) &&
                    (installed_matches(
                         package, dependency, target_architecture) ||
                     installed_provides(
@@ -600,6 +604,60 @@ bool relation_hits_installed(
 {
     return base_package(package.package_name) == relation.package &&
            version_matches(package.installed_version, relation);
+}
+
+const DebianPackageVersion *best_conflict_resolution_candidate(
+    const PackageRecord &installed,
+    const DebianDependencyAlternative &conflict,
+    const std::vector<DebianPackageVersion> &available,
+    const std::string_view target_architecture,
+    const DebianCandidatePolicy &policy)
+{
+    const std::string installed_name =
+        base_package(installed.package_name);
+    const DebianPackageVersion *best = nullptr;
+    int best_priority = 0;
+
+    for (const DebianPackageVersion &candidate : available) {
+        if (candidate.package != installed_name ||
+            relation_hits_package(conflict, candidate)) {
+            continue;
+        }
+        if (!installed.architecture.empty() &&
+            candidate.architecture != "all" &&
+            candidate.architecture != installed.architecture) {
+            continue;
+        }
+
+        const int priority = source_priority(candidate, policy);
+        if (priority <= 0) {
+            continue;
+        }
+
+        /*
+         * Normal conflict repair may upgrade an installed package. A
+         * downgrade remains subject to the same high-priority rule used by
+         * transaction planning, so resolving a conflict cannot silently
+         * weaken candidate policy.
+         */
+        if (compare_debian_versions(
+                candidate.version,
+                installed.installed_version) < 0 &&
+            priority <= 1000) {
+            continue;
+        }
+
+        if (best == nullptr ||
+            better_candidate(
+                candidate, priority,
+                *best, best_priority,
+                target_architecture)) {
+            best = &candidate;
+            best_priority = priority;
+        }
+    }
+
+    return best;
 }
 
 bool expression_hits_installed(
@@ -652,6 +710,7 @@ bool candidate_requires_installed_removal(
 void check_conflicts(
     const std::unordered_map<std::string, DebianPackageVersion> &selected,
     const std::vector<PackageRecord> &installed,
+    const std::unordered_set<std::string> &planned_removals,
     std::vector<DebianResolutionProblem> &problems)
 {
     for (const auto &entry : selected) {
@@ -696,7 +755,9 @@ void check_conflicts(
                 }
 
                 for (const PackageRecord &other : installed) {
-                    if (base_package(other.package_name) == owner.package ||
+                    if (planned_removals.find(other.id) !=
+                            planned_removals.end() ||
+                        base_package(other.package_name) == owner.package ||
                         candidate_requires_installed_removal(owner, other) ||
                         selected_replaces_installed(selected, other)) {
                         continue;
@@ -732,6 +793,7 @@ bool problem_exists(
 void validate_final_dependencies(
     const std::unordered_map<std::string, DebianPackageVersion> &selected,
     const std::vector<PackageRecord> &installed,
+    const std::unordered_set<std::string> &planned_removals,
     const std::string_view target_architecture,
     std::vector<DebianResolutionProblem> &problems)
 {
@@ -786,6 +848,7 @@ void validate_final_dependencies(
                         installed_satisfies(
                             selected,
                             installed,
+                            planned_removals,
                             alternative,
                             target_architecture)) {
                         satisfied = true;
@@ -809,7 +872,8 @@ void validate_final_dependencies(
     }
 
     for (const PackageRecord &package : installed) {
-        if (selected_replaces_installed(selected, package)) {
+        if (planned_removals.find(package.id) != planned_removals.end() ||
+            selected_replaces_installed(selected, package)) {
             continue;
         }
         validate(package.package_name, package.pre_depends, package.depends);
@@ -863,6 +927,7 @@ DebianResolution DebianDependencyResolver::resolve(
 {
     DebianResolution result;
     std::unordered_map<std::string, DebianPackageVersion> selected;
+    std::unordered_set<std::string> planned_removals;
     std::vector<std::string> pending;
 
     for (const DebianPackageVersion &root : roots) {
@@ -873,7 +938,8 @@ DebianResolution DebianDependencyResolver::resolve(
     }
 
     std::size_t cursor = 0U;
-    while (cursor < pending.size()) {
+    const auto resolve_pending = [&]() {
+        while (cursor < pending.size()) {
         const std::string key = pending[cursor++];
         const auto found_owner = selected.find(key);
         if (found_owner == selected.end()) {
@@ -922,6 +988,7 @@ DebianResolution DebianDependencyResolver::resolve(
                     installed_satisfies(
                         selected,
                         installed,
+                        planned_removals,
                         alternative,
                         target_architecture)) {
                     satisfied = true;
@@ -1002,14 +1069,134 @@ DebianResolution DebianDependencyResolver::resolve(
                     "Selected package version cannot satisfy all transaction requirements."});
             }
         }
+        }
+    };
+
+    resolve_pending();
+
+    /*
+     * Resolve package transitions caused by Conflicts/Breaks rather than
+     * rejecting every installed conflict. Prefer moving the conflicting
+     * installed package to a compatible repository version. If no compatible
+     * version exists, model an explicit removal and then re-run dependency
+     * resolution so retained packages either acquire an alternative provider
+     * or cause the plan to fail closed during final-state validation.
+     */
+    bool conflict_changed = true;
+    while (conflict_changed) {
+        conflict_changed = false;
+
+        std::vector<DebianPackageVersion> selected_snapshot;
+        selected_snapshot.reserve(selected.size());
+        for (const auto &entry : selected) {
+            selected_snapshot.push_back(entry.second);
+        }
+
+        for (const DebianPackageVersion &owner : selected_snapshot) {
+            const std::string expressions =
+                owner.conflicts.empty()
+                    ? owner.breaks
+                    : owner.breaks.empty()
+                        ? owner.conflicts
+                        : owner.conflicts + ", " + owner.breaks;
+            if (expressions.empty()) {
+                continue;
+            }
+
+            std::string parse_error;
+            const auto parsed = parse(expressions, parse_error);
+            if (!parsed.has_value()) {
+                continue;
+            }
+
+            for (const DebianDependencyGroup &group : parsed->groups) {
+                for (const DebianDependencyAlternative &relation :
+                     group.alternatives) {
+                    for (const PackageRecord &other : installed) {
+                        if (planned_removals.find(other.id) !=
+                                planned_removals.end() ||
+                            base_package(other.package_name) == owner.package ||
+                            candidate_requires_installed_removal(owner, other) ||
+                            selected_replaces_installed(selected, other) ||
+                            !relation_hits_installed(relation, other)) {
+                            continue;
+                        }
+
+                        const std::string other_name =
+                            base_package(other.package_name);
+                        const bool held =
+                            package_is_held(other.id, policy) ||
+                            package_is_held(other_name, policy);
+                        const DebianPackageVersion *repair =
+                            held
+                                ? nullptr
+                                : best_conflict_resolution_candidate(
+                                      other,
+                                      relation,
+                                      available,
+                                      target_architecture,
+                                      policy);
+
+                        if (repair != nullptr) {
+                            const std::string repair_key =
+                                selected_key(*repair);
+                            const auto existing =
+                                selected.find(repair_key);
+                            if (existing == selected.end() ||
+                                existing->second.version != repair->version ||
+                                existing->second.source != repair->source ||
+                                existing->second.filename != repair->filename) {
+                                selected[repair_key] = *repair;
+                                pending.push_back(repair_key);
+                                conflict_changed = true;
+                            }
+                        } else if (!held && !other.essential) {
+                            if (planned_removals.insert(other.id).second) {
+                                /*
+                                 * Previously-satisfied dependencies may have
+                                 * relied on this installed package. Revisit
+                                 * every selected package before accepting the
+                                 * removal.
+                                 */
+                                for (const auto &entry : selected) {
+                                    pending.push_back(entry.first);
+                                }
+                                conflict_changed = true;
+                            }
+                        }
+
+                        if (conflict_changed) {
+                            break;
+                        }
+                    }
+                    if (conflict_changed) break;
+                }
+                if (conflict_changed) break;
+            }
+            if (conflict_changed) break;
+        }
+
+        if (conflict_changed) {
+            resolve_pending();
+        }
     }
 
     validate_final_dependencies(
         selected,
         installed,
+        planned_removals,
         target_architecture,
         result.problems);
-    check_conflicts(selected, installed, result.problems);
+    check_conflicts(
+        selected,
+        installed,
+        planned_removals,
+        result.problems);
+
+    result.remove_installed.insert(
+        result.remove_installed.end(),
+        planned_removals.begin(),
+        planned_removals.end());
 
     for (const PackageRecord &package : installed) {
         for (const auto &entry : selected) {
