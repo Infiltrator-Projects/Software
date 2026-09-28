@@ -33,8 +33,12 @@ jobs:
           version="$(tr -d '[:space:]' < VERSION)"
           [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
           grep -Fq "**Current source version:** $version" README.md
-          test "$(tr -d '[:space:]' < src/infiltratr-common/VERSION)" = "1.19.35"
-          test "$(git -C src/infiltratr-common rev-parse HEAD)" = "7cc5de3de0e94ed2cfcff0840bbb5346eb5c9c9f"
+          common_version="$(sed -n 's/.*INFILTRATR_COMMON_EXPECTED_VERSION "\([^"]*\)".*/\1/p' CMakeLists.txt)"
+          common_commit="$(sed -n 's/.*INFILTRATR_COMMON_EXPECTED_COMMIT "\([^"]*\)".*/\1/p' CMakeLists.txt)"
+          test -n "$common_version"
+          test -n "$common_commit"
+          test "$(tr -d '[:space:]' < src/infiltratr-common/VERSION)" = "$common_version"
+          test "$(git -C src/infiltratr-common rev-parse HEAD)" = "$common_commit"
 
       - name: Install build dependencies
         if: runner.environment == 'github-hosted'
