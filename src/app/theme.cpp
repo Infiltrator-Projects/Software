@@ -923,24 +923,26 @@ void ThemeController::load_preferences()
     std::fclose(file);
 }
 
-void ThemeController::save_preferences() const
+bool ThemeController::save_preferences() const
 {
     const std::string path = preferences_path();
     gchar *directory = g_path_get_dirname(path.c_str());
     if (directory == nullptr) {
-        return;
+        return false;
     }
 
     const int directory_result =
         g_mkdir_with_parents(directory, 0700);
     g_free(directory);
     if (directory_result != 0) {
-        return;
+        return false;
     }
 
-    (void)infiltratr_atomic_file_write(
-        path.c_str(), INFILTRATR_ATOMIC_FILE_PRIVATE,
-        write_preferences, this);
+    return infiltratr_atomic_file_write(
+               path.c_str(),
+               INFILTRATR_ATOMIC_FILE_PRIVATE,
+               write_preferences,
+               this) == 0;
 }
 
 void ThemeController::set_mode(
@@ -953,8 +955,9 @@ void ThemeController::set_mode(
 
     mode_ = mode;
     apply();
-    if (persist) {
-        save_preferences();
+    if (persist && !save_preferences()) {
+        g_warning(
+            "Unable to persist Software appearance preference.");
     }
 }
 
