@@ -56,6 +56,18 @@ bool safe_token_list(std::string_view value)
     return true;
 }
 
+bool safe_expected_identity(
+    const std::string_view value,
+    const std::size_t maximum)
+{
+    if (value.empty() || value.size() > maximum) return false;
+    for (const char raw : value) {
+        const unsigned char ch = static_cast<unsigned char>(raw);
+        if (ch < 0x20U || ch == 0x7fU) return false;
+    }
+    return true;
+}
+
 bool https_uri(std::string_view value)
 {
     if (value.rfind("https://", 0U) != 0U ||
@@ -271,7 +283,9 @@ bool parse_index(
 int set_apt_source_enabled(
     const char *path_text,
     const char *entry_text,
-    const char *enabled_text)
+    const char *enabled_text,
+    const char *expected_uri_text,
+    const char *expected_suites_text)
 {
     const std::filesystem::path path =
         path_text == nullptr
@@ -285,6 +299,20 @@ int set_apt_source_enabled(
             : std::string_view(entry_text);
     if (!parse_index(entry_value, entry)) {
         std::fprintf(stderr, "Invalid APT source entry identity.\n");
+        return 2;
+    }
+
+    const std::string_view expected_uri =
+        expected_uri_text == nullptr
+            ? std::string_view{}
+            : std::string_view(expected_uri_text);
+    const std::string_view expected_suites =
+        expected_suites_text == nullptr
+            ? std::string_view{}
+            : std::string_view(expected_suites_text);
+    if (!safe_expected_identity(expected_uri, 2048U) ||
+        !safe_expected_identity(expected_suites, 1024U)) {
+        std::fprintf(stderr, "Invalid reviewed APT source identity.\n");
         return 2;
     }
 
@@ -322,6 +350,8 @@ int set_apt_source_enabled(
                 content,
                 entry,
                 enabled,
+                expected_uri,
+                expected_suites,
                 updated,
                 error);
     } else {
@@ -330,6 +360,8 @@ int set_apt_source_enabled(
                 content,
                 entry,
                 enabled,
+                expected_uri,
+                expected_suites,
                 updated,
                 error);
     }
@@ -427,10 +459,10 @@ int main(int argc, char **argv)
             argv[2], argv[3], argv[4], argv[5], argv[6]);
     }
 
-    if (argc == 5 &&
+    if (argc == 7 &&
         std::strcmp(argv[1], "set-apt-source-enabled") == 0) {
         return set_apt_source_enabled(
-            argv[2], argv[3], argv[4]);
+            argv[2], argv[3], argv[4], argv[5], argv[6]);
     }
 
     std::fprintf(
@@ -438,6 +470,6 @@ int main(int argc, char **argv)
         "Usage: infiltrator-software-helper "
         "add-apt-source NAME HTTPS_URI SUITE COMPONENTS SIGNED_BY\n"
         "   or: infiltrator-software-helper "
-        "set-apt-source-enabled FILE ENTRY_INDEX yes|no\n");
+        "set-apt-source-enabled FILE ENTRY_INDEX yes|no EXPECTED_URI EXPECTED_SUITES\n");
     return 64;
 }

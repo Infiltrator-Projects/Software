@@ -22,6 +22,7 @@ struct SourceRecord {
     std::string detail;
     std::string scope;
     std::string backing_file;
+    std::string apt_suites;
     std::size_t entry_index{0U};
     bool enabled{true};
 };

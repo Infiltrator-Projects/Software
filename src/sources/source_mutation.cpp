@@ -2,8 +2,11 @@
 #include "sources/source_mutation.hpp"
 
 #include <cctype>
+#include <sstream>
 #include <string>
 #include <string_view>
+#include <utility>
+#include <vector>
 
 namespace infiltrator::software {
 namespace {
@@ -36,6 +39,32 @@ StanzaBoundary next_stanza_boundary(
         return {lf, lf + 2U};
     }
     return {content.size(), content.size()};
+}
+
+std::string trim(std::string_view value)
+{
+    std::size_t first = 0U;
+    while (first < value.size() &&
+           std::isspace(static_cast<unsigned char>(value[first])) != 0) {
+        ++first;
+    }
+    std::size_t last = value.size();
+    while (last > first &&
+           std::isspace(static_cast<unsigned char>(value[last - 1U])) != 0) {
+        --last;
+    }
+    return std::string(value.substr(first, last - first));
+}
+
+std::vector<std::string> split_words(const std::string_view value)
+{
+    std::istringstream input{std::string(value)};
+    std::vector<std::string> result;
+    std::string word;
+    while (input >> word) {
+        result.emplace_back(std::move(word));
+    }
+    return result;
 }
 
 std::size_t indentation_end(std::string_view line)
@@ -82,7 +111,7 @@ bool find_deb822_field(
     return false;
 }
 
-bool is_deb822_binary_source(std::string_view block)
+bool is_deb822_source(std::string_view block)
 {
     std::size_t start = 0U;
     std::size_t end = 0U;
@@ -118,14 +147,75 @@ bool is_deb822_binary_source(std::string_view block)
                        values[word_end])) == 0) {
             ++word_end;
         }
-        if (values.substr(
-                word_start,
-                word_end - word_start) == "deb") {
+        const std::string_view type =
+            values.substr(word_start, word_end - word_start);
+        if (type == "deb" || type == "deb-src") {
             return true;
         }
         word_start = word_end;
     }
     return false;
+}
+
+bool list_identity_matches(
+    const std::string_view body,
+    const std::string_view expected_uri,
+    const std::string_view expected_suites)
+{
+    const std::vector<std::string> words = split_words(body);
+    if (words.size() < 3U) return false;
+
+    std::size_t index = 1U;
+    if (index < words.size() &&
+        !words[index].empty() &&
+        words[index].front() == '[') {
+        while (index < words.size() &&
+               words[index].find(']') == std::string::npos) {
+            ++index;
+        }
+        if (index < words.size()) ++index;
+    }
+    return index + 1U < words.size() &&
+           words[index] == expected_uri &&
+           words[index + 1U] == expected_suites;
+}
+
+bool deb822_identity_matches(
+    const std::string_view block,
+    const std::string_view expected_uri,
+    const std::string_view expected_suites)
+{
+    std::size_t value_start = 0U;
+    std::size_t line_end = 0U;
+    if (!find_deb822_field(
+            block, "URIs:", value_start, line_end)) {
+        return false;
+    }
+    const std::string_view uri_line =
+        without_cr(block.substr(value_start, line_end - value_start));
+    const std::size_t uri_colon = uri_line.find(':');
+    if (uri_colon == std::string_view::npos) return false;
+
+    bool uri_matches = false;
+    for (const std::string &uri :
+         split_words(uri_line.substr(uri_colon + 1U))) {
+        if (uri == expected_uri) {
+            uri_matches = true;
+            break;
+        }
+    }
+    if (!uri_matches) return false;
+
+    if (!find_deb822_field(
+            block, "Suites:", value_start, line_end)) {
+        return false;
+    }
+    const std::string_view suite_line =
+        without_cr(block.substr(value_start, line_end - value_start));
+    const std::size_t suite_colon = suite_line.find(':');
+    return suite_colon != std::string_view::npos &&
+           trim(suite_line.substr(suite_colon + 1U)) ==
+               trim(expected_suites);
 }
 
 } // namespace
@@ -134,6 +224,8 @@ bool set_apt_list_entry_enabled(
     std::string_view content,
     const std::size_t line_number,
     const bool enabled,
+    const std::string_view expected_uri,
+    const std::string_view expected_suites,
     std::string &updated,
     std::string &error)
 {
@@ -185,6 +277,15 @@ bool set_apt_list_entry_enabled(
         error = "Selected APT source line is not a deb or deb-src entry.";
         return false;
     }
+    if (expected_uri.empty() ||
+        expected_suites.empty() ||
+        !list_identity_matches(
+            body, expected_uri, expected_suites)) {
+        error =
+            "Selected APT source changed since it was reviewed; refresh the "
+            "repository list before changing it.";
+        return false;
+    }
 
     if (currently_enabled == enabled) {
         updated.assign(content);
@@ -209,6 +310,8 @@ bool set_apt_deb822_entry_enabled(
     std::string_view content,
     const std::size_t stanza_number,
     const bool enabled,
+    const std::string_view expected_uri,
+    const std::string_view expected_suites,
     std::string &updated,
     std::string &error)
 {
@@ -232,9 +335,18 @@ bool set_apt_deb822_entry_enabled(
         if (stanza == stanza_number) {
             const std::string_view block =
                 content.substr(start, end - start);
-            if (!is_deb822_binary_source(block)) {
+            if (!is_deb822_source(block)) {
                 error =
-                    "Selected deb822 stanza is not an enabled-capable binary repository.";
+                    "Selected deb822 stanza is not an enabled-capable Debian repository.";
+                return false;
+            }
+            if (expected_uri.empty() ||
+                expected_suites.empty() ||
+                !deb822_identity_matches(
+                    block, expected_uri, expected_suites)) {
+                error =
+                    "Selected APT source changed since it was reviewed; refresh "
+                    "the repository list before changing it.";
                 return false;
             }
 

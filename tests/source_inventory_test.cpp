@@ -33,7 +33,9 @@ int main()
         std::string updated;
         std::string error;
         assert(infiltrator::software::set_apt_list_entry_enabled(
-            list, records[0].entry_index, false, updated, error));
+            list, records[0].entry_index, false,
+            records[0].location, records[0].apt_suites,
+            updated, error));
         assert(error.empty());
         const auto disabled =
             SourceInventory::parse_apt_list(
@@ -42,7 +44,9 @@ int main()
         assert(!disabled[0].enabled);
 
         assert(infiltrator::software::set_apt_list_entry_enabled(
-            updated, disabled[1].entry_index, true, updated, error));
+            updated, disabled[1].entry_index, true,
+            disabled[1].location, disabled[1].apt_suites,
+            updated, error));
         assert(error.empty());
         const auto enabled =
             SourceInventory::parse_apt_list(
@@ -77,7 +81,9 @@ int main()
         std::string updated;
         std::string error;
         assert(infiltrator::software::set_apt_deb822_entry_enabled(
-            deb822, records[1].entry_index, true, updated, error));
+            deb822, records[1].entry_index, true,
+            records[1].location, records[1].apt_suites,
+            updated, error));
         assert(error.empty());
         const auto enabled =
             SourceInventory::parse_apt_deb822(
@@ -107,7 +113,9 @@ int main()
         std::string updated;
         std::string error;
         assert(infiltrator::software::set_apt_deb822_entry_enabled(
-            deb822, records[0].entry_index, false, updated, error));
+            deb822, records[0].entry_index, false,
+            records[0].location, records[0].apt_suites,
+            updated, error));
         assert(error.empty());
         assert(updated.find("Enabled: no\n\nTypes: deb") !=
                std::string::npos);
@@ -144,7 +152,9 @@ int main()
 
         std::string error;
         assert(infiltrator::software::set_apt_deb822_entry_enabled(
-            deb822, records[0].entry_index, false, deb822, error));
+            deb822, records[0].entry_index, false,
+            records[0].location, records[0].apt_suites,
+            deb822, error));
         assert(error.empty());
         assert(
             deb822.find(
@@ -158,6 +168,101 @@ int main()
         assert(records.size() == 2U);
         assert(!records[0].enabled);
         assert(records[1].enabled);
+    }
+
+    {
+        const std::string source_only =
+            "Types: deb-src\n"
+            "URIs: https://source-only.invalid/debian\n"
+            "Suites: stable\n"
+            "Components: main\n"
+            "Enabled: yes\n";
+        const auto records =
+            SourceInventory::parse_apt_deb822(
+                source_only,
+                "/etc/apt/sources.list.d/source-only.sources");
+        assert(records.size() == 1U);
+        assert(records[0].enabled);
+        std::string updated;
+        std::string error;
+        assert(infiltrator::software::set_apt_deb822_entry_enabled(
+            source_only,
+            records[0].entry_index,
+            false,
+            records[0].location,
+            records[0].apt_suites,
+            updated,
+            error));
+        assert(error.empty());
+        const auto disabled =
+            SourceInventory::parse_apt_deb822(
+                updated,
+                "/etc/apt/sources.list.d/source-only.sources");
+        assert(disabled.size() == 1U);
+        assert(!disabled[0].enabled);
+    }
+
+    {
+        const std::string original =
+            "deb https://first.invalid stable main\n"
+            "deb https://second.invalid testing main\n";
+        const auto records =
+            SourceInventory::parse_apt_list(
+                original,
+                "/etc/apt/sources.list.d/stale.list");
+        assert(records.size() == 2U);
+
+        const std::string shifted =
+            "deb https://inserted.invalid unstable main\n" +
+            original;
+        std::string updated;
+        std::string error;
+        assert(!infiltrator::software::set_apt_list_entry_enabled(
+            shifted,
+            records[1].entry_index,
+            false,
+            records[1].location,
+            records[1].apt_suites,
+            updated,
+            error));
+        assert(error.find("changed since it was reviewed") !=
+               std::string::npos);
+    }
+
+    {
+        const std::string original =
+            "Types: deb\n"
+            "URIs: https://first.invalid/debian\n"
+            "Suites: stable\n"
+            "Components: main\n\n"
+            "Types: deb\n"
+            "URIs: https://second.invalid/debian\n"
+            "Suites: testing\n"
+            "Components: main\n";
+        const auto records =
+            SourceInventory::parse_apt_deb822(
+                original,
+                "/etc/apt/sources.list.d/stale.sources");
+        assert(records.size() == 2U);
+
+        const std::string shifted =
+            "Types: deb\n"
+            "URIs: https://inserted.invalid/debian\n"
+            "Suites: unstable\n"
+            "Components: main\n\n" +
+            original;
+        std::string updated;
+        std::string error;
+        assert(!infiltrator::software::set_apt_deb822_entry_enabled(
+            shifted,
+            records[1].entry_index,
+            false,
+            records[1].location,
+            records[1].apt_suites,
+            updated,
+            error));
+        assert(error.find("changed since it was reviewed") !=
+               std::string::npos);
     }
 
     {

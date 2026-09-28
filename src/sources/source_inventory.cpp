@@ -133,6 +133,16 @@ std::map<std::string, std::string> parse_key_values(
     return values;
 }
 
+bool contains_word(
+    const std::string_view words,
+    const std::string_view expected)
+{
+    for (const std::string &word : split_words(words)) {
+        if (word == expected) return true;
+    }
+    return false;
+}
+
 bool parse_bool(std::string_view value, const bool fallback)
 {
     std::string lower;
@@ -316,6 +326,7 @@ std::vector<SourceRecord> SourceInventory::parse_apt_list(
         record.location = words[index];
         record.scope = "System";
         record.backing_file = std::string(backing_file);
+        record.apt_suites = words[index + 1U];
         record.entry_index = line_number;
         record.enabled = enabled;
 
@@ -356,7 +367,8 @@ std::vector<SourceRecord> SourceInventory::parse_apt_deb822(
         if (uris != values.end() &&
             suites != values.end() &&
             (types == values.end() ||
-             types->second.find("deb") != std::string::npos)) {
+             contains_word(types->second, "deb") ||
+             contains_word(types->second, "deb-src"))) {
             const bool enabled =
                 values.find("Enabled") == values.end() ||
                 parse_bool(values.at("Enabled"), true);
@@ -368,6 +380,7 @@ std::vector<SourceRecord> SourceInventory::parse_apt_deb822(
                 record.location = uri;
                 record.scope = "System";
                 record.backing_file = std::string(backing_file);
+                record.apt_suites = suites->second;
                 record.entry_index = stanza_number;
                 record.enabled = enabled;
 

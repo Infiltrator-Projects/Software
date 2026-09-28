@@ -10182,7 +10182,9 @@ void source_toggle_clicked(
             "set-apt-source-enabled",
             context->source.backing_file,
             std::to_string(context->source.entry_index),
-            enable ? "yes" : "no"
+            enable ? "yes" : "no",
+            context->source.location,
+            context->source.apt_suites
         };
     } else if (context->source.kind ==
                infiltrator::software::SourceKind::flatpak) {
