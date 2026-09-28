@@ -125,6 +125,7 @@ pkg_check_modules(LZMA REQUIRED IMPORTED_TARGET liblzma)
 pkg_check_modules(SQLITE3 REQUIRED IMPORTED_TARGET sqlite3)
 
 add_library(software-core STATIC
+    src/core/exact_transaction_spec.cpp
     src/core/model.cpp
     src/core/update_freshness.cpp
     src/core/update_policy.cpp
@@ -214,7 +215,7 @@ target_link_libraries(infiltrator-software-helper PRIVATE
 add_executable(infiltrator-software-update-helper
     src/helper/update_helper.cpp)
 target_link_libraries(infiltrator-software-update-helper PRIVATE
-    software-apt-plan-guard)
+    software-apt-plan-guard software-core PkgConfig::GLIB)
 
 add_executable(infiltrator-software-engine
     src/service/main.cpp)
@@ -346,6 +347,14 @@ if(BUILD_TESTING)
     add_executable(software-model-test tests/model_test.cpp)
     target_link_libraries(software-model-test PRIVATE software-core)
     add_test(NAME software-model-test COMMAND software-model-test)
+
+    add_executable(software-exact-transaction-spec-test
+        tests/exact_transaction_spec_test.cpp)
+    target_link_libraries(software-exact-transaction-spec-test PRIVATE
+        software-core)
+    add_test(
+        NAME software-exact-transaction-spec-test
+        COMMAND software-exact-transaction-spec-test)
 
     add_executable(software-engine-compatibility-test
         tests/engine_compatibility_test.cpp)
