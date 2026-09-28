@@ -91,23 +91,51 @@ int main()
         "Suites: stable\n"
         "Components: main\n"
         "Signed-By: /usr/share/keyrings/test.gpg "
-        "0123456789ABCDEF0123456789ABCDEF01234567\n",
+        "0123456789ABCDEF0123456789ABCDEF01234567!\n",
         "fingerprint.sources",
         error);
-    assert(fingerprint.empty());
-    assert(error.find("fingerprint") != std::string::npos);
+    assert(error.empty());
+    assert(fingerprint.size() == 1U);
+    assert(fingerprint[0].keyrings.size() == 1U);
+    assert(fingerprint[0].allowed_fingerprints.size() == 1U);
+    assert(
+        fingerprint[0].allowed_fingerprints[0] ==
+        "0123456789ABCDEF0123456789ABCDEF01234567!");
 
-    error.clear();
+    const auto inline_key = DebianSourceConfiguration::parse_deb822(
+        "Types: deb\n"
+        "URIs: https://inline.invalid/debian\n"
+        "Suites: stable\n"
+        "Components: main\n"
+        "Signed-By:\n"
+        " -----BEGIN PGP PUBLIC KEY BLOCK-----\n"
+        " .\n"
+        " QUJD\n"
+        " -----END PGP PUBLIC KEY BLOCK-----\n",
+        "inline.sources",
+        error);
+    assert(error.empty());
+    assert(inline_key.size() == 1U);
+    assert(inline_key[0].inline_keys.size() == 1U);
+    assert(
+        inline_key[0].inline_keys[0].find(
+            "BEGIN PGP PUBLIC KEY BLOCK") != std::string::npos);
+
     const auto modifiers = DebianSourceConfiguration::parse_deb822(
         "Types: deb\n"
         "URIs: https://modifier.invalid/debian\n"
         "Suites: stable\n"
         "Components: main\n"
-        "Architectures-Add: arm64\n",
+        "Architectures: amd64\n"
+        "Architectures-Add: arm64\n"
+        "Architectures-Remove: i386\n",
         "modifier.sources",
         error);
-    assert(modifiers.empty());
-    assert(error.find("add/remove") != std::string::npos);
+    assert(error.empty());
+    assert(modifiers.size() == 1U);
+    assert(modifiers[0].architectures.size() == 1U);
+    assert(modifiers[0].architecture_additions.size() == 1U);
+    assert(modifiers[0].architecture_removals.size() == 1U);
 
     return 0;
 }
