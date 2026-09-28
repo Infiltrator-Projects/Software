@@ -24,7 +24,7 @@ constexpr const char *kInterfaceName =
     "net.ssmith.infiltrator.software.Engine";
 constexpr int kInventoryCallTimeoutMs = 750;
 constexpr int kControlCallTimeoutMs = 5000;
-constexpr int kRefreshCallTimeoutMs = 125000;
+constexpr int kRefreshCallTimeoutMs = 30 * 60 * 1000;
 constexpr guint32 kRequiredApiVersion = 5U;
 constexpr const char *kRequiredEngineVersion =
     INFILTRATOR_SOFTWARE_VERSION;

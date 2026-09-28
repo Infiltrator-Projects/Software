@@ -83,11 +83,15 @@ constexpr const char *kIntrospectionXml = R"XML(
 
 struct ServiceState {
     explicit ServiceState(std::string database_path)
-        : core(std::move(database_path))
+        : core(database_path),
+          database_path(std::move(database_path))
     {
     }
 
     EngineServiceCore core;
+    std::string database_path;
+    bool refresh_active{false};
+    std::vector<GDBusMethodInvocation *> refresh_waiters;
     GMainLoop *loop{};
     GDBusConnection *connection{};
     GDBusNodeInfo *node_info{};
@@ -446,28 +450,153 @@ bool refresh_installed_and_signal(
     return refreshed;
 }
 
-bool refresh_and_signal(
-    ServiceState *state,
-    std::string &error)
+struct RefreshTaskData {
+    explicit RefreshTaskData(std::string path)
+        : database_path(std::move(path))
+    {
+    }
+
+    std::string database_path;
+    std::string error;
+};
+
+void refresh_worker(
+    GTask *task,
+    gpointer,
+    gpointer task_data,
+    GCancellable *)
 {
+    auto *data =
+        static_cast<RefreshTaskData *>(task_data);
+    if (data == nullptr) {
+        g_task_return_boolean(task, FALSE);
+        return;
+    }
+
+    EngineServiceCore worker(data->database_path);
+    const bool refreshed = worker.refresh(data->error);
+    g_task_return_boolean(
+        task,
+        refreshed ? TRUE : FALSE);
+}
+
+void refresh_complete(
+    GObject *,
+    GAsyncResult *result,
+    gpointer user_data)
+{
+    auto *state =
+        static_cast<ServiceState *>(user_data);
+    auto *task = G_TASK(result);
+    auto *data =
+        static_cast<RefreshTaskData *>(
+            g_task_get_task_data(task));
+
+    GError *task_error = nullptr;
+    bool refreshed =
+        g_task_propagate_boolean(
+            task,
+            &task_error) != FALSE;
+    std::string error;
+    if (task_error != nullptr) {
+        error =
+            task_error->message == nullptr
+                ? "Repository refresh worker failed."
+                : task_error->message;
+        g_error_free(task_error);
+    } else if (data != nullptr) {
+        error = data->error;
+    }
+
+    if (state != nullptr && refreshed) {
+        const EngineServiceStatus before =
+            state->last_status;
+        std::string reload_error;
+        if (!state->core.reload(reload_error)) {
+            refreshed = false;
+            error = reload_error.empty()
+                ? "Repository refresh completed but the published state could not be reloaded."
+                : reload_error;
+        } else {
+            const EngineServiceStatus after =
+                state->core.status();
+            if (after.generation != before.generation) {
+                emit_state_changed(
+                    state,
+                    after.generation);
+            }
+            if (after.healthy != before.healthy ||
+                after.detail != before.detail) {
+                emit_health_changed(state, after);
+            }
+            state->last_status = after;
+        }
+    }
+
     if (state == nullptr) {
-        error = "Engine service state is unavailable.";
-        return false;
+        return;
     }
 
-    const EngineServiceStatus before = state->last_status;
-    const bool refreshed = state->core.refresh(error);
-    const EngineServiceStatus after = state->core.status();
+    std::vector<GDBusMethodInvocation *> waiters =
+        std::move(state->refresh_waiters);
+    state->refresh_waiters.clear();
+    state->refresh_active = false;
 
-    if (after.generation != before.generation) {
-        emit_state_changed(state, after.generation);
+    for (GDBusMethodInvocation *invocation : waiters) {
+        if (invocation == nullptr) {
+            continue;
+        }
+        if (refreshed) {
+            g_dbus_method_invocation_return_value(
+                invocation,
+                g_variant_new(
+                    "(@a{sv})",
+                    status_variant(
+                        state->core.status())));
+        } else {
+            g_dbus_method_invocation_return_dbus_error(
+                invocation,
+                "net.ssmith.infiltrator.software.Engine.Error.RefreshFailed",
+                error.empty()
+                    ? "Repository refresh failed."
+                    : error.c_str());
+        }
+        g_object_unref(invocation);
     }
-    if (after.healthy != before.healthy ||
-        after.detail != before.detail) {
-        emit_health_changed(state, after);
+}
+
+void begin_refresh(
+    ServiceState *state,
+    GDBusMethodInvocation *invocation)
+{
+    if (state == nullptr || invocation == nullptr) {
+        return;
     }
-    state->last_status = after;
-    return refreshed;
+
+    state->refresh_waiters.push_back(
+        G_DBUS_METHOD_INVOCATION(
+            g_object_ref(invocation)));
+    if (state->refresh_active) {
+        return;
+    }
+
+    state->refresh_active = true;
+    auto *data =
+        new RefreshTaskData(state->database_path);
+    GTask *task =
+        g_task_new(
+            nullptr,
+            nullptr,
+            refresh_complete,
+            state);
+    g_task_set_task_data(
+        task,
+        data,
+        [](gpointer value) {
+            delete static_cast<RefreshTaskData *>(value);
+        });
+    g_task_run_in_thread(task, refresh_worker);
+    g_object_unref(task);
 }
 
 void reload_and_signal(ServiceState *state)
@@ -736,6 +865,13 @@ void handle_method_call(
     }
 
     if (method == "RefreshInstalledState") {
+        if (state->refresh_active) {
+            return_engine_error(
+                invocation,
+                "net.ssmith.infiltrator.software.Engine.Error.Busy",
+                "A repository refresh is already in progress.");
+            return;
+        }
         std::string refresh_error;
         if (!refresh_installed_and_signal(state, refresh_error)) {
             return_engine_error(
@@ -753,23 +889,23 @@ void handle_method_call(
     }
 
     if (method == "RefreshState") {
-        std::string refresh_error;
-        if (!refresh_and_signal(state, refresh_error)) {
-            return_engine_error(
-                invocation,
-                "net.ssmith.infiltrator.software.Engine.Error.RefreshFailed",
-                refresh_error);
-            return;
-        }
-        g_dbus_method_invocation_return_value(
-            invocation,
-            g_variant_new(
-                "(@a{sv})",
-                status_variant(state->core.status())));
+        /*
+         * Repository I/O, signature verification and parsing can take minutes.
+         * Coalesce concurrent callers onto one worker so the D-Bus main loop
+         * remains responsive to inventory/status requests throughout.
+         */
+        begin_refresh(state, invocation);
         return;
     }
 
     if (method == "Quit") {
+        if (state->refresh_active) {
+            return_engine_error(
+                invocation,
+                "net.ssmith.infiltrator.software.Engine.Error.Busy",
+                "The engine cannot quit while a repository refresh is in progress.");
+            return;
+        }
         g_dbus_method_invocation_return_value(
             invocation,
             g_variant_new("()"));
@@ -1006,6 +1142,15 @@ int main()
             nullptr);
 
     g_main_loop_run(state.loop);
+
+    /*
+     * A bus-name loss can end the loop independently of Quit. Keep the stack
+     * resident until an already-started worker has delivered its completion
+     * callback; the worker never touches the live core directly.
+     */
+    while (state.refresh_active) {
+        (void)g_main_context_iteration(nullptr, TRUE);
+    }
 
     if (state.debounce_id != 0U) {
         g_source_remove(state.debounce_id);
