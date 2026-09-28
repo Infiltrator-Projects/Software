@@ -12,6 +12,9 @@
 
 namespace infiltrator::software {
 
+std::string user_transaction_history_path();
+std::string system_transaction_history_path();
+
 struct TransactionHistoryItem {
     std::int64_t transaction_id{0};
     std::int64_t completed_at_unix{0};
