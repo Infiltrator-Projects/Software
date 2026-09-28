@@ -39,6 +39,15 @@ StanzaBoundary next_stanza_boundary(
     return {content.size(), content.size()};
 }
 
+std::string lower_ascii(std::string value)
+{
+    for (char &character : value) {
+        character = static_cast<char>(
+            std::tolower(static_cast<unsigned char>(character)));
+    }
+    return value;
+}
+
 std::string trim(std::string_view value)
 {
     std::size_t first = 0U;
@@ -78,13 +87,29 @@ std::string read_text_file(const std::filesystem::path &path)
     return text.str();
 }
 
-void append_apt_file(
+bool append_apt_file(
     std::vector<SourceRecord> &result,
-    const std::filesystem::path &path)
+    const std::filesystem::path &path,
+    std::string &error)
 {
-    const std::string content = read_text_file(path);
+    std::ifstream input(path, std::ios::binary);
+    if (!input) {
+        error =
+            "Unable to read configured APT source " +
+            path.string() + ".";
+        return false;
+    }
+    std::ostringstream text;
+    text << input.rdbuf();
+    if (!input.good() && !input.eof()) {
+        error =
+            "Unable to finish reading configured APT source " +
+            path.string() + ".";
+        return false;
+    }
+    const std::string content = text.str();
     if (content.empty()) {
-        return;
+        return true;
     }
 
     std::vector<SourceRecord> parsed;
@@ -100,6 +125,7 @@ void append_apt_file(
         result.end(),
         std::make_move_iterator(parsed.begin()),
         std::make_move_iterator(parsed.end()));
+    return true;
 }
 
 std::map<std::string, std::string> parse_key_values(
@@ -124,8 +150,8 @@ std::map<std::string, std::string> parse_key_values(
             continue;
         }
 
-        current_key = trim(
-            std::string_view(line).substr(0U, colon));
+        current_key = lower_ascii(trim(
+            std::string_view(line).substr(0U, colon)));
         values[current_key] = trim(
             std::string_view(line).substr(colon + 1U));
     }
@@ -360,9 +386,9 @@ std::vector<SourceRecord> SourceInventory::parse_apt_deb822(
             content.substr(start, end - start);
         const auto values = parse_key_values(block);
 
-        const auto uris = values.find("URIs");
-        const auto suites = values.find("Suites");
-        const auto types = values.find("Types");
+        const auto uris = values.find("uris");
+        const auto suites = values.find("suites");
+        const auto types = values.find("types");
 
         if (uris != values.end() &&
             suites != values.end() &&
@@ -370,8 +396,8 @@ std::vector<SourceRecord> SourceInventory::parse_apt_deb822(
              contains_word(types->second, "deb") ||
              contains_word(types->second, "deb-src"))) {
             const bool enabled =
-                values.find("Enabled") == values.end() ||
-                parse_bool(values.at("Enabled"), true);
+                values.find("enabled") == values.end() ||
+                parse_bool(values.at("enabled"), true);
 
             for (const std::string &uri : split_words(uris->second)) {
                 SourceRecord record;
@@ -385,7 +411,7 @@ std::vector<SourceRecord> SourceInventory::parse_apt_deb822(
                 record.enabled = enabled;
 
                 record.detail = suites->second;
-                const auto components = values.find("Components");
+                const auto components = values.find("components");
                 if (components != values.end() &&
                     !components->second.empty()) {
                     record.detail += " · " + components->second;
@@ -416,24 +442,60 @@ std::vector<SourceRecord> SourceInventory::list(std::string &error) const
     infiltrator.enabled = true;
     result.emplace_back(std::move(infiltrator));
 
+    const auto append_inventory_error =
+        [&](const std::string &detail) {
+            if (detail.empty()) return;
+            if (!error.empty()) error += " ";
+            error += detail;
+        };
+
     const std::filesystem::path main_list{"/etc/apt/sources.list"};
-    if (std::filesystem::exists(main_list)) {
-        append_apt_file(result, main_list);
+    std::error_code ec;
+    if (std::filesystem::exists(main_list, ec) && !ec) {
+        std::string source_error;
+        if (!append_apt_file(result, main_list, source_error)) {
+            append_inventory_error(source_error);
+        }
+    } else if (ec) {
+        append_inventory_error(
+            "Unable to inspect /etc/apt/sources.list: " + ec.message() + ".");
+        ec.clear();
     }
 
     const std::filesystem::path source_dir{"/etc/apt/sources.list.d"};
-    std::error_code ec;
-    if (std::filesystem::is_directory(source_dir, ec)) {
+    if (std::filesystem::is_directory(source_dir, ec) && !ec) {
         for (const auto &entry :
              std::filesystem::directory_iterator(source_dir, ec)) {
-            if (ec || !entry.is_regular_file()) {
+            if (ec) {
+                append_inventory_error(
+                    "Unable to enumerate configured APT sources: " +
+                    ec.message() + ".");
+                break;
+            }
+            std::error_code entry_error;
+            if (!entry.is_regular_file(entry_error)) {
+                if (entry_error) {
+                    append_inventory_error(
+                        "Unable to inspect configured APT source " +
+                        entry.path().string() + ": " +
+                        entry_error.message() + ".");
+                }
                 continue;
             }
             const auto extension = entry.path().extension();
             if (extension == ".list" || extension == ".sources") {
-                append_apt_file(result, entry.path());
+                std::string source_error;
+                if (!append_apt_file(
+                        result, entry.path(), source_error)) {
+                    append_inventory_error(source_error);
+                }
             }
         }
+    } else if (ec) {
+        append_inventory_error(
+            "Unable to inspect /etc/apt/sources.list.d: " +
+            ec.message() + ".");
+        ec.clear();
     }
 
     const auto system_flatpak =
