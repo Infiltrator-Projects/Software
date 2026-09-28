@@ -168,6 +168,17 @@ std::vector<PackageRecord> flatpak_installed_records()
 }
 
 
+bool flatpak_available()
+{
+    gchar *path =
+        g_find_program_in_path("flatpak");
+    if (path == nullptr) {
+        return false;
+    }
+    g_free(path);
+    return true;
+}
+
 std::vector<std::string_view> split_tabs(const std::string_view line)
 {
     std::vector<std::string_view> fields;
@@ -189,8 +200,7 @@ bool run_flatpak_remote_ls(
 {
     output.clear();
 
-    if (access("/usr/bin/flatpak", X_OK) != 0 &&
-        access("/bin/flatpak", X_OK) != 0) {
+    if (!flatpak_available()) {
         return true;
     }
 
@@ -324,8 +334,7 @@ std::vector<PackageRecord> flatpak_remote_records(
 {
     warning.clear();
     std::vector<PackageRecord> result;
-    if (access("/usr/bin/flatpak", X_OK) != 0 &&
-        access("/bin/flatpak", X_OK) != 0) {
+    if (!flatpak_available()) {
         return result;
     }
 
