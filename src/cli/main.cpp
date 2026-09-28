@@ -2,6 +2,7 @@
 #include "client/engine_client.hpp"
 #include "core/update_policy.hpp"
 #include "core/model.hpp"
+#include "core/transaction_history.hpp"
 
 #include <glib.h>
 
@@ -122,6 +123,30 @@ std::vector<std::string> exact_specs(const TransactionPlan &plan)
             result.push_back(item.package_id+"="+item.to_version);
     }
     return result;
+}
+
+void record_cli_history(
+    const TransactionPlan &plan,
+    const bool success,
+    const std::string_view message)
+{
+    const std::string path =
+        user_transaction_history_path();
+    if (path.empty() || plan.items.empty()) {
+        return;
+    }
+
+    TransactionHistoryStore store(path);
+    std::string history_error;
+    if (!store.append(
+            plan,
+            success,
+            message,
+            history_error)) {
+        std::cerr
+            << "Warning: unable to record transaction history: "
+            << history_error << "\n";
+    }
 }
 
 bool execute_plan(const TransactionPlan &plan, const Options &o, std::string &error)
@@ -269,7 +294,20 @@ int main(int argc,char **argv)
         options.replace_configuration=true;
     }
 
-    if (!execute_plan(*plan,options,error)) { std::cerr<<error<<"\n"; return 1; }
+    if (!execute_plan(*plan,options,error)) {
+        record_cli_history(
+            *plan,
+            false,
+            error.empty()
+                ? "CLI update transaction failed."
+                : error);
+        std::cerr<<error<<"\n";
+        return 1;
+    }
+    record_cli_history(
+        *plan,
+        true,
+        "CLI update transaction completed successfully.");
     std::cout<<"Update transaction completed.\n";
     return 0;
 }
