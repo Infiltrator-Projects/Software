@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+#include "core/exact_transaction_spec.hpp"
 #include "core/update_policy.hpp"
 #include "core/transaction_history.hpp"
 #include "engine/engine_service_core.hpp"
@@ -168,18 +169,6 @@ bool due(const SoftwarePreferences &prefs)
     return now_unix()-last>=seconds;
 }
 
-std::vector<std::string> exact_specs(const TransactionPlan &plan)
-{
-    std::vector<std::string> result;
-    for (const TransactionItem &item:plan.items) {
-        if (item.action==TransactionAction::remove)
-            result.push_back("remove:"+item.package_id+"="+item.from_version);
-        else
-            result.push_back(item.package_id+"="+item.to_version);
-    }
-    return result;
-}
-
 bool run_command(std::vector<std::string> args,std::string &error)
 {
     std::vector<gchar*> argv;
@@ -342,7 +331,15 @@ int main()
         "--mode=block","/usr/libexec/infiltrator-software-update-helper","apply-plan"};
     if (prefs.keep_configuration) command.push_back("--force-confold");
 
-    const auto specs=exact_specs(*plan);
+    std::vector<std::string> specs;
+    if (!exact_transaction_specs(*plan, specs, error)) {
+        record_system_history(
+            *plan,
+            false,
+            "Automatic system update refused because the reviewed artifact identity is incomplete: " + error);
+        g_printerr("Automatic system update refused: %s\n", error.c_str());
+        return 1;
+    }
     command.insert(command.end(),specs.begin(),specs.end());
     if (!run_command(std::move(command),error)) {
         record_system_history(
