@@ -303,6 +303,46 @@ int main()
             {}, "amd64", {});
     assert(!unversioned_cannot_fake_version.complete());
 
+    PackageRecord virtual_conflict_provider =
+        installed("provider-package", "1.0");
+    virtual_conflict_provider.provides =
+        "conflicted-virtual (= 1.0)";
+    DebianPackageVersion virtual_conflict =
+        package("virtual-conflict-owner", "1.0");
+    virtual_conflict.conflicts =
+        "conflicted-virtual (>= 1.0)";
+    const DebianResolution virtual_conflict_resolution =
+        DebianDependencyResolver::resolve(
+            {virtual_conflict},
+            {virtual_conflict_provider},
+            {},
+            "amd64",
+            {});
+    assert(virtual_conflict_resolution.complete());
+    assert(
+        std::find(
+            virtual_conflict_resolution.remove_installed.begin(),
+            virtual_conflict_resolution.remove_installed.end(),
+            "provider-package") !=
+        virtual_conflict_resolution.remove_installed.end());
+
+    DebianPackageVersion selected_virtual_provider =
+        package("selected-provider", "1.0");
+    selected_virtual_provider.provides =
+        "selected-virtual (= 2.0)";
+    DebianPackageVersion selected_virtual_blocker =
+        package("selected-blocker", "1.0");
+    selected_virtual_blocker.conflicts =
+        "selected-virtual (>= 2.0)";
+    const DebianResolution selected_virtual_conflict =
+        DebianDependencyResolver::resolve(
+            {selected_virtual_provider, selected_virtual_blocker},
+            {},
+            {},
+            "amd64",
+            {});
+    assert(!selected_virtual_conflict.complete());
+
     DebianPackageVersion recommends_owner =
         package("recommends-owner", "1.0");
     recommends_owner.recommends = "recommended-helper";
