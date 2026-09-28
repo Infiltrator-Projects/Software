@@ -17,6 +17,7 @@
 #include <string_view>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/syscall.h>
 #include <unistd.h>
 
 namespace {
@@ -174,7 +175,8 @@ bool read_text(
 bool write_atomic(
     const std::filesystem::path &path,
     const std::string &content,
-    const struct stat *preserve = nullptr)
+    const struct stat *preserve = nullptr,
+    const bool replace_existing = true)
 {
     const std::filesystem::path directory = path.parent_path();
     std::error_code ec;
@@ -234,7 +236,39 @@ bool write_atomic(
         return false;
     }
 
-    if (rename(temp_path.c_str(), path.c_str()) != 0) {
+    bool published = false;
+    if (replace_existing) {
+        published =
+            rename(temp_path.c_str(), path.c_str()) == 0;
+    } else {
+#if defined(SYS_renameat2)
+#ifndef RENAME_NOREPLACE
+#define RENAME_NOREPLACE (1U << 0U)
+#endif
+        published =
+            syscall(
+                SYS_renameat2,
+                AT_FDCWD,
+                temp_path.c_str(),
+                AT_FDCWD,
+                path.c_str(),
+                RENAME_NOREPLACE) == 0;
+        if (!published && errno == ENOSYS) {
+            published =
+                link(temp_path.c_str(), path.c_str()) == 0;
+            if (published) {
+                (void)unlink(temp_path.c_str());
+            }
+        }
+#else
+        published =
+            link(temp_path.c_str(), path.c_str()) == 0;
+        if (published) {
+            (void)unlink(temp_path.c_str());
+        }
+#endif
+    }
+    if (!published) {
         unlink(temp_path.c_str());
         return false;
     }
@@ -430,7 +464,18 @@ int add_apt_source(
     }
     content += "Enabled: yes\n";
 
-    if (!write_atomic(destination, content)) {
+    if (!write_atomic(
+            destination,
+            content,
+            nullptr,
+            false)) {
+        if (errno == EEXIST) {
+            std::fprintf(
+                stderr,
+                "Software source %s already exists; choose a different name or edit the existing source.\n",
+                destination.c_str());
+            return 4;
+        }
         std::fprintf(
             stderr,
             "Unable to write %s: %s\n",
