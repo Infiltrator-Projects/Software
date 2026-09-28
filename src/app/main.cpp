@@ -4881,12 +4881,11 @@ read_privileged_update_progress()
 
 std::filesystem::path transaction_history_path()
 {
-    const char *data = g_get_user_data_dir();
-    if (data == nullptr || *data == '\0') {
-        return {};
-    }
-    return std::filesystem::path(data) /
-           "infiltrator-software" / "history.sqlite3";
+    const std::string path =
+        infiltrator::software::user_transaction_history_path();
+    return path.empty()
+        ? std::filesystem::path{}
+        : std::filesystem::path(path);
 }
 
 void record_transaction_history(
@@ -11011,8 +11010,71 @@ void history_worker(
             "The user data directory is unavailable.";
     } else {
         TransactionHistoryStore store(path.string());
+        std::string user_error;
         result->records =
-            store.load_recent(100U, result->error);
+            store.load_recent(100U, user_error);
+        if (!user_error.empty()) {
+            result->error =
+                "User history: " + user_error;
+        }
+
+        const std::string system_path =
+            infiltrator::software::system_transaction_history_path();
+        if (std::filesystem::exists(system_path)) {
+            TransactionHistoryStore system_store(
+                system_path);
+            std::string system_error;
+            std::vector<TransactionHistoryItem> system_records =
+                system_store.load_recent(
+                    100U,
+                    system_error);
+            if (system_error.empty()) {
+                for (TransactionHistoryItem &entry :
+                     system_records) {
+                    /*
+                     * User and system SQLite databases each allocate IDs from
+                     * one.  Negative IDs namespace root-owned transactions so
+                     * the UI never groups unrelated records together.
+                     */
+                    entry.transaction_id =
+                        -entry.transaction_id;
+                }
+                result->records.insert(
+                    result->records.end(),
+                    std::make_move_iterator(
+                        system_records.begin()),
+                    std::make_move_iterator(
+                        system_records.end()));
+            } else {
+                if (!result->error.empty()) {
+                    result->error += " ";
+                }
+                result->error +=
+                    "System history: " +
+                    system_error;
+            }
+        }
+
+        std::stable_sort(
+            result->records.begin(),
+            result->records.end(),
+            [](const TransactionHistoryItem &left,
+               const TransactionHistoryItem &right) {
+                if (left.completed_at_unix !=
+                    right.completed_at_unix) {
+                    return left.completed_at_unix >
+                        right.completed_at_unix;
+                }
+                if (left.transaction_id !=
+                    right.transaction_id) {
+                    return left.transaction_id >
+                        right.transaction_id;
+                }
+                return false;
+            });
+        if (result->records.size() > 200U) {
+            result->records.resize(200U);
+        }
     }
 
     g_task_return_pointer(
