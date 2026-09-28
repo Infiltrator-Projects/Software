@@ -10,6 +10,7 @@
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
 #include <utility>
