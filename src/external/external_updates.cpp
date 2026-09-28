@@ -757,10 +757,10 @@ bool set_flatpak_application_installed(
         user_installation ? "--user" : "--system"
     };
 
+    command.emplace_back("--");
     if (installed && !remote.empty()) {
         command.emplace_back(remote);
     }
-    command.emplace_back("--");
     command.emplace_back(application_id);
 
     if (progress) {
