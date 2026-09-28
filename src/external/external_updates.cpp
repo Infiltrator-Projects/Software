@@ -713,6 +713,70 @@ bool apply_cinnamon_updates_selected(
         selected, error, std::move(progress));
 }
 
+bool set_flatpak_application_installed(
+    const std::string_view application_id,
+    const std::string_view remote,
+    const bool user_installation,
+    const bool installed,
+    std::string &error,
+    ExternalProgressCallback progress)
+{
+    error.clear();
+    if (!program_available("flatpak")) {
+        error =
+            "Flatpak is unavailable; the selected application was not changed.";
+        return false;
+    }
+    if (!valid_flatpak_component(application_id) ||
+        (!remote.empty() &&
+         !valid_flatpak_component(remote))) {
+        error = "Invalid Flatpak application identity.";
+        return false;
+    }
+
+    std::vector<std::string> command{
+        "flatpak",
+        installed ? "install" : "uninstall",
+        "-y",
+        "--noninteractive",
+        user_installation ? "--user" : "--system"
+    };
+
+    if (installed && !remote.empty()) {
+        command.emplace_back(remote);
+    }
+    command.emplace_back("--");
+    command.emplace_back(application_id);
+
+    if (progress) {
+        progress(
+            installed
+                ? "Installing Flatpak application"
+                : "Removing Flatpak application");
+    }
+
+    std::string output;
+    if (!run_command_streaming(
+            command,
+            output,
+            error,
+            [&](const std::string_view detail) {
+                if (progress && !detail.empty()) {
+                    progress(detail);
+                }
+            })) {
+        return false;
+    }
+
+    if (progress) {
+        progress(
+            installed
+                ? "Flatpak application installed"
+                : "Flatpak application removed");
+    }
+    return true;
+}
+
 bool apply_flatpak_updates_selected(
     const std::vector<ExternalUpdate> &selected,
     std::string &error,
