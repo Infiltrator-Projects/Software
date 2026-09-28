@@ -105,6 +105,7 @@ std::vector<std::string_view> split_fields(
 
 bool encode_exact_transaction_spec(
     const TransactionItem &item,
+    const std::string_view source_fingerprint,
     std::string &spec,
     std::string &error)
 {
@@ -128,6 +129,14 @@ bool encode_exact_transaction_spec(
         return false;
     }
 
+    if (source_fingerprint.empty() ||
+        !valid_sha256(source_fingerprint)) {
+        error =
+            "The resolved transaction is missing its reviewed repository "
+            "source fingerprint.";
+        return false;
+    }
+
     if (!removal &&
         (item.source.empty() ||
          item.filename.empty() ||
@@ -139,14 +148,15 @@ bool encode_exact_transaction_spec(
     }
 
     spec =
-        "x2|" +
+        "x3|" +
         std::string(removal ? "R" : "I") + "|" +
         encode_field(item.package_id) + "|" +
         encode_field(version) + "|" +
         encode_field(item.architecture) + "|" +
         encode_field(item.source) + "|" +
         encode_field(item.filename) + "|" +
-        encode_field(item.sha256);
+        encode_field(item.sha256) + "|" +
+        encode_field(source_fingerprint);
     return true;
 }
 
@@ -165,7 +175,11 @@ bool exact_transaction_specs(
     specs.reserve(plan.items.size());
     for (const TransactionItem &item : plan.items) {
         std::string spec;
-        if (!encode_exact_transaction_spec(item, spec, error)) {
+        if (!encode_exact_transaction_spec(
+                item,
+                plan.source_fingerprint,
+                spec,
+                error)) {
             specs.clear();
             return false;
         }
@@ -184,7 +198,7 @@ bool decode_exact_transaction_spec(
 
     const std::vector<std::string_view> fields =
         split_fields(spec);
-    if (fields.size() != 8U || fields[0] != "x2" ||
+    if (fields.size() != 9U || fields[0] != "x3" ||
         (fields[1] != "I" && fields[1] != "R")) {
         error = "Unsupported exact transaction specification.";
         return false;
@@ -196,8 +210,10 @@ bool decode_exact_transaction_spec(
         !decode_field(fields[5], decoded.source) ||
         !decode_field(fields[6], decoded.filename) ||
         !decode_field(fields[7], decoded.sha256) ||
+        !decode_field(fields[8], decoded.source_fingerprint) ||
         decoded.package_id.empty() ||
-        decoded.version.empty()) {
+        decoded.version.empty() ||
+        !valid_sha256(decoded.source_fingerprint)) {
         error = "Malformed exact transaction specification.";
         return false;
     }
