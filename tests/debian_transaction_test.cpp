@@ -344,6 +344,23 @@ int main()
     assert(!intrinsic_hold_plan.has_value());
     assert(error.find("held") != std::string::npos);
 
+    TransactionRequest install_held;
+    install_held.action = TransactionAction::install;
+    install_held.package_ids = {"app"};
+    error.clear();
+    const auto install_held_plan =
+        DebianTransactionPlanner::plan(
+            install_held,
+            intrinsically_held,
+            repository,
+            "amd64",
+            132U,
+            "snapshot-132",
+            policy,
+            error);
+    assert(!install_held_plan.has_value());
+    assert(error.find("held") != std::string::npos);
+
     DebianPackageVersion newer_pinned =
         available("pinned-app", "2.0", 20U, 200U, "newer");
     newer_pinned.pin_priority = 100;

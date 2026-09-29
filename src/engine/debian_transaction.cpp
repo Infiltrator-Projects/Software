@@ -854,7 +854,7 @@ std::optional<TransactionPlan> DebianTransactionPlanner::plan(
         }
 
         if (current != nullptr &&
-            held(current->id, policy)) {
+            (current->held || held(current->id, policy))) {
             error =
                 "Resolved transaction would modify held package " +
                 current->id + ".";
