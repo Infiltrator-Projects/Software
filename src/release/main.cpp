@@ -1395,6 +1395,10 @@ bool ensure_release_recovered_for_plan(
     }
 
     if (geteuid() == 0) {
+        ScopedReleaseLock process_lock;
+        if (!process_lock.acquire(error)) {
+            return false;
+        }
         return recover_pending_release(error);
     }
 
