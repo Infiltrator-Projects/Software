@@ -1,3 +1,14 @@
+infiltrator-software (0.3.56) unstable; urgency=high
+
+  * Replace stale same-user update-indicator processes when Software starts so
+    an old tray binary cannot keep reporting obsolete package-engine errors
+    after the package itself has been upgraded.
+  * Make the resident tray detect when dpkg replaces its installed executable
+    and re-exec the new binary automatically, preventing the same stale-process
+    failure on future upgrades.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Tue, 29 Sep 2026 17:45:00 +1000
+
 infiltrator-software (0.3.55) unstable; urgency=high
 
   * Honour dpkg hold and Protected state end to end, persist installed
