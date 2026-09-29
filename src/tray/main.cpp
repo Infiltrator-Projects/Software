@@ -9,6 +9,7 @@
 #include <libxapp/xapp-status-icon.h>
 
 #include <algorithm>
+#include <cerrno>
 #include <charconv>
 #include <csignal>
 #include <ctime>
@@ -72,20 +73,17 @@ constexpr std::string_view kDeletedSuffix = " (deleted)";
 bool take_replace_argument(int &argc, char **argv)
 {
     bool replace_existing = false;
-    for (int read = 1, write = 1; read < argc; ++read) {
+    int write = 1;
+    for (int read = 1; read < argc; ++read) {
         if (argv[read] != nullptr &&
             std::string_view(argv[read]) == "--replace") {
             replace_existing = true;
             continue;
         }
         argv[write++] = argv[read];
-        if (write != read + 1) {
-            argv[write] = nullptr;
-        }
     }
-    if (replace_existing) {
-        --argc;
-    }
+    argc = write;
+    argv[argc] = nullptr;
     return replace_existing;
 }
 
