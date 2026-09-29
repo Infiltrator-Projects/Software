@@ -9,6 +9,8 @@
 #include <libxapp/xapp-status-icon.h>
 
 #include <algorithm>
+#include <charconv>
+#include <csignal>
 #include <ctime>
 #include <filesystem>
 #include <fstream>
@@ -17,6 +19,7 @@
 #include <string>
 #include <string_view>
 #include <sys/file.h>
+#include <sys/stat.h>
 #include <unistd.h>
 #include <utility>
 #include <vector>
@@ -59,9 +62,147 @@ struct TrayState {
     SoftwarePreferences preferences{};
     gint64 started_us{0};
     gint64 last_metadata_refresh_us{0};
+    bool replacement_exec_failed{false};
 };
 
-int acquire_single_instance_lock()
+constexpr const char *kInstalledTrayPath =
+    "/usr/bin/infiltrator-software-tray";
+constexpr std::string_view kDeletedSuffix = " (deleted)";
+
+bool take_replace_argument(int &argc, char **argv)
+{
+    bool replace_existing = false;
+    for (int read = 1, write = 1; read < argc; ++read) {
+        if (argv[read] != nullptr &&
+            std::string_view(argv[read]) == "--replace") {
+            replace_existing = true;
+            continue;
+        }
+        argv[write++] = argv[read];
+        if (write != read + 1) {
+            argv[write] = nullptr;
+        }
+    }
+    if (replace_existing) {
+        --argc;
+    }
+    return replace_existing;
+}
+
+bool tray_executable_name(std::string name)
+{
+    if (name.size() >= kDeletedSuffix.size() &&
+        name.compare(
+            name.size() - kDeletedSuffix.size(),
+            kDeletedSuffix.size(),
+            kDeletedSuffix) == 0) {
+        name.resize(name.size() - kDeletedSuffix.size());
+    }
+    return name == "infiltrator-software-tray";
+}
+
+bool same_user_tray_process(const pid_t pid)
+{
+    if (pid <= 1 || pid == getpid()) {
+        return false;
+    }
+
+    const std::filesystem::path process =
+        std::filesystem::path("/proc") /
+        std::to_string(static_cast<long long>(pid));
+
+    struct stat process_stat {};
+    if (::stat(process.c_str(), &process_stat) != 0 ||
+        process_stat.st_uid != getuid()) {
+        return false;
+    }
+
+    std::error_code ec;
+    const std::filesystem::path executable =
+        std::filesystem::read_symlink(
+            process / "exe", ec);
+    if (ec) {
+        return false;
+    }
+    return tray_executable_name(
+        executable.filename().string());
+}
+
+void stop_same_user_tray_processes()
+{
+    std::error_code ec;
+    std::filesystem::directory_iterator iterator(
+        "/proc",
+        std::filesystem::directory_options::skip_permission_denied,
+        ec);
+    const std::filesystem::directory_iterator end;
+    for (; !ec && iterator != end; iterator.increment(ec)) {
+        const std::string name =
+            iterator->path().filename().string();
+        pid_t pid = 0;
+        const auto parsed =
+            std::from_chars(
+                name.data(),
+                name.data() + name.size(),
+                pid);
+        if (parsed.ec != std::errc{} ||
+            parsed.ptr != name.data() + name.size() ||
+            !same_user_tray_process(pid)) {
+            continue;
+        }
+
+        if (::kill(pid, SIGTERM) != 0 && errno != ESRCH) {
+            g_debug(
+                "Unable to stop stale Software tray process %ld: %s",
+                static_cast<long>(pid),
+                g_strerror(errno));
+        }
+    }
+}
+
+bool installed_tray_replaced()
+{
+    std::error_code ec;
+    std::filesystem::path running =
+        std::filesystem::read_symlink(
+            "/proc/self/exe", ec);
+    if (ec) {
+        return false;
+    }
+
+    std::string running_text = running.string();
+    bool deleted = false;
+    if (running_text.size() >= kDeletedSuffix.size() &&
+        running_text.compare(
+            running_text.size() - kDeletedSuffix.size(),
+            kDeletedSuffix.size(),
+            kDeletedSuffix) == 0) {
+        running_text.resize(
+            running_text.size() - kDeletedSuffix.size());
+        deleted = true;
+    }
+
+    if (running_text != kInstalledTrayPath) {
+        return false;
+    }
+
+    struct stat installed {};
+    if (::stat(kInstalledTrayPath, &installed) != 0) {
+        return false;
+    }
+    if (deleted) {
+        return true;
+    }
+
+    struct stat running_stat {};
+    if (::stat("/proc/self/exe", &running_stat) != 0) {
+        return false;
+    }
+    return installed.st_dev != running_stat.st_dev ||
+           installed.st_ino != running_stat.st_ino;
+}
+
+int acquire_single_instance_lock(const bool replace_existing)
 {
     const char *runtime = g_get_user_runtime_dir();
     if (runtime == nullptr || *runtime == '\0') {
@@ -84,11 +225,41 @@ int acquire_single_instance_lock()
     if (fd < 0) {
         return -1;
     }
-    if (flock(fd, LOCK_EX | LOCK_NB) != 0) {
+    if (flock(fd, LOCK_EX | LOCK_NB) == 0) {
+        return fd;
+    }
+    if (!replace_existing) {
         close(fd);
         return -2;
     }
-    return fd;
+
+    /*
+     * The tray is a session-resident executable.  dpkg can replace the file
+     * underneath a still-running process, so a newly installed GUI must be
+     * able to evict that stale same-user instance.  Match /proc/<pid>/exe,
+     * not a process name, so unrelated applications cannot be terminated.
+     */
+    stop_same_user_tray_processes();
+
+    constexpr guint kReplacementAttempts = 100U;
+    constexpr gulong kReplacementDelayUs = 50000U;
+    for (guint attempt = 0U;
+         attempt < kReplacementAttempts;
+         ++attempt) {
+        if (flock(fd, LOCK_EX | LOCK_NB) == 0) {
+            return fd;
+        }
+        if (errno != EWOULDBLOCK && errno != EAGAIN) {
+            close(fd);
+            return -1;
+        }
+        if (attempt + 1U < kReplacementAttempts) {
+            g_usleep(kReplacementDelayUs);
+        }
+    }
+
+    close(fd);
+    return -2;
 }
 
 std::filesystem::path state_file()
@@ -638,7 +809,28 @@ gboolean scheduled_check(gpointer user_data)
 
 gboolean state_tick(gpointer user_data)
 {
-    render(static_cast<TrayState *>(user_data));
+    auto *state = static_cast<TrayState *>(user_data);
+    if (state != nullptr &&
+        !state->replacement_exec_failed &&
+        installed_tray_replaced()) {
+        /*
+         * Future package upgrades can replace the tray while it is resident.
+         * Re-exec the installed image as soon as that happens.  The lock fd is
+         * O_CLOEXEC, so the new image reacquires the same single-instance lock
+         * rather than leaving an obsolete process in the panel.
+         */
+        (void)execl(
+            kInstalledTrayPath,
+            "infiltrator-software-tray",
+            "--replace",
+            static_cast<char *>(nullptr));
+        state->replacement_exec_failed = true;
+        g_warning(
+            "Unable to replace stale Software tray executable: %s",
+            g_strerror(errno));
+    }
+
+    render(state);
     return G_SOURCE_CONTINUE;
 }
 
@@ -709,9 +901,12 @@ void quit_menu_item(GtkMenuItem *, gpointer)
 
 int main(int argc, char **argv)
 {
+    const bool replace_existing =
+        take_replace_argument(argc, argv);
     gtk_init(&argc, &argv);
 
-    const int lock_fd = acquire_single_instance_lock();
+    const int lock_fd =
+        acquire_single_instance_lock(replace_existing);
     if (lock_fd == -2) {
         return 0;
     }
