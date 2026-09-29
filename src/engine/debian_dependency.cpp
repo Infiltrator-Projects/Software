@@ -1011,7 +1011,7 @@ bool candidate_branch_viable(
                         continue;
                     }
                     if (relation_hits_package(
-                            relation, entry.second)) {
+                            relation, entry.second, target_architecture)) {
                         return false;
                     }
                 }
@@ -1039,7 +1039,7 @@ bool candidate_branch_viable(
             for (const DebianDependencyAlternative &relation :
                  group.alternatives) {
                 if (relation_hits_package(
-                        relation, candidate)) {
+                        relation, candidate, target_architecture)) {
                     return false;
                 }
             }
@@ -1063,14 +1063,14 @@ bool candidate_branch_viable(
                         planned_removals.find(other.id) !=
                             planned_removals.end() ||
                         !relation_hits_installed(
-                            relation, other)) {
+                            relation, other, target_architecture)) {
                         continue;
                     }
 
                     if (candidate_requires_installed_removal(
-                            candidate, other) ||
+                            candidate, other, target_architecture) ||
                         selected_replaces_installed(
-                            trial_selected, other)) {
+                            trial_selected, other, target_architecture)) {
                         trial_removals.insert(other.id);
                         continue;
                     }
@@ -1078,6 +1078,7 @@ bool candidate_branch_viable(
                     const std::string other_name =
                         base_package(other.package_name);
                     const bool held =
+                        other.held ||
                         package_is_held(other.id, policy) ||
                         package_is_held(other_name, policy);
                     const auto repairs =
