@@ -308,6 +308,42 @@ int main()
     assert(!essential_plan.has_value());
     assert(error.find("Essential") != std::string::npos);
 
+    PackageRecord protected_package =
+        installed("protected-base", "1.0", 100U);
+    protected_package.protected_package = true;
+    TransactionRequest protected_remove;
+    protected_remove.action = TransactionAction::remove;
+    protected_remove.package_ids = {"protected-base"};
+    error.clear();
+    const auto protected_plan =
+        DebianTransactionPlanner::plan(
+            protected_remove,
+            {protected_package},
+            {},
+            "amd64",
+            130U,
+            "snapshot-130",
+            policy,
+            error);
+    assert(!protected_plan.has_value());
+    assert(error.find("Protected") != std::string::npos);
+
+    std::vector<PackageRecord> intrinsically_held = current;
+    intrinsically_held.front().held = true;
+    error.clear();
+    const auto intrinsic_hold_plan =
+        DebianTransactionPlanner::plan(
+            upgrade,
+            intrinsically_held,
+            repository,
+            "amd64",
+            131U,
+            "snapshot-131",
+            policy,
+            error);
+    assert(!intrinsic_hold_plan.has_value());
+    assert(error.find("held") != std::string::npos);
+
     DebianPackageVersion newer_pinned =
         available("pinned-app", "2.0", 20U, 200U, "newer");
     newer_pinned.pin_priority = 100;

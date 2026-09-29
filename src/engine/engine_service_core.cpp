@@ -35,9 +35,14 @@ bool same_installed_state(
             a.depends != b.depends ||
             a.pre_depends != b.pre_depends ||
             a.provides != b.provides ||
+            a.conflicts != b.conflicts ||
+            a.breaks != b.breaks ||
+            a.replaces != b.replaces ||
             a.priority != b.priority ||
             a.multi_arch != b.multi_arch ||
-            a.essential != b.essential) {
+            a.held != b.held ||
+            a.essential != b.essential ||
+            a.protected_package != b.protected_package) {
             return false;
         }
     }

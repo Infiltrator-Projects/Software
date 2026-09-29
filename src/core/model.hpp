@@ -50,9 +50,14 @@ struct PackageRecord {
     std::string depends;
     std::string pre_depends;
     std::string provides;
+    std::string conflicts;
+    std::string breaks;
+    std::string replaces;
     std::string priority;
     std::string multi_arch;
+    bool held{false};
     bool essential{false};
+    bool protected_package{false};
     bool system_critical{false};
     bool security_update{false};
 };

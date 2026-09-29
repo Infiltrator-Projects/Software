@@ -66,6 +66,8 @@ int main()
         installed("linux-modules-7.0.0-34-generic", "7.0.0-34.34"),
         installed("linux-headers-7.0.0-34", "7.0.0-34.34"),
         installed("linux-headers-7.0.0-34-generic", "7.0.0-34.34"),
+        installed("linux-image-7.0.0-33-lowlatency", "7.0.0-33.33"),
+        installed("linux-modules-7.0.0-33-lowlatency", "7.0.0-33.33"),
         installed("linux-image-7.0.0-31-generic", "7.0.0-31.31"),
         installed("linux-modules-7.0.0-31-generic", "7.0.0-31.31"),
         installed("linux-headers-7.0.0-31", "7.0.0-31.31"),

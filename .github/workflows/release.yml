@@ -148,6 +148,11 @@ jobs:
           TAG="v${VERSION}"
           EXPECTED_ASSETS="$(printf '%s\n'             "LICENSE.txt"             "SHA256SUMS.txt"             "software_${VERSION}_amd64.deb"             "software_${VERSION}_source.tar.gz" | sort)"
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            TAG_SHA="$(git rev-list -n 1 "$TAG" 2>/dev/null || true)"
+            if [[ "$TAG_SHA" != "$EXPECTED_SHA" ]]; then
+              echo "::error::Existing immutable release $TAG points to $TAG_SHA, expected $EXPECTED_SHA."
+              exit 1
+            fi
             ACTUAL_ASSETS="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY"               --json assets --jq '.assets[].name' | sort)"
             if [[ "$ACTUAL_ASSETS" != "$EXPECTED_ASSETS" ]]; then
               echo "::error::Existing immutable release $TAG has an unexpected asset set."

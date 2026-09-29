@@ -39,9 +39,14 @@ infiltrator::software::PackageRecord installed(
     package.depends = "libcore (>= 1.0)";
     package.pre_depends = "init-base";
     package.provides = "virtual-" + name + " (= " + version + ")";
+    package.conflicts = "obsolete-" + name;
+    package.breaks = "broken-" + name;
+    package.replaces = "legacy-" + name;
     package.priority = "optional";
     package.multi_arch = "same";
+    package.held = name == "alpha";
     package.essential = name == "alpha";
+    package.protected_package = name == "alpha";
     package.state = InstallState::installed;
     return package;
 }
@@ -189,9 +194,14 @@ int main()
     assert(first->installed[0].depends == "libcore (>= 1.0)");
     assert(first->installed[0].pre_depends == "init-base");
     assert(first->installed[0].provides == "virtual-alpha (= 1.0)");
+    assert(first->installed[0].conflicts == "obsolete-alpha");
+    assert(first->installed[0].breaks == "broken-alpha");
+    assert(first->installed[0].replaces == "legacy-alpha");
     assert(first->installed[0].priority == "optional");
     assert(first->installed[0].multi_arch == "same");
+    assert(first->installed[0].held);
     assert(first->installed[0].essential);
+    assert(first->installed[0].protected_package);
 
     assert(store.publish(
         {installed("alpha", "1.1"),

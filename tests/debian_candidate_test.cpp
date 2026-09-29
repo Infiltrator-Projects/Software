@@ -87,13 +87,20 @@ int main()
     repository[1].pin_priority = 700;
     repository[2].pin_priority = 500;
 
+    const auto held_record = std::find_if(
+        current.begin(), current.end(),
+        [](const PackageRecord &package) {
+            return package.id == "held";
+        });
+    assert(held_record != current.end());
+    held_record->held = true;
+
     DebianCandidatePolicy policy;
     policy.source_priorities["stable"] = 500;
     policy.source_priorities["testing"] = 400;
     policy.source_priorities["forced"] = 1001;
     policy.source_priorities["foreign"] = 900;
     policy.source_priorities["low"] = 50;
-    policy.held_packages.insert("held");
 
     const auto selected =
         DebianCandidateSelector::select(current, repository, policy);

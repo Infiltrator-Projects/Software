@@ -20,6 +20,10 @@ int main()
         "Provides: virtual-alpha (= 1:2.3-4)\n"
         "Priority: required\n"
         "Essential: yes\n"
+        "Protected: yes\n"
+        "Conflicts: obsolete-alpha (<< 1.0)\n"
+        "Breaks: broken-alpha (<< 2.0)\n"
+        "Replaces: old-alpha\n"
         "Description: Alpha package\n"
         " continued description\n"
         "\n"
@@ -65,10 +69,16 @@ int main()
     assert(packages[0].pre_depends == "init-base");
     assert(packages[0].provides == "virtual-alpha (= 1:2.3-4)");
     assert(packages[0].priority == "required");
+    assert(packages[0].conflicts == "obsolete-alpha (<< 1.0)");
+    assert(packages[0].breaks == "broken-alpha (<< 2.0)");
+    assert(packages[0].replaces == "old-alpha");
+    assert(!packages[0].held);
     assert(packages[0].essential);
+    assert(packages[0].protected_package);
     assert(packages[0].state == InstallState::installed);
 
     assert(packages[1].id == "held-package");
+    assert(packages[1].held);
     assert(packages[1].installed_size_bytes == 0U);
 
     assert(packages[2].id == "infiltrator-calendar");

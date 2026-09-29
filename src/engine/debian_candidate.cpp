@@ -25,6 +25,9 @@ bool held(
     const PackageRecord &installed,
     const DebianCandidatePolicy &policy)
 {
+    if (installed.held) {
+        return true;
+    }
     if (policy.held_packages.find(installed.id) !=
         policy.held_packages.end()) {
         return true;

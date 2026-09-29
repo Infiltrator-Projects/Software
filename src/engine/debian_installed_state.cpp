@@ -66,14 +66,21 @@ std::uint64_t kib_to_bytes(const std::string_view text)
     return kib * kibibyte;
 }
 
-bool installed_status(const std::string_view value)
+bool installed_status(
+    const std::string_view value,
+    bool &held)
 {
+    held = false;
     std::istringstream words{std::string(value)};
     std::string want;
     std::string error;
     std::string state;
     words >> want >> error >> state;
-    return !want.empty() && error == "ok" && state == "installed";
+    if (want.empty() || error != "ok" || state != "installed") {
+        return false;
+    }
+    held = want == "hold";
+    return true;
 }
 
 using Fields = std::map<std::string, std::string>;
@@ -86,16 +93,18 @@ void append_package(
     const auto name = fields.find("package");
     const auto version = fields.find("version");
 
+    bool held = false;
     if (status == fields.end() ||
         name == fields.end() ||
         version == fields.end() ||
         name->second.empty() ||
         version->second.empty() ||
-        !installed_status(status->second)) {
+        !installed_status(status->second, held)) {
         return;
     }
 
     PackageRecord package;
+    package.held = held;
     package.id = name->second;
 
     const auto architecture = fields.find("architecture");
@@ -131,6 +140,15 @@ void append_package(
     if (const auto provides = fields.find("provides"); provides != fields.end()) {
         package.provides = provides->second;
     }
+    if (const auto conflicts = fields.find("conflicts"); conflicts != fields.end()) {
+        package.conflicts = conflicts->second;
+    }
+    if (const auto breaks = fields.find("breaks"); breaks != fields.end()) {
+        package.breaks = breaks->second;
+    }
+    if (const auto replaces = fields.find("replaces"); replaces != fields.end()) {
+        package.replaces = replaces->second;
+    }
     if (const auto priority = fields.find("priority"); priority != fields.end()) {
         package.priority = priority->second;
     }
@@ -140,6 +158,12 @@ void append_package(
     if (const auto essential = fields.find("essential"); essential != fields.end()) {
         package.essential =
             essential->second == "yes" || essential->second == "true";
+    }
+    if (const auto protected_field = fields.find("protected");
+        protected_field != fields.end()) {
+        package.protected_package =
+            protected_field->second == "yes" ||
+            protected_field->second == "true";
     }
 
     if (valid_identity(package)) {

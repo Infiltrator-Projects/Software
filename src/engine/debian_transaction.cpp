@@ -445,6 +445,7 @@ bool installed_system_critical(const PackageRecord &package)
 {
     const std::string name = package_base(package.package_name);
     return package.essential ||
+        package.protected_package ||
         package.priority == "required" ||
         name == "dpkg" ||
         name == "systemd" ||
@@ -476,13 +477,13 @@ std::optional<TransactionPlan> plan_removal(
                 "architecture-ambiguous: " + identity + ".";
             return std::nullopt;
         }
-        if (held(package->id, policy)) {
+        if (package->held || held(package->id, policy)) {
             error = "Package is held: " + package->id + ".";
             return std::nullopt;
         }
-        if (package->essential) {
+        if (package->essential || package->protected_package) {
             error =
-                "Refusing to remove Essential package " +
+                "Refusing to remove Essential/Protected package " +
                 package->id + ".";
             return std::nullopt;
         }
@@ -632,13 +633,13 @@ std::optional<TransactionPlan> DebianTransactionPlanner::plan(
                 "or is architecture-ambiguous: " + identity + ".";
             return std::nullopt;
         }
-        if (held(package->id, policy)) {
+        if (package->held || held(package->id, policy)) {
             error = "Package is held: " + package->id + ".";
             return std::nullopt;
         }
-        if (package->essential) {
+        if (package->essential || package->protected_package) {
             error =
-                "Refusing to remove Essential package " +
+                "Refusing to remove Essential/Protected package " +
                 package->id + ".";
             return std::nullopt;
         }
@@ -805,15 +806,15 @@ std::optional<TransactionPlan> DebianTransactionPlanner::plan(
                 identity + ".";
             return std::nullopt;
         }
-        if (held(package->id, policy)) {
+        if (package->held || held(package->id, policy)) {
             error =
                 "Resolved replacement would remove held package " +
                 package->id + ".";
             return std::nullopt;
         }
-        if (package->essential) {
+        if (package->essential || package->protected_package) {
             error =
-                "Resolved replacement would remove Essential package " +
+                "Resolved replacement would remove Essential/Protected package " +
                 package->id + ".";
             return std::nullopt;
         }

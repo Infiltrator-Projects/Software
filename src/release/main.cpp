@@ -23,6 +23,7 @@
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <sys/file.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <utility>
@@ -114,6 +115,49 @@ public:
 
 private:
     std::filesystem::path path_;
+};
+
+class ScopedReleaseLock final {
+public:
+    ScopedReleaseLock() = default;
+    ScopedReleaseLock(const ScopedReleaseLock &) = delete;
+    ScopedReleaseLock &operator=(const ScopedReleaseLock &) = delete;
+
+    ~ScopedReleaseLock()
+    {
+        if (fd_ >= 0) {
+            (void)flock(fd_, LOCK_UN);
+            (void)close(fd_);
+        }
+    }
+
+    bool acquire(std::string &error)
+    {
+        fd_ = open(
+            "/run/lock/infiltrator-software-release-upgrade.lock",
+            O_RDWR | O_CREAT | O_CLOEXEC,
+            0600);
+        if (fd_ < 0) {
+            error =
+                "Unable to open the release-upgrade process lock: " +
+                std::string(std::strerror(errno));
+            return false;
+        }
+        if (flock(fd_, LOCK_EX | LOCK_NB) != 0) {
+            error =
+                errno == EWOULDBLOCK
+                    ? "Another release-upgrade mutation or recovery is already running."
+                    : "Unable to lock release-upgrade mutation state: " +
+                        std::string(std::strerror(errno));
+            (void)close(fd_);
+            fd_ = -1;
+            return false;
+        }
+        return true;
+    }
+
+private:
+    int fd_{-1};
 };
 
 class ScopedEnvironment final {
@@ -1415,6 +1459,11 @@ int apply_inhibited_command(int argc,char **argv)
     }
     ReleaseInfo release;
     std::string error;
+    ScopedReleaseLock process_lock;
+    if (!process_lock.acquire(error)) {
+        std::cerr << error << "\n";
+        return 1;
+    }
     if (!recover_pending_release(error)) {
         std::cerr << error << "\n";
         return 1;
@@ -1607,6 +1656,11 @@ int main(int argc,char **argv)
     if (argc==2 && std::string_view(argv[1])=="plan") return plan_command();
     if (argc==2 && std::string_view(argv[1])=="recover") {
         std::string error;
+        ScopedReleaseLock process_lock;
+        if (!process_lock.acquire(error)) {
+            std::cerr << error << "\n";
+            return 1;
+        }
         if (!recover_pending_release(error)) {
             std::cerr << error << "\n";
             return 1;

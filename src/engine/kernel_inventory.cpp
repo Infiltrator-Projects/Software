@@ -934,9 +934,21 @@ std::vector<KernelRecord> KernelInventory::build(
      * only older superseded kernels are preselected, the running kernel is
      * never removable, and one older installed fallback is always retained.
      */
+    std::string active_kernel_type = selected_type;
+    for (const KernelRecord &record : result) {
+        if (record.active) {
+            active_kernel_type = record.kernel_type;
+            break;
+        }
+    }
+
     KernelRecord *fallback = nullptr;
     for (KernelRecord &record : result) {
-        if (!record.installed || record.active) continue;
+        if (!record.installed ||
+            record.active ||
+            record.kernel_type != active_kernel_type) {
+            continue;
+        }
         if (compare_numeric_versions(
                 record.version,
                 active_kernel_release_value) >= 0) {
