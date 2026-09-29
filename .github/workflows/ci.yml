@@ -236,7 +236,9 @@ jobs:
           assert '"remove:"' in guard
           assert "approved.remove != actual.remove" in guard
           assert "plan_removal(" in transaction
-          assert "Refusing to remove Essential package" in transaction
+          assert "Refusing to remove Essential/Protected package" in transaction
+          assert "package->protected_package" in transaction
+          assert "package->held || held(package->id, policy)" in transaction
           assert "Authentication is required to install, update or remove system software." in policy
 
           # Automatic maintenance must execute the exact reviewed purge set,
@@ -252,7 +254,12 @@ jobs:
           assert "request.install_recommends" in transaction
           assert "owner.recommends" in dependency
           assert "planned_removals" in dependency
-          assert "best_conflict_resolution_candidate" in dependency
+          assert "available_candidates" in dependency
+          assert "conflict_resolution_candidates" in dependency
+          assert "best_conflict_resolution_candidate" not in dependency
+          assert "installed_identity_held" in dependency
+          assert "candidate_architecture_matches" in dependency
+          assert "installed_architecture_matches" in dependency
           assert '"--install-recommends"' in backend
           assert '"--no-install-recommends"' in backend
 
