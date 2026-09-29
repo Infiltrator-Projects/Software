@@ -1,3 +1,19 @@
+infiltrator-software (0.3.55) unstable; urgency=high
+
+  * Honour dpkg hold and Protected state end to end, persist installed
+    Conflicts/Breaks/Replaces metadata and reject unsafe native plans before
+    they reach the privileged APT boundary.
+  * Refresh repository candidates for the native and all configured foreign
+    architectures, respect APT::Default-Release and architecture-qualified
+    conflict relations, and include the architecture set in state identity.
+  * Backtrack dependency and conflict-repair choices across candidate
+    versions/sources instead of committing to one highest-ranked version.
+  * Keep a same-flavour fallback for the running kernel, serialize privileged
+    release-upgrade mutation/recovery and reject an existing release tag that
+    does not target the exact tested release commit.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Tue, 29 Sep 2026 10:22:00 +1000
+
 infiltrator-software (0.3.54) unstable; urgency=high
 
   * Harden native repository authentication with Release freshness checks,
