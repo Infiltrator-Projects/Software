@@ -407,6 +407,121 @@ int main()
             {});
     assert(!selected_virtual_conflict.complete());
 
+    DebianPackageVersion version_owner =
+        package("version-owner", "1.0");
+    version_owner.depends = "version-choice (>= 1.0)";
+    DebianPackageVersion bad_newer =
+        package("version-choice", "2.0");
+    bad_newer.conflicts = "essential-guard";
+    DebianPackageVersion good_older =
+        package("version-choice", "1.5");
+    PackageRecord essential_guard =
+        installed("essential-guard", "1.0");
+    essential_guard.essential = true;
+    const DebianResolution version_backtrack =
+        DebianDependencyResolver::resolve(
+            {version_owner},
+            {essential_guard},
+            {bad_newer, good_older},
+            "amd64",
+            {});
+    assert(version_backtrack.complete());
+    const auto version_choice = std::find_if(
+        version_backtrack.selected.begin(),
+        version_backtrack.selected.end(),
+        [](const DebianPackageVersion &candidate) {
+            return candidate.package == "version-choice";
+        });
+    assert(version_choice != version_backtrack.selected.end());
+    assert(version_choice->version == "1.5");
+
+    PackageRecord reverse_blocker =
+        installed("reverse-blocker", "1.0");
+    reverse_blocker.conflicts =
+        "reverse-target (>= 2.0)";
+    const DebianResolution reverse_conflict =
+        DebianDependencyResolver::resolve(
+            {package("reverse-target", "2.0")},
+            {reverse_blocker},
+            {},
+            "amd64",
+            {});
+    assert(!reverse_conflict.complete());
+
+    DebianPackageVersion arch_owner =
+        package("arch-owner", "1.0");
+    arch_owner.conflicts = "arch-target:i386";
+    const DebianResolution architecture_scoped_conflict =
+        DebianDependencyResolver::resolve(
+            {arch_owner},
+            {installed("arch-target", "1.0", "amd64")},
+            {},
+            "amd64",
+            {});
+    assert(architecture_scoped_conflict.complete());
+
+    PackageRecord protected_target =
+        installed("protected-target", "1.0");
+    protected_target.protected_package = true;
+    DebianPackageVersion protected_conflicter =
+        package("protected-conflicter", "1.0");
+    protected_conflicter.conflicts = "protected-target";
+    const DebianResolution protected_conflict =
+        DebianDependencyResolver::resolve(
+            {protected_conflicter},
+            {protected_target},
+            {},
+            "amd64",
+            {});
+    assert(!protected_conflict.complete());
+    assert(protected_conflict.remove_installed.empty());
+
+    PackageRecord intrinsic_hold =
+        installed("intrinsic-held", "1.0");
+    intrinsic_hold.held = true;
+    DebianPackageVersion held_owner =
+        package("held-owner", "1.0");
+    held_owner.depends = "intrinsic-held (>= 2.0)";
+    const DebianResolution intrinsic_hold_resolution =
+        DebianDependencyResolver::resolve(
+            {held_owner},
+            {intrinsic_hold},
+            {package("intrinsic-held", "2.0")},
+            "amd64",
+            {});
+    assert(!intrinsic_hold_resolution.complete());
+
+    DebianPackageVersion repair_owner =
+        package("repair-owner", "1.0");
+    repair_owner.breaks = "repair-target (<< 2.0)";
+    DebianPackageVersion bad_repair =
+        package("repair-target", "3.0");
+    bad_repair.conflicts = "repair-guard";
+    DebianPackageVersion good_repair =
+        package("repair-target", "2.1");
+    PackageRecord repair_guard =
+        installed("repair-guard", "1.0");
+    repair_guard.essential = true;
+    const DebianResolution repair_backtrack =
+        DebianDependencyResolver::resolve(
+            {repair_owner},
+            {
+                installed("repair-target", "1.0"),
+                repair_guard
+            },
+            {bad_repair, good_repair},
+            "amd64",
+            {});
+    assert(repair_backtrack.complete());
+    const auto repair_choice = std::find_if(
+        repair_backtrack.selected.begin(),
+        repair_backtrack.selected.end(),
+        [](const DebianPackageVersion &candidate) {
+            return candidate.package == "repair-target";
+        });
+    assert(repair_choice != repair_backtrack.selected.end());
+    assert(repair_choice->version == "2.1");
+
     DebianPackageVersion recommends_owner =
         package("recommends-owner", "1.0");
     recommends_owner.recommends = "recommended-helper";

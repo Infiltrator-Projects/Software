@@ -1468,6 +1468,20 @@ DebianRepositorySnapshot DebianRepositoryRefresh::refresh(
         return snapshot;
     }
 
+    if (!release.architectures.empty() &&
+        std::find(
+            release.architectures.begin(),
+            release.architectures.end(),
+            architecture) == release.architectures.end()) {
+        /*
+         * A configured foreign architecture is not necessarily published by
+         * every source. Treat that as an inapplicable source/architecture
+         * pair rather than turning a valid multiarch host refresh into an
+         * error.
+         */
+        return snapshot;
+    }
+
     std::vector<std::string> components = source.components;
     if (components.empty()) {
         components = release.components;

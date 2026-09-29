@@ -39,6 +39,11 @@ public:
 
     void append(DebianAptPreferences other);
 
+    void set_default_release(std::string release)
+    {
+        default_release_ = std::move(release);
+    }
+
     [[nodiscard]] std::string_view id() const noexcept override
     {
         return "host-apt-preferences";
@@ -54,6 +59,7 @@ public:
 
 private:
     std::vector<DebianPreferenceRule> rules_;
+    std::string default_release_;
 };
 
 } // namespace infiltrator::software

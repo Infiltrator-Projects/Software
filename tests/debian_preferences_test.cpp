@@ -166,5 +166,44 @@ Pin-Priority: 1000
         100);
     assert(policy.evaluate(backports).priority == 100);
 
+    const std::string target_preferences =
+R"(Package: *
+Pin: release a=stable
+Pin-Priority: 50
+
+Package: target-special
+Pin: release a=stable
+Pin-Priority: 1001
+)";
+    DebianAptPreferences target_policy =
+        DebianAptPreferences::parse(
+            target_preferences,
+            "target.pref",
+            error);
+    assert(error.empty());
+    target_policy.set_default_release("stable");
+
+    const auto target_ordinary = package(
+        "target-ordinary",
+        "1.0",
+        "Debian",
+        "stable",
+        "stable",
+        "main",
+        "deb.debian.org");
+    assert(target_policy.evaluate(target_ordinary).has_value());
+    assert(target_policy.evaluate(target_ordinary)->priority == 990);
+
+    const auto target_special = package(
+        "target-special",
+        "1.0",
+        "Debian",
+        "stable",
+        "stable",
+        "main",
+        "deb.debian.org");
+    assert(target_policy.evaluate(target_special).has_value());
+    assert(target_policy.evaluate(target_special)->priority == 1001);
+
     return 0;
 }

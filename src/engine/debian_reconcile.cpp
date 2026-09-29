@@ -16,6 +16,7 @@
 #include <filesystem>
 #include <string>
 #include <string_view>
+#include <sstream>
 #include <tuple>
 #include <unistd.h>
 #include <utility>
@@ -97,12 +98,14 @@ void checksum_field(GChecksum *checksum, const std::string_view value)
 std::string build_fingerprint(
     const std::vector<DebianRepositorySource> &sources,
     const std::vector<DebianPackageVersion> &available,
-    const std::string_view architecture)
+    const std::vector<std::string> &architectures)
 {
     GChecksum *checksum = g_checksum_new(G_CHECKSUM_SHA256);
     if (checksum == nullptr) return {};
 
-    checksum_field(checksum, architecture);
+    for (const std::string &architecture : architectures) {
+        checksum_field(checksum, architecture);
+    }
     for (const DebianRepositorySource &source : sources) {
         checksum_field(checksum, source.id);
         checksum_field(checksum, source.uri);
@@ -145,6 +148,91 @@ std::string build_fingerprint(
     return result;
 }
 
+bool configured_architectures(
+    const std::string_view native_architecture,
+    std::vector<std::string> &architectures,
+    std::string &error)
+{
+    architectures.clear();
+    if (native_architecture.empty()) {
+        error = "Unable to determine the native Debian architecture.";
+        return false;
+    }
+    architectures.emplace_back(native_architecture);
+
+    const char *override_value =
+        std::getenv("INFILTRATOR_SOFTWARE_FOREIGN_ARCHITECTURES");
+    std::string foreign;
+    if (override_value != nullptr) {
+        foreign = override_value;
+    } else {
+        gchar *program = g_find_program_in_path("dpkg");
+        if (program == nullptr) {
+            return true;
+        }
+        gchar *argv[] = {
+            program,
+            const_cast<gchar *>("--print-foreign-architectures"),
+            nullptr};
+        gchar *standard_output = nullptr;
+        gchar *standard_error = nullptr;
+        gint wait_status = 0;
+        GError *spawn_error = nullptr;
+        const gboolean spawned =
+            g_spawn_sync(
+                nullptr,
+                argv,
+                nullptr,
+                G_SPAWN_DEFAULT,
+                nullptr,
+                nullptr,
+                &standard_output,
+                &standard_error,
+                &wait_status,
+                &spawn_error);
+        const bool exited_ok =
+            spawned != FALSE &&
+            g_spawn_check_wait_status(
+                wait_status, &spawn_error) != FALSE;
+        if (!exited_ok) {
+            error =
+                spawn_error != nullptr &&
+                spawn_error->message != nullptr
+                    ? std::string(spawn_error->message)
+                    : "dpkg --print-foreign-architectures failed.";
+            g_free(program);
+            g_free(standard_output);
+            g_free(standard_error);
+            g_clear_error(&spawn_error);
+            return false;
+        }
+        foreign =
+            standard_output == nullptr
+                ? std::string{}
+                : std::string(standard_output);
+        g_free(program);
+        g_free(standard_output);
+        g_free(standard_error);
+        g_clear_error(&spawn_error);
+    }
+
+    std::istringstream input(foreign);
+    std::string architecture;
+    while (input >> architecture) {
+        if (architecture.empty() ||
+            architecture == native_architecture ||
+            std::find(
+                architectures.begin(),
+                architectures.end(),
+                architecture) != architectures.end()) {
+            continue;
+        }
+        architectures.emplace_back(std::move(architecture));
+    }
+    std::sort(architectures.begin(), architectures.end());
+    return true;
+}
+
 bool same_available(
     const DebianPackageVersion &left,
     const DebianPackageVersion &right)
@@ -171,9 +259,25 @@ bool DebianReconciler::reconcile(
         return false;
     }
 
+    std::vector<std::string> architectures;
+    if (!configured_architectures(
+            target_architecture,
+            architectures,
+            error)) {
+        return false;
+    }
+
     std::vector<DebianRepositorySource> configured =
         DebianSourceConfiguration::read(error);
     if (!error.empty()) return false;
+
+    std::string installed_error;
+    std::vector<PackageRecord> installed =
+        DebianInstalledState::read(installed_error);
+    if (!installed_error.empty()) {
+        error = installed_error;
+        return false;
+    }
 
     std::string preferences_error;
     const DebianAptPreferences host_preferences =
@@ -209,37 +313,55 @@ bool DebianReconciler::reconcile(
     std::vector<DebianRepositorySource> active;
     std::vector<DebianPackageVersion> available;
     for (const DebianRepositorySource &source : configured) {
-        if (!architecture_enabled(source, target_architecture)) continue;
+        bool source_active = false;
+        for (const std::string &architecture : architectures) {
+            if (!architecture_enabled(source, architecture)) {
+                continue;
+            }
 
-        std::string refresh_error;
-        DebianRepositorySnapshot snapshot =
-            DebianRepositoryRefresh::refresh(
-                source, target_architecture, cache_directory, refresh_error);
-        if (!refresh_error.empty()) {
-            error = "Unable to reconcile " + source.uri + " " +
-                source.suite + ": " + refresh_error;
-            return false;
-        }
-        for (DebianPackageVersion &package : snapshot.packages) {
-            package.security_update =
-                security_candidate(package);
-            const DebianPolicyDecision decision =
-                policy.evaluate(package);
-            package.pin_priority = decision.priority;
-            package.policy_provider = decision.provider;
-            package.policy_reason = decision.reason;
-        }
+            std::string refresh_error;
+            DebianRepositorySnapshot snapshot =
+                DebianRepositoryRefresh::refresh(
+                    source,
+                    architecture,
+                    cache_directory,
+                    refresh_error);
+            if (!refresh_error.empty()) {
+                error = "Unable to reconcile " + source.uri + " " +
+                    source.suite + " for " + architecture + ": " +
+                    refresh_error;
+                return false;
+            }
+            if (snapshot.verified_indexes.empty() &&
+                snapshot.packages.empty()) {
+                continue;
+            }
 
-        active.emplace_back(source);
-        available.insert(
-            available.end(),
-            std::make_move_iterator(snapshot.packages.begin()),
-            std::make_move_iterator(snapshot.packages.end()));
+            source_active = true;
+            for (DebianPackageVersion &package : snapshot.packages) {
+                package.security_update =
+                    security_candidate(package);
+                const DebianPolicyDecision decision =
+                    policy.evaluate(package);
+                package.pin_priority = decision.priority;
+                package.policy_provider = decision.provider;
+                package.policy_reason = decision.reason;
+            }
+
+            available.insert(
+                available.end(),
+                std::make_move_iterator(snapshot.packages.begin()),
+                std::make_move_iterator(snapshot.packages.end()));
+        }
+        if (source_active) {
+            active.emplace_back(source);
+        }
     }
 
     if (active.empty()) {
-        error = "No configured Debian repository applies to architecture " +
-            std::string(target_architecture) + ".";
+        error =
+            "No configured Debian repository applies to any configured "
+            "architecture.";
         return false;
     }
 
@@ -256,16 +378,8 @@ bool DebianReconciler::reconcile(
         std::unique(available.begin(), available.end(), same_available),
         available.end());
 
-    std::string installed_error;
-    std::vector<PackageRecord> installed =
-        DebianInstalledState::read(installed_error);
-    if (!installed_error.empty()) {
-        error = installed_error;
-        return false;
-    }
-
     const std::string fingerprint =
-        build_fingerprint(active, available, target_architecture);
+        build_fingerprint(active, available, architectures);
     if (fingerprint.empty()) {
         error = "Unable to calculate package-state source fingerprint.";
         return false;

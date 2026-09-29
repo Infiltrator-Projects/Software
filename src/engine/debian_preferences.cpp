@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "engine/debian_preferences.hpp"
 
+#include <glib.h>
+
 #include <algorithm>
 #include <charconv>
 #include <cctype>
@@ -450,6 +452,90 @@ bool read_text(
     return true;
 }
 
+bool read_default_release(
+    std::string &release,
+    std::string &error)
+{
+    release.clear();
+    gchar *program = g_find_program_in_path("apt-config");
+    if (program == nullptr) {
+        return true;
+    }
+
+    gchar *argv[] = {
+        program,
+        const_cast<gchar *>("shell"),
+        const_cast<gchar *>("INFILTRATOR_DEFAULT_RELEASE"),
+        const_cast<gchar *>("APT::Default-Release"),
+        nullptr};
+    gchar *standard_output = nullptr;
+    gchar *standard_error = nullptr;
+    gint wait_status = 0;
+    GError *spawn_error = nullptr;
+    const gboolean spawned =
+        g_spawn_sync(
+            nullptr,
+            argv,
+            nullptr,
+            G_SPAWN_DEFAULT,
+            nullptr,
+            nullptr,
+            &standard_output,
+            &standard_error,
+            &wait_status,
+            &spawn_error);
+    const bool exited_ok =
+        spawned != FALSE &&
+        g_spawn_check_wait_status(
+            wait_status, &spawn_error) != FALSE;
+    if (!exited_ok) {
+        error =
+            spawn_error != nullptr &&
+                spawn_error->message != nullptr
+                ? std::string(spawn_error->message)
+                : "apt-config could not read APT::Default-Release.";
+        g_free(program);
+        g_free(standard_output);
+        g_free(standard_error);
+        g_clear_error(&spawn_error);
+        return false;
+    }
+
+    std::string output =
+        standard_output == nullptr
+            ? std::string{}
+            : trim(standard_output);
+    g_free(program);
+    g_free(standard_output);
+    g_free(standard_error);
+    g_clear_error(&spawn_error);
+
+    if (output.empty()) {
+        return true;
+    }
+    const std::size_t equals = output.find('=');
+    if (equals == std::string::npos) {
+        error =
+            "apt-config returned malformed APT::Default-Release output.";
+        return false;
+    }
+
+    std::string value = trim(
+        std::string_view(output).substr(equals + 1U));
+    if (!value.empty() && value.back() == ';') {
+        value.pop_back();
+        value = trim(value);
+    }
+    if (value.size() >= 2U &&
+        ((value.front() == '\'' && value.back() == '\'') ||
+         (value.front() == '"' && value.back() == '"'))) {
+        value =
+            value.substr(1U, value.size() - 2U);
+    }
+    release = std::move(value);
+    return true;
+}
+
 } // namespace
 
 DebianAptPreferences DebianAptPreferences::parse(
@@ -602,6 +688,11 @@ DebianAptPreferences DebianAptPreferences::read(
         result.append(std::move(parsed));
     }
 
+    if (!read_default_release(
+            result.default_release_,
+            error)) {
+        return {};
+    }
     return result;
 }
 
@@ -627,6 +718,15 @@ DebianAptPreferences::evaluate(
                 std::string(id()),
                 "Matched host APT package-specific preference."};
         }
+    }
+
+    if (!default_release_.empty() &&
+        (package.release_archive == default_release_ ||
+         package.release_codename == default_release_)) {
+        return DebianPolicyDecision{
+            990,
+            std::string(id()),
+            "Matched host APT::Default-Release target."};
     }
 
     bool matched_generic = false;

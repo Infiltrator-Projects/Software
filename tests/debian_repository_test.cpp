@@ -105,6 +105,14 @@ int main()
     assert(std::filesystem::exists(
         cache / "fixture_stable_main/Release"));
 
+    error.clear();
+    const DebianRepositorySnapshot unsupported_architecture =
+        DebianRepositoryRefresh::refresh(
+            source, "i386", cache.string(), error);
+    assert(error.empty());
+    assert(unsupported_architecture.packages.empty());
+    assert(unsupported_architecture.verified_indexes.empty());
+
     /*
      * With an unchanged signed Release document, a refresh must be able to
      * reuse the verified uncompressed Packages cache instead of requiring the
