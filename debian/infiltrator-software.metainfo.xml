@@ -34,6 +34,16 @@
   <url type="homepage">https://github.com/Infiltrator-Projects/Software</url>
 
   <releases>
+    <release version="0.3.56" date="2026-09-29">
+      <description>
+        <p>Replaces stale resident update-indicator processes after Software upgrades and makes the tray re-exec itself automatically when dpkg installs a newer tray binary.</p>
+      </description>
+    </release>
+    <release version="0.3.55" date="2026-09-29">
+      <description>
+        <p>Hardens native package planning around held and protected packages, architecture-qualified repository state, dependency backtracking and release-upgrade recovery.</p>
+      </description>
+    </release>
     <release version="0.3.54" date="2026-09-28">
       <description>
         <p>Hardens repository trust and exact reviewed payload verification, completes interrupted-upgrade and dependency-conflict recovery, and moves repository refresh ownership into a dedicated controller.</p>
