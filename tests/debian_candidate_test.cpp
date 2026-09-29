@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "engine/debian_candidate.hpp"
 
+#include <algorithm>
 #include <cassert>
 #include <string>
 #include <vector>
