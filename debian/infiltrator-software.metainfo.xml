@@ -34,6 +34,11 @@
   <url type="homepage">https://github.com/Infiltrator-Projects/Software</url>
 
   <releases>
+    <release version="0.3.59" date="2026-10-01">
+      <description>
+        <p>Fixes Linux kernel-manager timeouts by indexing package candidates once and giving computed kernel inventory a realistic bounded D-Bus response window.</p>
+      </description>
+    </release>
     <release version="0.3.58" date="2026-10-01">
       <description>
         <p>Prevents false native update-planning timeouts on slower hosts and safely recovers exact Flatpak commit identities when remote-ls returns incomplete metadata.</p>

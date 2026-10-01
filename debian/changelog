@@ -1,3 +1,16 @@
+infiltrator-software (0.3.59) unstable; urgency=high
+
+  * Replace repeated full package-catalogue scans in Linux kernel inventory
+    construction with a one-pass best-candidate index, sharply reducing kernel
+    manager CPU and latency on large repositories and virtual machines.
+  * Give the computed ListKernels D-Bus request its own bounded ten-second
+    timeout instead of the 750 ms lightweight inventory timeout, preventing
+    false "Timeout was reached" failures while preserving strict bounds.
+  * Keep Installed and Updates snapshot reads on the existing sub-second path;
+    the longer window applies only to computed kernel inventory.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Thu, 01 Oct 2026 21:30:00 +1000
+
 infiltrator-software (0.3.58) unstable; urgency=high
 
   * Give native dependency planning its own bounded two-minute D-Bus window
