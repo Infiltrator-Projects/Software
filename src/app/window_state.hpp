@@ -40,7 +40,6 @@ struct WindowState {
     GtkWidget *discover_count{};
     GtkWidget *discover_source{};
     GtkWidget *discover_state{};
-    GtkWidget *discover_spotlight{};
     GtkWidget *discover_featured_flow{};
     GtkWidget *discover_update_preview{};
     GtkWidget *discover_repository_preview{};
@@ -94,7 +93,6 @@ struct WindowState {
     unsigned int updates_generation{0U};
     bool updates_busy{false};
     bool external_updates_active{false};
-    bool updates_from_engine{false};
     bool updates_auto_refresh_pending{true};
     gint64 updates_last_metadata_refresh_us{0};
     SoftwarePreferences preferences{};

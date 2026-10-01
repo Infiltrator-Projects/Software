@@ -173,10 +173,6 @@ target_link_libraries(software-client PUBLIC
 target_compile_definitions(software-client PRIVATE
     INFILTRATOR_SOFTWARE_VERSION="${PROJECT_VERSION}")
 
-add_library(software-apt STATIC src/backends/apt/apt_backend.cpp)
-target_include_directories(software-apt PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
-target_link_libraries(software-apt PUBLIC software-engine)
-
 add_library(software-catalogue STATIC
     src/catalogue/repository_catalogue.cpp
     src/catalogue/catalogue_snapshot_store.cpp
@@ -281,7 +277,7 @@ add_executable(infiltrator-software
     src/app/ui_components.cpp)
 
 target_link_libraries(infiltrator-software PRIVATE
-    software-core software-history software-client software-apt
+    software-core software-history software-client
     software-catalogue software-sources software-external
     InfiltratrCommon::Common PkgConfig::GTK4 PkgConfig::CURL)
 
@@ -331,7 +327,7 @@ install(FILES ${SOFTWARE_FONT_FILES}
 install(FILES LICENSE DESTINATION share/doc/infiltrator-software)
 
 foreach(target IN ITEMS
-        software-core software-history software-engine software-client software-apt software-catalogue software-sources software-external
+        software-core software-history software-engine software-client software-catalogue software-sources software-external
         software-apt-plan-guard
         infiltrator-software-helper infiltrator-software-update-helper
         infiltrator-software-engine infiltrator-software-tray
@@ -497,10 +493,6 @@ if(BUILD_TESTING)
     add_test(
         NAME software-engine-service-core-test
         COMMAND software-engine-service-core-test)
-
-    add_executable(software-apt-test tests/apt_backend_test.cpp)
-    target_link_libraries(software-apt-test PRIVATE software-apt)
-    add_test(NAME software-apt-test COMMAND software-apt-test)
 
     add_executable(software-apt-plan-guard-test
         tests/apt_plan_guard_test.cpp)

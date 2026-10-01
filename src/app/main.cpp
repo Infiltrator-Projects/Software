@@ -12,7 +12,6 @@
 #include "app/ui_components.hpp"
 #include "app/window_state.hpp"
 #include "app/preferences_dialog.hpp"
-#include "backends/apt/apt_backend.hpp"
 #include "catalogue/repository_catalogue.hpp"
 #include "catalogue/catalogue_snapshot_store.hpp"
 #include "catalogue/system_catalogue.hpp"
@@ -53,7 +52,6 @@
 
 namespace infiltrator::software::app {
 
-using infiltrator::software::AptBackend;
 using infiltrator::software::CatalogueSnapshot;
 using infiltrator::software::CatalogueSnapshotStore;
 using infiltrator::software::EngineClient;
@@ -104,6 +102,10 @@ using infiltrator::software::make_page_intro;
 using infiltrator::software::make_stat_card;
 
 void refresh_updates(WindowState *state, bool refresh_metadata = false);
+void refresh_updates_internal(
+    WindowState *state,
+    bool refresh_metadata,
+    bool refresh_external);
 void refresh_discover(WindowState *state, bool force_refresh);
 void refresh_installed(WindowState *state);
 void refresh_history(WindowState *state);
@@ -1287,227 +1289,6 @@ GtkWidget *make_discover_category_shortcut(
     return button;
 }
 
-GtkWidget *make_spotlight_chip(
-    const char *text,
-    const char *css_class)
-{
-    GtkWidget *label =
-        make_label(text, css_class);
-    gtk_label_set_ellipsize(
-        GTK_LABEL(label),
-        PANGO_ELLIPSIZE_END);
-    return label;
-}
-
-void rebuild_discover_spotlight(
-    WindowState *state,
-    const PackageRecord *record)
-{
-    if (state == nullptr ||
-        state->discover_spotlight == nullptr) {
-        return;
-    }
-
-    GtkWidget *child =
-        gtk_widget_get_first_child(
-            state->discover_spotlight);
-    while (child != nullptr) {
-        GtkWidget *next =
-            gtk_widget_get_next_sibling(child);
-        gtk_box_remove(
-            GTK_BOX(state->discover_spotlight),
-            child);
-        child = next;
-    }
-
-    if (record == nullptr) {
-        GtkWidget *empty =
-            gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
-        gtk_widget_set_hexpand(empty, true);
-        gtk_widget_set_valign(
-            empty, GTK_ALIGN_CENTER);
-
-        GtkWidget *kicker =
-            make_label("FEATURED", "spotlight-kicker");
-        GtkWidget *title =
-            make_label(
-                "No software matches this view",
-                "spotlight-title");
-        GtkWidget *copy =
-            make_label(
-                "Change the search or category to explore the catalogue.",
-                "spotlight-copy");
-        gtk_label_set_wrap(GTK_LABEL(copy), true);
-
-        gtk_box_append(GTK_BOX(empty), kicker);
-        gtk_box_append(GTK_BOX(empty), title);
-        gtk_box_append(GTK_BOX(empty), copy);
-        gtk_box_append(
-            GTK_BOX(state->discover_spotlight),
-            empty);
-        return;
-    }
-
-    GtkWidget *copy_column =
-        gtk_box_new(GTK_ORIENTATION_VERTICAL, 9);
-    gtk_widget_set_hexpand(copy_column, true);
-    gtk_widget_set_valign(
-        copy_column, GTK_ALIGN_CENTER);
-
-    GtkWidget *kicker =
-        make_label("FEATURED SOFTWARE", "spotlight-kicker");
-    gtk_box_append(GTK_BOX(copy_column), kicker);
-
-    GtkWidget *title =
-        make_label(
-            record->name.c_str(),
-            "spotlight-title");
-    gtk_label_set_wrap(GTK_LABEL(title), true);
-    gtk_box_append(GTK_BOX(copy_column), title);
-
-    GtkWidget *description =
-        make_label(
-            record->description.c_str(),
-            "spotlight-copy");
-    gtk_label_set_wrap(
-        GTK_LABEL(description), true);
-    gtk_label_set_lines(
-        GTK_LABEL(description), 3);
-    gtk_label_set_ellipsize(
-        GTK_LABEL(description),
-        PANGO_ELLIPSIZE_END);
-    gtk_label_set_max_width_chars(
-        GTK_LABEL(description), 62);
-    gtk_box_append(
-        GTK_BOX(copy_column), description);
-
-    GtkWidget *chips =
-        gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
-    gtk_widget_add_css_class(
-        chips, "spotlight-chips");
-
-    const std::string category_text =
-        record->category.empty()
-            ? "Software"
-            : record->category;
-    gtk_box_append(
-        GTK_BOX(chips),
-        make_spotlight_chip(
-            category_text.c_str(),
-            "spotlight-chip"));
-
-    if (!record->available_version.empty()) {
-        gtk_box_append(
-            GTK_BOX(chips),
-            make_spotlight_chip(
-                record->available_version.c_str(),
-                "spotlight-chip"));
-    }
-
-    if (!record->source.empty()) {
-        gtk_box_append(
-            GTK_BOX(chips),
-            make_spotlight_chip(
-                record->source.c_str(),
-                "spotlight-chip-source"));
-    }
-    gtk_box_append(
-        GTK_BOX(copy_column), chips);
-
-    GtkWidget *actions =
-        gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
-
-    GtkWidget *details =
-        gtk_button_new_with_label("Explore");
-    gtk_widget_add_css_class(
-        details, "spotlight-secondary-action");
-    g_object_set_data_full(
-        G_OBJECT(details),
-        "discover-record",
-        new PackageRecord(*record),
-        package_record_destroy);
-    g_signal_connect(
-        details, "clicked",
-        G_CALLBACK(discover_details_clicked),
-        state);
-    gtk_box_append(GTK_BOX(actions), details);
-
-    if (!record->package_name.empty()) {
-        const bool installed =
-            record->state ==
-            infiltrator::software::InstallState::installed;
-        const bool upgradable =
-            record->state ==
-            infiltrator::software::InstallState::upgradable;
-
-        GtkWidget *action =
-            gtk_button_new_with_label(
-                installed
-                    ? "Remove"
-                    : (upgradable ? "Update" : "Install"));
-        gtk_widget_add_css_class(
-            action,
-            installed
-                ? "destructive-action"
-                : "suggested-action");
-        gtk_widget_add_css_class(
-            action, "spotlight-primary-action");
-        g_object_set_data_full(
-            G_OBJECT(action),
-            "discover-install-record",
-            new PackageRecord(*record),
-            package_record_destroy);
-        g_signal_connect(
-            action, "clicked",
-            G_CALLBACK(discover_install_clicked),
-            state);
-        gtk_box_append(
-            GTK_BOX(actions), action);
-    }
-
-    gtk_box_append(
-        GTK_BOX(copy_column), actions);
-    gtk_box_append(
-        GTK_BOX(state->discover_spotlight),
-        copy_column);
-
-    GtkWidget *art =
-        gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-    gtk_widget_add_css_class(
-        art, "spotlight-art");
-    gtk_widget_set_size_request(
-        art, 190, 176);
-    gtk_widget_set_halign(
-        art, GTK_ALIGN_END);
-    gtk_widget_set_valign(
-        art, GTK_ALIGN_CENTER);
-
-    GtkWidget *icon_well =
-        gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-    gtk_widget_add_css_class(
-        icon_well, "spotlight-icon-well");
-    gtk_widget_set_halign(
-        icon_well, GTK_ALIGN_CENTER);
-    gtk_widget_set_valign(
-        icon_well, GTK_ALIGN_CENTER);
-    gtk_widget_set_size_request(
-        icon_well, 132, 132);
-
-    GtkWidget *icon =
-        catalogue_icon(*record, 104);
-    gtk_widget_set_halign(
-        icon, GTK_ALIGN_CENTER);
-    gtk_widget_set_valign(
-        icon, GTK_ALIGN_CENTER);
-    gtk_box_append(
-        GTK_BOX(icon_well), icon);
-    gtk_box_append(GTK_BOX(art), icon_well);
-
-    gtk_box_append(
-        GTK_BOX(state->discover_spotlight),
-        art);
-}
-
 void rebuild_discover(WindowState *state)
 {
     if (state == nullptr || state->discover_visible == nullptr) {
@@ -1527,8 +1308,6 @@ void rebuild_discover(WindowState *state)
     indices.reserve(state->discover_records.size());
     std::vector<std::size_t> visible_indices;
     visible_indices.reserve(state->discover_records.size());
-    std::optional<std::size_t> first_visible;
-
     const bool cached_search_text =
         state->discover_search_texts.size() ==
         state->discover_records.size();
@@ -1553,19 +1332,9 @@ void rebuild_discover(WindowState *state)
             }
         }
 
-        if (!first_visible.has_value()) {
-            first_visible = index;
-        }
         visible_indices.push_back(index);
         indices.emplace_back(std::to_string(index));
     }
-
-    rebuild_discover_spotlight(
-        state,
-        first_visible.has_value()
-            ? &state->discover_records[
-                  *first_visible]
-            : nullptr);
 
     if (state->discover_featured_flow != nullptr) {
         GtkWidget *child =
@@ -3038,7 +2807,7 @@ void refresh_installed(WindowState *state)
 struct UpdatesResult {
     unsigned int generation{0U};
     bool refreshed_metadata{false};
-    bool from_engine{false};
+    bool external_refreshed{false};
     std::vector<PackageRecord> records;
     std::vector<ExternalUpdate> external_records;
     std::string external_error;
@@ -3048,6 +2817,7 @@ struct UpdatesResult {
 struct UpdatesTaskData {
     unsigned int generation{0U};
     bool refresh_metadata{false};
+    bool refresh_external{true};
     bool show_flatpak{true};
     bool show_cinnamon{true};
 };
@@ -3055,12 +2825,10 @@ struct UpdatesTaskData {
 struct UpdatePlanResult {
     std::optional<infiltrator::software::TransactionPlan> plan;
     std::string error;
-    bool from_engine{false};
 };
 
 struct UpdatePlanTaskData {
     std::vector<std::string> package_ids;
-    bool use_engine{false};
     bool install_recommends{false};
 };
 
@@ -3906,24 +3674,30 @@ void discover_plan_worker(
         std::string engine_error;
         EngineClient engine;
         result->plan = engine.plan(request, engine_error);
-        if (result->plan.has_value()) {
-            result->from_engine = true;
-        } else if (data->action == TransactionAction::remove) {
-            result->error =
-                "Native removal planner: " + one_line(engine_error);
-        } else {
-            std::string fallback_error;
-            AptBackend fallback;
-            result->plan = fallback.plan(request, fallback_error);
+        if (!result->plan.has_value()) {
+            /*
+             * A missing/stale shared generation is recoverable without
+             * reviving the retired APT planner. Reconcile once, then retry the
+             * exact native request. Mutation still cannot begin unless the
+             * native planner returns a complete reviewed transaction.
+             */
+            std::string refresh_error;
+            if (engine.refresh(refresh_error)) {
+                engine_error.clear();
+                result->plan =
+                    engine.plan(request, engine_error);
+            }
             if (!result->plan.has_value()) {
-                result->error = "Native planner: " + one_line(engine_error);
-                if (!fallback_error.empty()) {
+                result->error =
+                    "Native planner: " + one_line(engine_error);
+                if (!refresh_error.empty()) {
                     result->error +=
-                        "  Compatibility planner: " +
-                        one_line(fallback_error);
+                        "  State refresh: " +
+                        one_line(refresh_error);
                 }
             }
         }
+        result->from_engine = result->plan.has_value();
     }
 
     g_task_return_pointer(
@@ -4276,7 +4050,7 @@ void discover_plan_complete(
                 : task_data->action == TransactionAction::upgrade
                     ? "Update" : "Install",
             plan,
-            from_engine);
+            true);
     g_signal_connect(
         dialog, "response",
         G_CALLBACK(discover_install_confirm_response),
@@ -6220,10 +5994,10 @@ void updates_worker(
      * package state.  If no generation exists yet, initialise it once through
      * the same reconciliation path before retrying the inventory read.
      */
-    result->from_engine = true;
     if (data == nullptr) {
         result->error = "Update task state is unavailable.";
     } else {
+        result->external_refreshed = data->refresh_external;
         EngineClient engine;
 
         /*
@@ -6246,7 +6020,7 @@ void updates_worker(
                 result->error);
         }
 
-        if (data->show_flatpak) {
+        if (data->refresh_external && data->show_flatpak) {
             std::vector<ExternalUpdate> flatpak;
             std::string external_error;
             if (discover_flatpak_updates(
@@ -6262,7 +6036,7 @@ void updates_worker(
             }
         }
 
-        if (data->show_cinnamon) {
+        if (data->refresh_external && data->show_cinnamon) {
             std::vector<ExternalUpdate> cinnamon;
             std::string external_error;
             if (discover_cinnamon_updates(
@@ -6302,7 +6076,7 @@ gboolean auto_refresh_updates_idle(gpointer user_data)
             G_OBJECT(window),
             "infiltrator-window-state"));
     if (state != nullptr && !state->updates_busy) {
-        refresh_updates(state, true);
+        refresh_updates_internal(state, true, false);
     }
     return G_SOURCE_REMOVE;
 }
@@ -6376,11 +6150,11 @@ void updates_complete(
                     return name != "infiltrator-software";
                 }),
             state->update_records.end());
+        result->external_refreshed = true;
         result->external_records.clear();
         result->external_error.clear();
     }
 
-    state->updates_from_engine = result->from_engine;
     if (state->discover_updates_summary != nullptr) {
         const std::string summary =
             std::to_string(
@@ -6444,27 +6218,32 @@ void updates_complete(
             state->selected_update_ids.insert(identity);
         }
     }
-    state->external_update_records =
-        std::move(result->external_records);
-    state->selected_flatpak_refs.clear();
-    state->selected_cinnamon_refs.clear();
-    for (const ExternalUpdate &update : state->external_update_records) {
-        if (update.backend == "Flatpak") {
-            state->selected_flatpak_refs.insert(
-                flatpak_selection_key(update));
-        } else if (update.backend == "Cinnamon") {
-            state->selected_cinnamon_refs.insert(
-                cinnamon_selection_key(update));
-        }
-    }
+    const bool external_refreshed =
+        result->external_refreshed;
     const std::string external_error =
-        result->external_error;
-    rebuild_external_updates(state);
+        external_refreshed
+            ? result->external_error
+            : std::string{};
+    if (external_refreshed) {
+        state->external_update_records =
+            std::move(result->external_records);
+        state->selected_flatpak_refs.clear();
+        state->selected_cinnamon_refs.clear();
+        for (const ExternalUpdate &update :
+             state->external_update_records) {
+            if (update.backend == "Flatpak") {
+                state->selected_flatpak_refs.insert(
+                    flatpak_selection_key(update));
+            } else if (update.backend == "Cinnamon") {
+                state->selected_cinnamon_refs.insert(
+                    cinnamon_selection_key(update));
+            }
+        }
+        rebuild_external_updates(state);
+    }
 
     const bool refreshed_metadata =
         result->refreshed_metadata;
-    const bool from_engine =
-        result->from_engine;
     const std::string error =
         result->error;
     delete result;
@@ -6495,9 +6274,7 @@ void updates_complete(
     if (state->updates_backend != nullptr) {
         gtk_label_set_text(
             GTK_LABEL(state->updates_backend),
-            from_engine
-                ? "Native engine"
-                : "Native engine unavailable");
+            "Native engine");
     }
 
     rebuild_updates(state);
@@ -6627,7 +6404,10 @@ void updates_complete(
     }
 }
 
-void refresh_updates(WindowState *state, const bool refresh_metadata)
+void refresh_updates_internal(
+    WindowState *state,
+    const bool refresh_metadata,
+    const bool refresh_external)
 {
     if (state == nullptr || state->window == nullptr ||
         state->updates_list == nullptr || state->updates_busy) {
@@ -6663,6 +6443,7 @@ void refresh_updates(WindowState *state, const bool refresh_metadata)
     auto *data = new UpdatesTaskData{
         state->updates_generation,
         refresh_metadata,
+        refresh_external,
         state->preferences.show_flatpak_updates,
         state->preferences.show_cinnamon_updates};
     GTask *task = g_task_new(
@@ -6677,6 +6458,16 @@ void refresh_updates(WindowState *state, const bool refresh_metadata)
         });
     g_task_run_in_thread(task, updates_worker);
     g_object_unref(task);
+}
+
+void refresh_updates(
+    WindowState *state,
+    const bool refresh_metadata)
+{
+    refresh_updates_internal(
+        state,
+        refresh_metadata,
+        true);
 }
 
 void destroy_update_process_run(UpdateProcessRun *run)
@@ -6786,8 +6577,9 @@ void update_process_complete(
              * repeating the full network reconciliation here only delays the
              * UI and can leave completed packages visible as stale updates.
              */
-            refresh_updates(
+            refresh_updates_internal(
                 state,
+                run->operation == "refresh",
                 run->operation == "refresh");
         } else {
             std::string message =
@@ -7231,17 +7023,9 @@ void update_plan_worker(
         request.install_recommends =
             data->install_recommends;
 
-        if (data->use_engine) {
-            EngineClient engine;
-            result->plan =
-                engine.plan(request, result->error);
-            result->from_engine =
-                result->plan.has_value();
-        } else {
-            AptBackend fallback;
-            result->plan =
-                fallback.plan(request, result->error);
-        }
+        EngineClient engine;
+        result->plan =
+            engine.plan(request, result->error);
     }
 
     g_task_return_pointer(
@@ -7293,7 +7077,6 @@ void update_plan_complete(
 
     const infiltrator::software::TransactionPlan plan =
         *result->plan;
-    const bool from_engine = result->from_engine;
     delete result;
 
     state->pending_update_plan = plan;
@@ -7375,7 +7158,6 @@ void update_install_clicked(GtkButton *, gpointer user_data)
     set_update_runtime_state("checking");
 
     auto *data = new UpdatePlanTaskData{};
-    data->use_engine = state->updates_from_engine;
     data->install_recommends =
         state->preferences.install_recommends;
     data->package_ids.reserve(state->selected_update_ids.size());
@@ -7994,7 +7776,7 @@ gboolean periodic_updates_refresh(gpointer user_data)
             g_get_monotonic_time(),
             state->updates_last_metadata_refresh_us,
             state->updates_busy)) {
-        refresh_updates(state, true);
+        refresh_updates_internal(state, true, false);
     }
     return G_SOURCE_CONTINUE;
 }
@@ -8034,7 +7816,7 @@ void refresh_page_if_needed(WindowState *state, const int index)
                        g_get_monotonic_time(),
                        state->updates_last_metadata_refresh_us,
                        state->updates_busy)) {
-            refresh_updates(state, true);
+            refresh_updates_internal(state, true, false);
         }
         break;
     case 3:

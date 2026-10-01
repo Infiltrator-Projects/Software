@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "app/installed_inventory.hpp"
 
-#include "backends/apt/apt_backend.hpp"
+#include "engine/debian_installed_state.hpp"
 #include "client/engine_client.hpp"
 #include "core/update_policy.hpp"
 
@@ -29,9 +29,8 @@ std::vector<PackageRecord> read_installed_packages(
         return packages;
     }
 
-    AptBackend fallback;
     std::string fallback_error;
-    packages = fallback.list_installed(fallback_error);
+    packages = DebianInstalledState::read(fallback_error);
     if (fallback_error.empty()) {
         for (PackageRecord &package : packages) {
             classify_package_role(package);

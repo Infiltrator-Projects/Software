@@ -89,7 +89,6 @@ jobs:
           app = "\n".join(path.read_text() for path in app_files)
           theme = Path("src/app/theme.cpp").read_text()
           cmake = Path("CMakeLists.txt").read_text()
-          backend = Path("src/backends/apt/apt_backend.cpp").read_text()
           transaction = Path("src/engine/debian_transaction.cpp").read_text()
           candidate = Path("src/engine/debian_candidate.cpp").read_text()
           package_policy = Path("src/engine/package_policy.cpp").read_text()
@@ -103,6 +102,7 @@ jobs:
           history_controller = Path("src/app/history_controller.cpp").read_text()
           history_view = Path("src/app/history_view.cpp").read_text()
           installed_controller = Path("src/app/installed_controller.cpp").read_text()
+          installed_inventory = Path("src/app/installed_inventory.cpp").read_text()
           repository_controller = Path("src/app/repository_controller.cpp").read_text()
           ui_components = Path("src/app/ui_components.cpp").read_text()
           helper = Path("src/helper/update_helper.cpp").read_text()
@@ -213,9 +213,10 @@ jobs:
           assert "engine.refresh(result->error)" in app
           assert "backend.refresh_metadata(result->error)" not in app
           assert '"refresh"}' not in app
-          assert "AptBackend::refresh_metadata" in backend
-          assert "Dir::State::lists=" in backend
-          assert "APT::Sandbox::User=" in backend
+          assert "AptBackend" not in app
+          assert "DebianInstalledState::read" in installed_inventory
+          assert "add_library(software-apt STATIC" not in cmake
+          assert "refresh_updates_internal(state, true, false)" in app
           assert 'strcmp(argv[1], "refresh")' not in helper
           assert 'run_apt({"update"})' in helper
           assert 'strcmp(argv[1], "apply-plan")' in helper
