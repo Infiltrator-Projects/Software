@@ -58,16 +58,36 @@ int main()
       echo 'System Flatpak repository is unavailable' >&2
       exit 1
     fi
-    printf 'org.example.App\tapp/org.example.App/x86_64/stable\t2.0\t1234\t1111111111111111111111111111111111111111111111111111111111111111\n'
-    printf 'org.example.Runtime\truntime/org.example.Runtime/x86_64/24.08\t24.08\t2345\t2222222222222222222222222222222222222222222222222222222222222222\n'
+    if [ "$ABBREVIATED_COMMIT" = 1 ]; then
+      printf 'org.example.App\tapp/org.example.App/x86_64/stable\t2.0\t1234\t111111111111\n'
+      printf 'org.example.Runtime\truntime/org.example.Runtime/x86_64/24.08\t24.08\t2345\t222222222222\n'
+    else
+      printf 'org.example.App\tapp/org.example.App/x86_64/stable\t2.0\t1234\t1111111111111111111111111111111111111111111111111111111111111111\n'
+      printf 'org.example.Runtime\truntime/org.example.Runtime/x86_64/24.08\t24.08\t2345\t2222222222222222222222222222222222222222222222222222222222222222\n'
+    fi
     exit 0
     ;;
   *uninstall*--unused*)
     echo "flatpak-uninstall $*" >> "$TRACE"
     exit 0
     ;;
+  *info*--show-origin*)
+    printf 'flathub\n'
+    exit 0
+    ;;
   *remotes*)
     printf 'flathub\n'
+    exit 0
+    ;;
+  *remote-info*--show-commit*)
+    case "$*" in
+      *org.example.Runtime*)
+        printf '2222222222222222222222222222222222222222222222222222222222222222\n'
+        ;;
+      *)
+        printf '1111111111111111111111111111111111111111111111111111111111111111\n'
+        ;;
+    esac
     exit 0
     ;;
   *remote-info*)
@@ -114,6 +134,21 @@ exit 0
     }
     assert(saw_app);
     assert(saw_runtime);
+
+    /*
+     * Some Flatpak CLI versions/installations expose a shortened or otherwise
+     * unusable commit in remote-ls. Discovery must recover the exact commit
+     * through the installed origin so selected updates remain pinned.
+     */
+    (void)setenv("ABBREVIATED_COMMIT", "1", 1);
+    std::vector<ExternalUpdate> recovered_flatpak;
+    assert(discover_flatpak_updates(recovered_flatpak, error));
+    assert(error.empty());
+    assert(recovered_flatpak.size() == 4U);
+    for (const ExternalUpdate &update : recovered_flatpak) {
+        assert(update.commit.size() == 64U);
+    }
+    (void)unsetenv("ABBREVIATED_COMMIT");
 
     std::vector<ExternalUpdate> selected;
     for (const ExternalUpdate &update : flatpak) {
