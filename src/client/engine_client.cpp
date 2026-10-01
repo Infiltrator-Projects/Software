@@ -23,6 +23,13 @@ constexpr const char *kObjectPath =
 constexpr const char *kInterfaceName =
     "net.ssmith.infiltrator.software.Engine";
 constexpr int kInventoryCallTimeoutMs = 750;
+/*
+ * Kernel inventory is computed from the cached package snapshot rather than
+ * returned as a prebuilt list. It is still bounded, but gets a realistic
+ * window for cold caches and low-I/O virtual machines instead of inheriting
+ * the sub-second timeout used by simple installed/update snapshot reads.
+ */
+constexpr int kKernelInventoryCallTimeoutMs = 10 * 1000;
 constexpr int kControlCallTimeoutMs = 5000;
 /*
  * Dependency planning is local but can legitimately exceed a short control
@@ -744,7 +751,7 @@ bool EngineClient::list_kernels(
             "ListKernels",
             g_variant_new("(s)", type.c_str()),
             G_VARIANT_TYPE("(aa{sv})"),
-            kInventoryCallTimeoutMs,
+            kKernelInventoryCallTimeoutMs,
             error);
     return reply != nullptr &&
            parse_kernels_reply(reply, kernels, error);

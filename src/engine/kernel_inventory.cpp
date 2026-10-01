@@ -266,23 +266,6 @@ const KernelReleaseWindow *find_window(
     return found == windows.end() ? nullptr : &*found;
 }
 
-const DebianPackageVersion *best_available(
-    const std::vector<DebianPackageVersion> &available,
-    const std::string_view package)
-{
-    const DebianPackageVersion *best = nullptr;
-    for (const DebianPackageVersion &candidate : available) {
-        if (candidate.package != package) continue;
-        if (best == nullptr ||
-            compare_debian_versions(
-                candidate.version,
-                best->version) > 0) {
-            best = &candidate;
-        }
-    }
-    return best;
-}
-
 bool installed_package(
     const std::unordered_set<std::string> &installed,
     const std::string &name)
@@ -444,6 +427,38 @@ std::vector<KernelRecord> KernelInventory::build(
                     : package.package_name));
     }
 
+    /*
+     * Kernel inventory is derived from the already reconciled package
+     * snapshot. Build a one-pass package-name index here rather than scanning
+     * the complete available-package catalogue for every installed kernel and
+     * every related image/header/modules package. On large catalogues and
+     * virtual machines the former O(kernel_packages × catalogue_packages)
+     * behaviour could exceed the client's inventory timeout.
+     */
+    std::unordered_map<std::string, const DebianPackageVersion *>
+        best_available_by_name;
+    best_available_by_name.reserve(available.size());
+    for (const DebianPackageVersion &candidate : available) {
+        auto [entry, inserted] =
+            best_available_by_name.emplace(
+                candidate.package, &candidate);
+        if (!inserted &&
+            compare_debian_versions(
+                candidate.version,
+                entry->second->version) > 0) {
+            entry->second = &candidate;
+        }
+    }
+
+    const auto best_available = [&](const std::string_view package)
+        -> const DebianPackageVersion * {
+        const auto found =
+            best_available_by_name.find(std::string(package));
+        return found == best_available_by_name.end()
+            ? nullptr
+            : found->second;
+    };
+
     std::map<std::string, Seed> seeds;
     auto add_image = [&](const std::string &name,
                          const bool is_installed,
@@ -494,7 +509,7 @@ std::vector<KernelRecord> KernelInventory::build(
                 package.package_name.empty()
                     ? package.id
                     : package.package_name);
-        add_image(name, true, best_available(available, name));
+        add_image(name, true, best_available(name));
     }
     for (const DebianPackageVersion &package : available) {
         add_image(
@@ -783,7 +798,7 @@ std::vector<KernelRecord> KernelInventory::build(
                 record.kernel_type,
                 false);
         for (const std::string &name : install_names) {
-            if (best_available(available, name) != nullptr) {
+            if (best_available(name) != nullptr) {
                 record.install_package_ids.push_back(name);
             }
         }
@@ -862,7 +877,7 @@ std::vector<KernelRecord> KernelInventory::build(
 
             for (const std::string &meta : meta_names) {
                 const DebianPackageVersion *candidate =
-                    best_available(available, meta);
+                    best_available(meta);
                 if (candidate == nullptr ||
                     series_of(
                         candidate->version, 3U) !=
