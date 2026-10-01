@@ -250,8 +250,8 @@ jobs:
           assert '"/usr/libexec/infiltrator-software-update-helper"' in maintenance
           assert '"apt-get",\n                "autoremove"' not in maintenance
 
-          # Recommends policy is resolved into the reviewed native/fallback
-          # plan; the privileged executor must not independently broaden it.
+          # Recommends policy is resolved into the reviewed native plan; the
+          # privileged executor must not independently broaden it.
           assert "request.install_recommends" in transaction
           assert "owner.recommends" in dependency
           assert "planned_removals" in dependency
@@ -261,9 +261,6 @@ jobs:
           assert "installed_identity_held" in dependency
           assert "candidate_architecture_matches" in dependency
           assert "installed_architecture_matches" in dependency
-          assert '"--install-recommends"' in backend
-          assert '"--no-install-recommends"' in backend
-
           # Release source switching is transactional across a failed package
           # mutation, and Preferences must not synchronously block GTK.
           assert "rollback_target_sources" in release_upgrader
@@ -602,7 +599,7 @@ jobs:
           assert "discover_install_clicked" in app
           assert '"apply-plan"' in app
           assert "state->pending_update_plan = plan" in app
-          assert "request.action == TransactionAction::remove" in backend
+          assert "plan_removal(" in transaction
 
           # Privileged mutations must authenticate rather than being denied
           # merely because the desktop is remote/inactive. Never cache this
