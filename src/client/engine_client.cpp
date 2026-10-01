@@ -24,6 +24,13 @@ constexpr const char *kInterfaceName =
     "net.ssmith.infiltrator.software.Engine";
 constexpr int kInventoryCallTimeoutMs = 750;
 constexpr int kControlCallTimeoutMs = 5000;
+/*
+ * Dependency planning is local but can legitimately exceed a short control
+ * timeout on cold caches, large package sets and low-I/O virtual machines.
+ * Keep quick identity/control probes strict while giving the solver its own
+ * bounded window.
+ */
+constexpr int kPlanCallTimeoutMs = 2 * 60 * 1000;
 constexpr int kRefreshCallTimeoutMs = 30 * 60 * 1000;
 constexpr guint32 kRequiredApiVersion = 5U;
 constexpr const char *kRequiredEngineVersion =
@@ -795,7 +802,7 @@ std::optional<TransactionPlan> EngineClient::plan(
                       ids.data(),
                       request.install_recommends),
             G_VARIANT_TYPE("(a{sv})"),
-            kControlCallTimeoutMs,
+            kPlanCallTimeoutMs,
             error);
     if (reply == nullptr) {
         return std::nullopt;
