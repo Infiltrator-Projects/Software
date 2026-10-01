@@ -132,8 +132,13 @@ add_library(software-core STATIC
     src/core/update_tracker.cpp)
 target_include_directories(software-core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
 
+add_library(software-installed-state STATIC
+    src/engine/debian_installed_state.cpp)
+target_include_directories(software-installed-state PUBLIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_link_libraries(software-installed-state PUBLIC software-core)
+
 add_library(software-engine STATIC
-    src/engine/debian_installed_state.cpp
     src/engine/debian_package_index.cpp
     src/engine/debian_version.cpp
     src/engine/debian_candidate.cpp
@@ -150,7 +155,8 @@ add_library(software-engine STATIC
     src/engine/engine_service_core.cpp)
 target_include_directories(software-engine PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/src")
-target_link_libraries(software-engine PUBLIC software-core
+target_link_libraries(software-engine PUBLIC
+    software-core software-installed-state
     PRIVATE InfiltratrCommon::Common
             PkgConfig::CURL PkgConfig::GLIB PkgConfig::ZLIB PkgConfig::LZMA
             PkgConfig::SQLITE3)
@@ -277,7 +283,7 @@ add_executable(infiltrator-software
     src/app/ui_components.cpp)
 
 target_link_libraries(infiltrator-software PRIVATE
-    software-core software-history software-client
+    software-core software-history software-client software-installed-state
     software-catalogue software-sources software-external
     InfiltratrCommon::Common PkgConfig::GTK4 PkgConfig::CURL)
 
@@ -327,7 +333,7 @@ install(FILES ${SOFTWARE_FONT_FILES}
 install(FILES LICENSE DESTINATION share/doc/infiltrator-software)
 
 foreach(target IN ITEMS
-        software-core software-history software-engine software-client software-catalogue software-sources software-external
+        software-core software-history software-installed-state software-engine software-client software-catalogue software-sources software-external
         software-apt-plan-guard
         infiltrator-software-helper infiltrator-software-update-helper
         infiltrator-software-engine infiltrator-software-tray
