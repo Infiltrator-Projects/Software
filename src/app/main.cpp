@@ -4018,7 +4018,6 @@ void discover_plan_complete(
     }
 
     const TransactionPlan plan = *result->plan;
-    const bool from_engine = result->from_engine;
     delete result;
 
     const std::string heading =
@@ -7102,7 +7101,7 @@ void update_plan_complete(
             heading.str(),
             "Install updates",
             plan,
-            from_engine);
+            true);
     g_signal_connect(
         dialog, "response",
         G_CALLBACK(update_confirm_response), state);
