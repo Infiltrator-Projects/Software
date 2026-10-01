@@ -19,6 +19,8 @@ namespace {
 
 bool flatpak_installation_absent(
     std::string_view error) noexcept;
+bool valid_flatpak_component(
+    std::string_view value);
 
 std::string trim(const std::string_view value)
 {
@@ -311,6 +313,65 @@ bool valid_flatpak_commit(
             });
 }
 
+bool resolve_flatpak_commit(
+    const bool user,
+    const std::string_view ref,
+    std::string &commit,
+    std::string &error)
+{
+    if (ref.empty() ||
+        ref.find_first_of(" \t\r\n") != std::string_view::npos) {
+        error = "Flatpak update metadata returned an invalid ref identity.";
+        return false;
+    }
+
+    std::vector<std::string> origin_command{
+        "flatpak", "info",
+        user ? "--user" : "--system",
+        "--show-origin", std::string(ref)
+    };
+    std::string origin_output;
+    if (!run_command(
+            origin_command,
+            origin_output,
+            error)) {
+        error =
+            "Unable to resolve the Flatpak update origin: " + error;
+        return false;
+    }
+
+    const std::string origin = trim(origin_output);
+    if (!valid_flatpak_component(origin)) {
+        error =
+            "Flatpak update metadata returned an invalid origin identity.";
+        return false;
+    }
+
+    std::vector<std::string> commit_command{
+        "flatpak", "remote-info",
+        user ? "--user" : "--system",
+        "--show-commit", origin, std::string(ref)
+    };
+    std::string commit_output;
+    if (!run_command(
+            commit_command,
+            commit_output,
+            error)) {
+        error =
+            "Unable to resolve the Flatpak update commit: " + error;
+        return false;
+    }
+
+    commit = trim(commit_output);
+    if (!valid_flatpak_commit(commit)) {
+        error =
+            "Flatpak remote metadata returned an invalid commit identity.";
+        return false;
+    }
+    error.clear();
+    return true;
+}
+
 ExternalUpdateKind flatpak_kind(
     const std::string_view ref)
 {
@@ -359,16 +420,8 @@ bool parse_flatpak_output(
                         parse_size(
                             std::string(fields[3]));
                 }
-                if (fields.size() <= commit_index) {
-                    error =
-                        "Flatpak update metadata did not include a commit identity.";
-                    return false;
-                }
-                update.commit = trim(fields[commit_index]);
-                if (!valid_flatpak_commit(update.commit)) {
-                    error =
-                        "Flatpak update metadata returned an invalid commit identity.";
-                    return false;
+                if (fields.size() > commit_index) {
+                    update.commit = trim(fields[commit_index]);
                 }
 
                 const std::string ref =
@@ -378,6 +431,28 @@ bool parse_flatpak_output(
                 update.ref = ref;
                 update.user_installation = installation == "User";
                 update.kind = flatpak_kind(ref);
+
+                /*
+                 * Flatpak versions in the field do not all expose commit
+                 * metadata identically through remote-ls. Keep exact commit
+                 * pinning, but recover a missing/abbreviated value through
+                 * the installed ref's origin and remote-info rather than
+                 * rejecting an otherwise valid update inventory.
+                 */
+                if (!valid_flatpak_commit(update.commit)) {
+                    std::string resolve_error;
+                    if (!resolve_flatpak_commit(
+                            update.user_installation,
+                            update.ref,
+                            update.commit,
+                            resolve_error)) {
+                        error = resolve_error.empty()
+                            ? "Flatpak update metadata did not provide a usable commit identity."
+                            : resolve_error;
+                        return false;
+                    }
+                }
+
                 update.detail =
                     std::string(installation) +
                     (ref.empty()
