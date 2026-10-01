@@ -411,12 +411,13 @@ jobs:
 
           # Third visual pass: the landing page must behave like a graphical
           # software centre rather than a catalogue table with decoration.
-          assert "discover_spotlight" in app
-          assert "rebuild_discover_spotlight" in app
-          assert '"FEATURED SOFTWARE"' in app
-          assert '"Explore software"' in app
-          assert ".discover-spotlight" in theme
-          assert ".spotlight-art" in theme
+          # The obsolete Spotlight prototype was retired; the current landing
+          # surface is the dashboard plus curated Featured Applications panel.
+          assert "discover_featured_flow" in app
+          assert "append_curated_featured" in app
+          assert '"Featured Applications"' in app
+          assert ".featured-panel" in theme
+          assert ".featured-card" in theme
           assert ".catalogue-section-heading" in theme
 
           # Fourth visual pass: the shell now owns brand/search while Discover
