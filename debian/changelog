@@ -1,3 +1,15 @@
+infiltrator-software (0.3.58) unstable; urgency=high
+
+  * Give native dependency planning its own bounded two-minute D-Bus window
+    instead of the five-second control-call timeout, preventing false planning
+    failures on cold caches, virtual machines and slower storage.
+  * Recover missing or abbreviated Flatpak remote-ls commit identities through
+    the installed ref's origin and remote-info, while retaining exact 64-hex
+    commit pinning for reviewed Flatpak updates.
+  * Add regression coverage for Flatpak commit-identity recovery.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Thu, 01 Oct 2026 20:40:00 +1000
+
 infiltrator-software (0.3.57) unstable; urgency=high
 
   * Restore true lazy startup hydration: opening Discover no longer launches
