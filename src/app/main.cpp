@@ -8007,20 +8007,19 @@ void refresh_page_if_needed(WindowState *state, const int index)
 
     switch (index) {
     case 0:
+        /*
+         * Discover is the default page, so keep its startup work strictly
+         * scoped to Discover. Preloading Updates, Repositories, History and
+         * Repair here defeats the lazy-page contract and can make a freshly
+         * opened window run several package/state scans concurrently,
+         * especially visible on virtual machines.
+         *
+         * Dashboard summary cards retain their placeholder/cached values until
+         * their owning page is first hydrated. Navigation below loads each
+         * page on demand.
+         */
         if (!state->discover_loaded) {
             refresh_discover(state);
-        }
-        if (!state->updates_loaded) {
-            refresh_updates(state);
-        }
-        if (!state->repositories.loaded) {
-            refresh_repositories(state);
-        }
-        if (!state->history.loaded) {
-            refresh_history(state);
-        }
-        if (!state->repair_loaded) {
-            refresh_repair(state, false);
         }
         break;
     case 1:
