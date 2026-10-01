@@ -34,6 +34,11 @@
   <url type="homepage">https://github.com/Infiltrator-Projects/Software</url>
 
   <releases>
+    <release version="0.3.57" date="2026-10-01">
+      <description>
+        <p>Restores lazy page hydration and avoids restarting the resident tray on every launch, reducing startup CPU and duplicate package-state work.</p>
+      </description>
+    </release>
     <release version="0.3.56" date="2026-09-29">
       <description>
         <p>Replaces stale resident update-indicator processes after Software upgrades and makes the tray re-exec itself automatically when dpkg installs a newer tray binary.</p>
