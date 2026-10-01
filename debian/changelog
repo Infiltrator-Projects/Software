@@ -1,3 +1,15 @@
+infiltrator-software (0.3.57) unstable; urgency=high
+
+  * Restore true lazy startup hydration: opening Discover no longer launches
+    Updates, Repositories, History and Repair refresh workers in parallel.
+  * Stop forcing the resident update indicator to restart every time Software
+    opens; the tray now starts only when absent and keeps its existing
+    self-reexec path for real package upgrades.
+  * Reduce launch-time package/state reconciliation load, particularly on
+    virtual machines and lower-core systems.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Thu, 01 Oct 2026 16:55:00 +1000
+
 infiltrator-software (0.3.56) unstable; urgency=high
 
   * Replace stale same-user update-indicator processes when Software starts so
