@@ -8643,14 +8643,15 @@ void ensure_update_indicator()
     g_free(program);
 
     /*
-     * The tray survives package upgrades inside the desktop session.  Always
-     * ask the newly installed tray binary to replace a stale same-user
-     * instance; an already-current instance is replaced harmlessly and this
-     * also repairs upgrades from releases that predate tray self-reexec.
+     * Ensure the tray exists, but do not replace a healthy resident instance
+     * every time the main window opens.  The tray owns a single-instance lock
+     * and already self-reexecs when it detects that its installed executable
+     * changed after an upgrade.  Forcing --replace here needlessly restarts the
+     * tray and triggers another package-state reconciliation during startup.
      */
     GError *error = nullptr;
     if (!g_spawn_command_line_async(
-            "infiltrator-software-tray --replace", &error)) {
+            "infiltrator-software-tray", &error)) {
         if (error != nullptr) {
             g_warning(
                 "Unable to start software update indicator: %s",
