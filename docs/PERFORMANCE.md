@@ -96,31 +96,35 @@ The Discover software catalogue is persistent and bootstrap-once. The first succ
 
 ## Shared-engine client cutover
 
-The first client cutover is implemented. Installed inventory is no longer read on the GTK main thread. Installed and ordinary Updates hydration query the D-Bus engine from worker tasks, and the XApp panel indicator subscribes to StateChanged/HealthChanged so an engine publication is propagated as an event rather than starting a second resolver. The tray retains a low-frequency resilience check, but when engine state exists that check is a shared-snapshot read rather than a package calculation.
+The GUI cutover is complete for normal package inventory, repository refresh and transaction planning. Installed inventory is not read on the GTK main thread. Installed and ordinary Updates hydration query the D-Bus engine from worker tasks, and the XApp panel indicator subscribes to StateChanged/HealthChanged so an engine publication is propagated as an event rather than starting a second resolver. The tray retains a low-frequency resilience check, but when engine state exists that check is a shared-snapshot read rather than a package calculation.
 
-Native reconciliation now owns source refresh and generation publication. Ordinary Updates hydration first reconciles the authoritative local dpkg state against the current verified repository generation; it does not redownload repository metadata merely to discover that a completed package transaction changed the installed version.
+Native reconciliation owns source refresh and generation publication. Ordinary Updates hydration first reconciles authoritative local dpkg state against the current verified repository generation; it does not redownload repository metadata merely to discover that a completed package transaction changed the installed version. If the engine is unavailable, Installed alone retains a deliberately small direct `/var/lib/dpkg/status` reader; this fallback does not pull repository or resolver work into the GUI.
 
 ## Discover reopen latency
 
-Cached Discover startup is now explicitly two-phase. The saved catalogue is parsed and painted first; package-engine installed-state reconciliation and remote-icon hydration begin only after the first usable catalogue is on screen. A slow or unavailable engine can therefore no longer leave Discover at 0 applications / Loading while the user waits.
+Cached Discover startup is explicitly two-phase. The saved catalogue is parsed and painted first; package-engine installed-state reconciliation and remote-icon hydration begin only after the first usable catalogue is on screen. A slow or unavailable engine can therefore no longer leave Discover at 0 applications / Loading while the user waits.
 
 Icon hydration merges only icon state back into the live catalogue so it cannot overwrite a concurrent installed-state update. This preserves the fast-path rendering contract while keeping both enrichments asynchronous.
 
 ## Cached update metadata
 
-The Updates page now follows the same cache-first principle as Discover without allowing stale metadata to masquerade as current state. Cached compatibility results are rendered first for responsiveness, then one unprivileged repository metadata refresh is scheduled in the background for the session. When that refresh completes, the visible candidate set is replaced with current repository state.
+The Updates page follows the same cache-first principle as Discover without allowing stale metadata to masquerade as current state. Cached native results are rendered first, then one unprivileged repository metadata refresh is scheduled in the background for the session. When that refresh completes, the visible candidate set is replaced with current repository state.
 
 This means opening Updates does not block on network/package-manager work, while a newly published release cannot remain hidden indefinitely behind older state. Repository refresh always fetches and verifies the small Release/InRelease integrity root; when that document is byte-identical to the cached copy, Software reuses each cached uncompressed Packages index only after rechecking its signed byte count and SHA-256. Unchanged repositories therefore avoid repeated multi-megabyte index downloads.
 
+Flatpak and Cinnamon discovery is intentionally not repeated during that immediate metadata-refresh pass. Initial Updates hydration discovers external updates once; the follow-up Debian repository refresh reuses the existing external snapshot. This prevents duplicate `flatpak remote-ls` processes and duplicate Cinnamon HTTPS metadata downloads on first page entry.
+
 After an install/update transaction, Software performs local installed-state reconciliation first and publishes a new native generation before reloading Installed and Discover. It does not immediately perform a second network refresh after the privileged executor has already refreshed metadata. Manual repository refresh remains available.
 
-## 0.3.7 interactive latency pass
+## Interactive latency pass
 
-The catalogue UI is now virtualized. Discover no longer creates a complete GTK widget tree for every application whenever the catalogue loads, installed state changes, icons arrive, the category changes or the user types into Search. A GtkGridView binds only the cards required for the visible viewport, while a lightweight string model contains the filtered record indices.
+The catalogue UI is virtualized. Discover no longer creates a complete GTK widget tree for every application whenever the catalogue loads, installed state changes, icons arrive, the category changes or the user types into Search. A GtkGridView binds only the cards required for the visible viewport, while a lightweight string model contains the filtered record indices.
 
-Installed inventory replacement is one GtkStringList splice rather than thousands of remove/append model notifications. Repository source discovery runs on a worker task. Read-only shared-engine inventory calls have a short fail-fast timeout because their compatibility fallbacks are local and safe; transaction planning and engine control retain longer timeouts.
+Installed inventory replacement is one GtkStringList splice rather than thousands of remove/append model notifications. Repository source discovery runs on a worker task. Read-only shared-engine inventory calls have bounded fail-fast windows appropriate to each operation; transaction planning, kernel inventory and engine control use larger operation-specific bounds where computation can legitimately take longer on cold caches, virtual machines or slower storage.
 
-These changes make UI latency proportional to the visible interface rather than the full package catalogue and prevent optional backend availability from dominating navigation time.
+The retired GUI `AptBackend` and its package-backend abstraction are no longer linked into Software, so failed native planning cannot silently launch an older compatibility resolver. Discover and Updates planning remain on one native path.
+
+These changes make UI latency proportional to the visible interface rather than the full package catalogue and prevent optional provider availability from dominating navigation time.
 
 
 ## Update-page freshness
