@@ -2,7 +2,7 @@
 
 # Native Debian compatibility engine
 
-The 0.4 package engine replaces APT command-line programs while preserving Debian repository and .deb compatibility.
+The native package engine replaces APT command-line programs for normal inventory, repository refresh and transaction planning while preserving Debian repository and .deb compatibility. The final privileged mutation boundary remains deliberately separate and may still use host Debian tooling until the native payload executor replaces it.
 
 This is an implementation replacement, not an ecosystem rewrite.
 
@@ -21,7 +21,7 @@ The engine consumes supported authoritative sources directly:
 - AppStream metadata;
 - Flatpak remotes and metadata through structured integration.
 
-It must not require apt, apt-get or apt-cache for normal operation.
+It must not require apt, apt-get or apt-cache for normal inventory, repository refresh or planning.
 
 APT private binary caches are not an API and are not inputs to the native engine.
 
@@ -139,9 +139,9 @@ The third native slice implements Debian version comparison inside the engine. I
 
 The fourth native slice implements deterministic candidate selection. It matches installed package identity and architecture (including architecture-independent all packages), applies configurable per-source priorities, honours explicit holds, prefers the highest-priority source then the newest Debian version, uses deterministic source/file tie-breaking, and refuses downgrades unless the winning priority exceeds 1000.
 
-The fifth native slice adds the resolver core. It parses Debian Depends and Pre-Depends groups, alternatives and version operators; recursively expands dependency graphs with cycle protection; accepts retained installed satisfiers; chooses repository dependencies using effective pin/source priority and Debian version ordering; resolves versioned virtual Provides; recognises native, explicit and :any architecture qualifiers at the supported Multi-Arch boundary; honours held dependency names; and surfaces unsatisfied dependencies and selected-package Conflicts/Breaks as typed problems. Final-state validation rejects incompatible requirements and dependencies that would otherwise be satisfied only by an installed version replaced by the same transaction. Recommends remain policy rather than hard dependencies, and the resolver now feeds the native preflight transaction planner.
+The fifth native slice adds the resolver core. It parses Debian Depends and Pre-Depends groups, alternatives and version operators; recursively expands dependency graphs with cycle protection; accepts retained installed satisfiers; chooses repository dependencies using effective pin/source priority and Debian version ordering; resolves versioned virtual Provides; recognises native, explicit and :any architecture qualifiers at the supported Multi-Arch boundary; honours held dependency names; and surfaces unsatisfied dependencies and selected-package Conflicts/Breaks as typed problems. Final-state validation rejects incompatible requirements and dependencies that would otherwise be satisfied only by an installed version replaced by the same transaction. Recommends remain policy rather than hard dependencies, and the resolver feeds the native preflight transaction planner.
 
-The sixth native slice implements repository refresh itself. The engine fetches InRelease directly with libcurl and verifies the OpenPGP signature with gpgv using configured keyrings or known system trusted keyrings. If a repository uses detached metadata, Release plus Release.gpg is verified instead. Release SHA-256 entries and exact byte counts are checked before any package index is accepted. Packages.xz, Packages.gz and plain Packages are supported, parsed directly into native package records, and verified uncompressed snapshots can be published atomically into the engine cache. Until shared engine state is connected, the GUI's transitional APT refresh runs entirely unprivileged against an isolated per-user metadata cache. Polkit is not part of the read-only refresh path; privileged system metadata refresh occurs only inside the authorized install executor immediately before mutation.
+The sixth native slice implements repository refresh itself. The engine fetches InRelease directly with libcurl and verifies the OpenPGP signature with gpgv using configured keyrings or known system trusted keyrings. If a repository uses detached metadata, Release plus Release.gpg is verified instead. Release SHA-256 entries and exact byte counts are checked before any package index is accepted. Packages.xz, Packages.gz and plain Packages are supported, parsed directly into native package records, and verified uncompressed snapshots can be published atomically into the engine cache. The GUI now uses this shared native refresh path directly. Polkit is not part of the read-only refresh path; privileged system metadata refresh occurs only inside the authorized execution boundary immediately before mutation.
 
 The seventh native slice implements the durable package-state store. It uses SQLite in WAL mode with an explicit schema version, immutable generations and an atomically switched current-generation pointer. Installed state and normalized repository package versions are written in one transaction; a failed publish rolls back without disturbing the previously readable generation. The store retains the current and immediately previous generations and is intentionally rebuildable from authoritative repository and installed-package inputs.
 
@@ -149,15 +149,12 @@ The eighth native slice implements deterministic transaction planning for instal
 
 The ninth native slice implements the shared engine service. A D-Bus-activatable session process owns the cached in-memory view of the latest SQLite generation and computes the update view once per generation. It exposes health/generation status, installed inventory, update inventory and native transaction planning through a typed local D-Bus contract, monitors package-state publication, emits StateChanged/HealthChanged events, and preserves the last loaded generation if a later read fails. Database reads use a dedicated read-only SQLite connection so ordinary clients never need write access to the state store.
 
-Migration is complete only when normal operation no longer spawns APT programs.
+The normal GUI migration is complete: the old `PackageBackend`/`AptBackend` compatibility implementation has been deleted, Installed uses shared engine state with a direct `/var/lib/dpkg/status` fallback, and Discover/Updates planning is native-only. The tray consumes the same shared engine state rather than owning a second APT-style resolver.
 
-During migration:
+The remaining host-tool dependency is deliberately confined to the privileged compatibility executor used for final Debian package mutation and exact-plan revalidation. It is not an inventory, repository-refresh or resolution architecture.
 
-- 0.3 APT code is treated as reference behaviour, not the target abstraction;
-- parity tests compare native results with known fixtures;
-- GUI code is moved to shared engine state before APT code is deleted;
-- no new feature may add another direct APT process dependency.
+No new feature may add a direct APT process dependency to the GUI, tray, read-only engine path or transaction planner.
 
 ## Acceptance criteria
 
-0.4 package-engine completion requires update inventory without APT executables, repository refresh without APT executables, installed-package inventory without dpkg-query process invocation, complete deterministic update planning fixtures, correct Debian version-ordering tests, dependency/conflict/provider fixtures, repository signature/checksum failure tests, shared state used by GUI and tray, and automated confirmation that normal paths spawn no APT subprocesses.
+The native package-engine migration requires update inventory without APT executables, repository refresh without APT executables, installed-package inventory without dpkg-query process invocation, complete deterministic update planning fixtures, correct Debian version-ordering tests, dependency/conflict/provider fixtures, repository signature/checksum failure tests, shared state used by GUI and tray, and automated confirmation that normal read-only/planning paths spawn no APT subprocesses. The remaining privileged compatibility executor is a separately constrained migration boundary for final system mutation.
