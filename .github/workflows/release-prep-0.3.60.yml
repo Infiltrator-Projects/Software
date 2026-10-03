@@ -1,0 +1,84 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: Prepare Software 0.3.60 release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/release-prep-0.3.60.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    if: github.event.head_commit.message == 'Prepare Software 0.3.60 release'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out exact main commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+          submodules: false
+
+      - name: Prepare immutable 0.3.60 release commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+          test "$(tr -d '[:space:]' < VERSION)" = "0.3.59"
+          test "$(dpkg-parsechangelog -S Version)" = "0.3.59"
+          ! grep -q 'release version="0.3.60"' debian/infiltrator-software.metainfo.xml
+
+          cat > /tmp/changelog-head <<'EOF'
+          infiltrator-software (0.3.60) unstable; urgency=high
+
+            * Remove the retired GUI AptBackend, package-backend abstraction and
+              associated regression test so ordinary Software operation has one
+              native package planning/inventory path instead of legacy fallback code.
+            * Avoid repeating Flatpak and Cinnamon discovery during the immediate
+              Debian metadata refresh after Updates first paints its cached/native
+              state, eliminating duplicate provider processes and network work.
+            * Isolate the direct dpkg installed-state fallback from the full package
+              engine, remove obsolete Discover Spotlight UI/theme state, and align
+              architecture/performance documentation with the implemented design.
+            * Preserve lazy startup, virtualized catalogue rendering, operation-specific
+              engine timeouts and the previously released VM/kernel CPU reductions.
+
+           -- Shannon Smith <infiltratr@yandex.com>  Sat, 03 Oct 2026 10:20:00 +1000
+
+          EOF
+          cat debian/changelog >> /tmp/changelog-head
+          mv /tmp/changelog-head debian/changelog
+
+          printf '0.3.60\n' > VERSION
+          sed -i 's/\*\*Current source version:\*\* 0\.3\.59/**Current source version:** 0.3.60/' README.md
+          grep -q '\*\*Current source version:\*\* 0\.3\.60' README.md
+
+          awk '
+            /^  <releases>$/ && !done {
+              print
+              print "    <release version=\"0.3.60\" date=\"2026-10-03\">"
+              print "      <description>"
+              print "        <p>Completes the native-path performance cleanup by removing the retired GUI APT backend, avoiding duplicate Flatpak/Cinnamon refresh work, isolating the lightweight installed-state fallback and deleting obsolete Discover Spotlight UI state.</p>"
+              print "      </description>"
+              print "    </release>"
+              done=1
+              next
+            }
+            { print }
+          ' debian/infiltrator-software.metainfo.xml > /tmp/metainfo.xml
+          test "$(grep -c 'release version=\"0.3.60\"' /tmp/metainfo.xml)" -eq 1
+          mv /tmp/metainfo.xml debian/infiltrator-software.metainfo.xml
+
+          rm .github/workflows/release-prep-0.3.60.yml
+
+          test "$(dpkg-parsechangelog -S Version)" = "0.3.60"
+          appstreamcli validate debian/infiltrator-software.metainfo.xml
+
+          git config user.name 'Shannon Smith'
+          git config user.email 'infiltratr@yandex.com'
+          git add VERSION README.md debian/changelog debian/infiltrator-software.metainfo.xml .github/workflows/release-prep-0.3.60.yml
+          git commit -m 'Release 0.3.60: complete native performance cleanup'
+          git push origin HEAD:main
