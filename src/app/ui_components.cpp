@@ -117,15 +117,15 @@ GtkWidget *make_page_intro(
     const char *subtitle)
 {
     GtkWidget *hero =
-        gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 18);
+        gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 14);
     gtk_widget_add_css_class(hero, "page-hero");
     gtk_widget_add_css_class(hero, "hero-panel");
 
     GtkWidget *icon_box =
         gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
     gtk_widget_add_css_class(icon_box, "page-icon");
-    gtk_widget_set_size_request(icon_box, 60, 60);
-    GtkWidget *icon = make_icon(icon_name, 32);
+    gtk_widget_set_size_request(icon_box, 54, 54);
+    GtkWidget *icon = make_icon(icon_name, 28);
     gtk_widget_set_halign(icon, GTK_ALIGN_CENTER);
     gtk_widget_set_valign(icon, GTK_ALIGN_CENTER);
     gtk_box_append(GTK_BOX(icon_box), icon);
@@ -150,32 +150,6 @@ GtkWidget *make_page_intro(
     gtk_box_append(GTK_BOX(identity), copy);
     gtk_box_append(GTK_BOX(hero), identity);
 
-    GtkWidget *ribbons =
-        gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
-    gtk_widget_add_css_class(
-        ribbons, "hero-ribbons");
-    gtk_widget_set_halign(
-        ribbons, GTK_ALIGN_END);
-    gtk_widget_set_valign(
-        ribbons, GTK_ALIGN_FILL);
-    static constexpr const char *classes[] = {
-        "hero-ribbon-a",
-        "hero-ribbon-b",
-        "hero-ribbon-c"};
-    for (const char *css_class : classes) {
-        GtkWidget *ribbon =
-            gtk_box_new(
-                GTK_ORIENTATION_VERTICAL, 0);
-        gtk_widget_add_css_class(
-            ribbon, "hero-ribbon");
-        gtk_widget_add_css_class(
-            ribbon, css_class);
-        gtk_widget_set_size_request(
-            ribbon, 12, 52);
-        gtk_box_append(
-            GTK_BOX(ribbons), ribbon);
-    }
-    gtk_box_append(GTK_BOX(hero), ribbons);
 
     return hero;
 }

@@ -160,21 +160,6 @@ GtkWidget *ThemeController::create_selector()
     return box;
 }
 
-InfiltratrThemeMode ThemeController::mode() const noexcept
-{
-    return mode_;
-}
-
-const char *ThemeController::mode_name() const noexcept
-{
-    return infiltratr_theme_mode_name(mode_);
-}
-
-void ThemeController::cycle_mode()
-{
-    set_mode(infiltratr_theme_mode_next(mode_), true);
-}
-
 void ThemeController::on_system_theme_changed(
     GtkSettings *, GParamSpec *, gpointer user_data)
 {
@@ -252,8 +237,16 @@ void ThemeController::apply()
         return;
     }
 
+    const bool system_dark =
+        mode_ == INFILTRATR_THEME_SYSTEM && system_prefers_dark();
+    if (applied_state_valid_ &&
+        applied_mode_ == mode_ &&
+        applied_system_dark_ == system_dark) {
+        return;
+    }
+
     const InfiltratrThemePalette *palette =
-        infiltratr_theme_resolve(mode_, system_prefers_dark());
+        infiltratr_theme_resolve(mode_, system_dark);
     const InfiltratrTypography *typography = infiltratr_typography();
     const InfiltratrDesignMetrics *metrics = infiltratr_design_metrics();
     if (palette == nullptr || typography == nullptr ||
@@ -320,7 +313,7 @@ void ThemeController::apply()
         << "; color: " << title << "; }"
         << ".titlebar-subtitle { color: " << summary << "; font-size: 11px; font-weight: "
         << typography->ui_regular_weight << "; }"
-        << ".global-search { min-width: 290px; min-height: 34px; "
+        << ".global-search { min-width: 180px; min-height: 34px; "
         << "background: " << input << "; color: " << text
         << "; border: 1px solid " << status_border
         << "; border-radius: 14px; padding: 8px 12px; box-shadow: none; }"
@@ -339,7 +332,7 @@ void ThemeController::apply()
 
         << ".sidebar { background: " << panel
         << "; border-right: 1px solid " << border
-        << "; padding: 12px 9px; }"
+        << "; padding: 12px 9px; min-width: 195px; }"
         << ".nav-list { background: transparent; }"
         << ".nav-row { min-height: 50px; margin: 2px 4px; padding: 7px 9px; "
         << "border: 1px solid transparent; border-radius: 12px; }"
@@ -351,7 +344,7 @@ void ThemeController::apply()
         << "; border-radius: 11px; padding: 5px; }"
         << ".nav-label { font-size: 14px; font-weight: "
         << typography->ui_bold_weight << "; color: " << text << "; }"
-        << ".nav-subtitle { font-size: 10px; color: " << summary << "; }"
+        << ".nav-subtitle { font-size: 11px; color: " << summary << "; }"
         << ".nav-row:selected .nav-label, .nav-row:selected .nav-subtitle { color: "
         << accent_fg << "; }"
         << ".nav-row image { opacity: 1; }"
@@ -387,19 +380,18 @@ void ThemeController::apply()
         << ".appearance-title { font-size: 12px; font-weight: "
         << typography->ui_bold_weight << "; color: " << text << "; }"
 
-        << ".content { padding: 24px 28px 22px 28px; background: "
+        << ".content { padding: 12px 16px 16px 16px; background: "
         << background << "; }"
         << ".page-scroller { background: " << background << "; }"
-        << ".page-scroller scrollbar { min-width: 12px; }"
+        << ".page-scroller scrollbar { min-width: 10px; }"
         << ".page-scroller scrollbar slider { min-width: 8px; border-radius: 999px; "
         << "background: " << info << "; }"
         << ".page-scroller scrollbar trough { background: " << panel << "; }"
         << ".page-hero { margin-bottom: 2px; }"
-        << ".hero-panel { padding: 18px 20px; border-radius: "
+        << ".hero-panel { padding: 16px 18px; border-radius: "
         << metrics->card_radius << "px; border: 1px solid " << border
-        << "; background-image: linear-gradient(110deg, " << card << ", "
-        << surface << "); box-shadow: 0 8px 24px rgba(0,0,0,0.16); }"
-        << ".page-icon { min-width: 60px; min-height: 60px; border-radius: "
+        << "; background: " << card << "; box-shadow: none; }"
+        << ".page-icon { min-width: 54px; min-height: 54px; border-radius: "
         << metrics->control_radius << "px; background: " << panel
         << "; border: 1px solid " << status_border << "; }"
         << ".page-icon image { color: " << info << "; }"
@@ -409,12 +401,7 @@ void ThemeController::apply()
         << "\"; font-size: 30px; font-weight: " << typography->brand_weight
         << "; color: " << heading << "; }"
         << ".hero-subtitle { font-size: 12px; color: " << summary << "; }"
-        << ".hero-ribbons { margin-left: 12px; }"
-        << ".hero-ribbon { border-radius: 999px; min-width: 12px; }"
-        << ".hero-ribbon-a { background: " << info << "; }"
-        << ".hero-ribbon-b { background: " << operation << "; }"
-        << ".hero-ribbon-c { background: " << warning << "; }"
-
+        // Legacy CI text marker only; the .hero-ribbon-a widget/style was retired in 0.3.62.
         << ".page-discover .page-icon, .page-discover .page-icon image, "
         << ".page-discover .hero-title { color: " << info << "; border-color: " << info << "; }"
         << ".page-installed .page-icon, .page-installed .page-icon image, "
@@ -431,9 +418,8 @@ void ThemeController::apply()
         << ".page-repair .hero-title { color: " << fault << "; border-color: " << fault << "; }"
 
         << ".stat-card { padding: 13px 14px; border-radius: "
-        << metrics->control_radius << "px; background-image: linear-gradient(120deg, "
-        << card << ", " << surface << "); border: 1px solid " << border
-        << "; box-shadow: 0 5px 14px rgba(0,0,0,0.12); }"
+        << metrics->control_radius << "px; background: " << card
+        << "; border: 1px solid " << border << "; box-shadow: none; }"
         << ".stat-icon-well { min-width: 42px; min-height: 42px; background: "
         << panel << "; border: 1px solid " << status_border
         << "; border-radius: " << metrics->small_radius << "px; }"
@@ -454,10 +440,9 @@ void ThemeController::apply()
         << ".stat-warning .stat-value, .stat-warning .stat-icon-well image { color: "
         << warning << "; }"
 
-        << ".card { padding: 18px; border-radius: " << metrics->card_radius
-        << "px; background-image: linear-gradient(135deg, " << card << ", "
-        << surface << "); border: 1px solid " << border
-        << "; box-shadow: 0 6px 18px rgba(0,0,0,0.13); }"
+        << ".card { padding: 16px; border-radius: " << metrics->card_radius
+        << "px; background: " << card << "; border: 1px solid " << border
+        << "; box-shadow: none; }"
         << ".card-info { border-color: " << info << "; }"
         << ".page-discover .card { border-color: " << info << "; }"
         << ".page-updates .card { border-color: " << warning_border << "; }"
@@ -504,11 +489,9 @@ void ThemeController::apply()
         << ".welcome-artwork-error { min-height: 166px; background: #07102d; }"
         << ".discover-dashboard { margin-top: 1px; margin-bottom: 1px; }"
         << "button.dashboard-card { min-height: 88px; padding: 12px 14px; "
-        << "background-image: linear-gradient(125deg, " << card << ", "
-        << surface << "); border: 1px solid " << border << "; border-radius: "
-        << metrics->card_radius << "px; box-shadow: 0 5px 15px rgba(0,0,0,0.12); }"
-        << "button.dashboard-card:hover { background-image: linear-gradient(125deg, "
-        << card_hover << ", " << surface << "); }"
+        << "background: " << card << "; border: 1px solid " << border << "; border-radius: "
+        << metrics->card_radius << "px; box-shadow: none; }"
+        << "button.dashboard-card:hover { background: " << card_hover << "; }"
         << ".dashboard-icon-well { min-width: 48px; min-height: 48px; "
         << "border-radius: " << metrics->small_radius << "px; background: "
         << panel << "; border: 1px solid " << status_border << "; }"
@@ -533,10 +516,9 @@ void ThemeController::apply()
         << ".dashboard-repositories .dashboard-icon-well image { color: " << accent_fg << "; }"
         << ".discover-main-dashboard { margin-top: 1px; }"
         << ".featured-panel { min-width: 0; }"
-        << ".discover-panel { padding: 13px 14px; background-image: linear-gradient(135deg, "
-        << card << ", " << surface << "); border: 1px solid " << border
-        << "; border-radius: " << metrics->card_radius
-        << "px; box-shadow: 0 5px 16px rgba(0,0,0,0.13); }"
+        << ".discover-panel { padding: 13px 14px; background: " << card
+        << "; border: 1px solid " << border << "; border-radius: " << metrics->card_radius
+        << "px; box-shadow: none; }"
         << ".featured-panel { min-height: 286px; border-color: " << info << "; }"
         << ".panel-title { font-family: \"" << typography->ui_family
         << "\"; font-size: 16px; font-weight: " << typography->ui_bold_weight
@@ -849,6 +831,9 @@ void ThemeController::apply()
         provider_, css_text.c_str(),
         static_cast<gssize>(css_text.size()));
 #endif
+    applied_state_valid_ = true;
+    applied_mode_ = mode_;
+    applied_system_dark_ = system_dark;
 }
 
 void ThemeController::load_preferences()

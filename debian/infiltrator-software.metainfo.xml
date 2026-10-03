@@ -34,6 +34,11 @@
   <url type="homepage">https://github.com/Infiltrator-Projects/Software</url>
 
   <releases>
+    <release version="0.3.62" date="2026-10-03">
+      <description>
+        <p>Moves Discover indexing off the GTK thread, avoids redundant global theme restyling, converges shell geometry and card surfaces with current System Settings, and updates to Common 1.19.38.</p>
+      </description>
+    </release>
     <release version="0.3.61" date="2026-10-03">
       <description>
         <p>Removes final compatibility-planner UI residue, aligns the shell with the current InfiltratorOS standard and verifies the latest Common 1.19.36 integration.</p>

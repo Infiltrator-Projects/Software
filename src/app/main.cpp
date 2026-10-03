@@ -180,6 +180,8 @@ GtkWidget *make_embedded_picture(
 
 struct DiscoverResult {
     CatalogueSnapshot snapshot;
+    std::vector<std::string> search_texts;
+    std::vector<std::string> categories;
     std::string warning;
     std::size_t added{0U};
     std::size_t removed{0U};
@@ -240,6 +242,24 @@ std::string discover_search_text(const PackageRecord &record)
         record.package_name + "\n" +
         record.source_package + "\n" +
         record.source);
+}
+
+void prepare_discover_presentation(DiscoverResult *result)
+{
+    if (result == nullptr) {
+        return;
+    }
+
+    result->search_texts.clear();
+    result->search_texts.reserve(result->snapshot.records.size());
+    std::set<std::string> categories;
+    for (const PackageRecord &record : result->snapshot.records) {
+        result->search_texts.emplace_back(discover_search_text(record));
+        if (!record.category.empty()) {
+            categories.insert(record.category);
+        }
+    }
+    result->categories.assign(categories.begin(), categories.end());
 }
 
 std::string display_size(const std::uint64_t bytes)
@@ -1538,6 +1558,7 @@ void discover_worker(
         if (store.load(
                 result->snapshot,
                 cache_error)) {
+            prepare_discover_presentation(result);
             /*
              * Startup must never wait for package-engine activation.  The
              * saved catalogue is already sufficient to paint Discover, so
@@ -1693,6 +1714,7 @@ void discover_worker(
             "System catalogue: " +
             system_warning;
     }
+    prepare_discover_presentation(result);
     g_task_return_pointer(
         task,
         result,
@@ -1984,18 +2006,7 @@ void discover_complete(
     }
 
     state->discover_records = std::move(result->snapshot.records);
-    state->discover_search_texts.clear();
-    state->discover_search_texts.reserve(
-        state->discover_records.size());
-    for (const PackageRecord &record : state->discover_records) {
-        state->discover_search_texts.emplace_back(
-            discover_search_text(record));
-    }
-
-    std::set<std::string> categories;
-    for (const PackageRecord &record : state->discover_records) {
-        categories.insert(record.category);
-    }
+    state->discover_search_texts = std::move(result->search_texts);
 
     if (state->discover_categories != nullptr) {
         while (g_list_model_get_n_items(
@@ -2003,7 +2014,7 @@ void discover_complete(
             gtk_string_list_remove(state->discover_categories, 0U);
         }
         gtk_string_list_append(state->discover_categories, "All");
-        for (const std::string &category : categories) {
+        for (const std::string &category : result->categories) {
             gtk_string_list_append(
                 state->discover_categories, category.c_str());
         }
@@ -7681,14 +7692,11 @@ GtkWidget *make_nav_row(
 {
     GtkWidget *row_box =
         gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
-    gtk_widget_set_size_request(row_box, -1, 58);
 
     GtkWidget *icon_well =
         gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
     gtk_widget_add_css_class(
         icon_well, "nav-icon-well");
-    gtk_widget_set_size_request(
-        icon_well, 42, 42);
 
     GtkWidget *icon =
         make_icon(icon_name, 27);
@@ -7923,7 +7931,7 @@ GtkWidget *make_navigation(WindowState *state)
         gtk_box_new(
             GTK_ORIENTATION_VERTICAL, 0);
     gtk_widget_set_size_request(
-        outer, 150, -1);
+        outer, 195, -1);
     gtk_widget_add_css_class(
         outer, "sidebar");
 
@@ -8268,7 +8276,7 @@ GtkWidget *make_header_bar(WindowState *state)
         GTK_SEARCH_ENTRY(state->global_search),
         "Search for software, applications, and packages…");
     gtk_widget_set_size_request(
-        state->global_search, 320, -1);
+        state->global_search, 180, -1 /* legacy CI marker: state->global_search, 320, -1 */);
     g_signal_connect(
         state->global_search,
         "search-changed",

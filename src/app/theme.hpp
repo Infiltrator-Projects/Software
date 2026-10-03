@@ -20,9 +20,6 @@ public:
 
     void initialise();
     [[nodiscard]] GtkWidget *create_selector();
-    [[nodiscard]] InfiltratrThemeMode mode() const noexcept;
-    [[nodiscard]] const char *mode_name() const noexcept;
-    void cycle_mode();
 
 private:
     static void on_system_theme_changed(
@@ -38,6 +35,9 @@ private:
     [[nodiscard]] std::string preferences_path() const;
 
     InfiltratrThemeMode mode_{INFILTRATR_THEME_SYSTEM};
+    bool applied_state_valid_{false};
+    InfiltratrThemeMode applied_mode_{INFILTRATR_THEME_SYSTEM};
+    bool applied_system_dark_{false};
     GtkCssProvider *provider_{nullptr};
     GtkSettings *settings_{nullptr};
     gulong theme_name_handler_{0};

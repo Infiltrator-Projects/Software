@@ -6,9 +6,9 @@
 
 Infiltrator Software is the software-management application for the Infiltrator project family. It presents software discovery, installation, removal, updates, system components, repositories, release channels, history and repair as one coherent graphical product.
 
-**Current source version:** 0.3.61<br>
+**Current source version:** 0.3.62<br>
 **Language:** C++17 application/core with native GTK4 Linux shell; C11 Common foundation  
-**Shared foundation:** Common 1.19.36  
+**Shared foundation:** Common 1.19.38<br>
 **Current package compatibility:** Debian repositories and .deb packages; Flatpak and AppStream catalogue integration  
 **0.4 direction:** native Infiltrator Debian-compatibility engine for inventory, refresh and resolution; constrained compatibility execution for final .deb mutation  
 **Licence:** GPL-3.0-or-later
@@ -126,7 +126,7 @@ See [Transactions](docs/TRANSACTIONS.md).
 
 ## Appearance
 
-Software uses the Common 1.19.36 appearance contract. Follow OS, Day and Night modes share project-family typography, semantic colours and structural metrics.
+Software uses the Common 1.19.38 appearance contract. Follow OS, Day and Night modes share project-family typography, semantic colours and structural metrics.
 
 Discover is visual and spacious. Installed and Updates are denser working views. System separates critical components clearly. Repositories behaves like a source/settings surface. History is chronological. Repair presents health first and problems only when they exist.
 
@@ -144,7 +144,7 @@ See [UI Design](docs/UI_DESIGN.md) and the [Software UI Vision](docs/UI_VISION.m
     ├── sources/             repository/source modelling
     ├── helper/              constrained privileged compatibility helpers
     ├── tray/                XApp desktop-panel indicator
-    └── infiltratr-common/   exact Common 1.19.36 gitlink
+    └── infiltratr-common/   exact Common 1.19.38 gitlink
 
     tests/                   regression and contract tests
     docs/                    architecture and product contracts
