@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   patch:
-    if: github.event.head_commit.message == 'Fix Software 0.3.65 source contract'
+    if: github.event.head_commit.message == 'Repair Software 0.3.65 source contract workflow'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -26,21 +26,15 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
-
           path = Path('tests/source_contracts.py')
           text = path.read_text()
-          old = '''assert '<< ".nav-row:selected { background: " << select_bg' in theme
-'''
-          new = '''assert '<< ".nav-list row.nav-row:selected { background-color: " << select_bg' in theme
-assert '<< ".nav-list row.nav-row:selected .nav-label, "' in theme
-assert '<< ".nav-list row.nav-row:selected image { color: " << select_fg' in theme
-'''
+          old = "assert '<< \".nav-row:selected { background: \" << select_bg' in theme\n"
+          new = "assert '<< \".nav-list row.nav-row:selected { background-color: \" << select_bg' in theme\nassert '<< \".nav-list row.nav-row:selected .nav-label, \"' in theme\nassert '<< \".nav-list row.nav-row:selected image { color: \" << select_fg' in theme\n"
           if old not in text:
               raise SystemExit('old sidebar source-contract assertion not found')
           path.write_text(text.replace(old, new, 1))
           Path('.github/workflows/fix-source-contract-0365.yml').unlink()
           PY
-
           git diff --check
           python3 tests/source_contracts.py
           git config user.name 'Shannon Smith'
