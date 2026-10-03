@@ -1,0 +1,43 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: Prepare Software 0.3.64 release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/release-prep-0.3.64.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    if: github.event.head_commit.message == 'Stage Software 0.3.64 release'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out exact main commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+          submodules: false
+      - name: Create immutable release commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+          test "$(tr -d '[:space:]' < VERSION)" = "0.3.63"
+          test "$(git ls-tree HEAD src/infiltratr-common | awk '{print $3}')" = "7070c5812b50821fd7580101cb2289a3184f6b2c"
+          python3 .github/scripts/release_0364.py
+          rm .github/scripts/release_0364.py
+          rm .github/workflows/release-prep-0.3.64.yml
+          test "$(tr -d '[:space:]' < VERSION)" = "0.3.64"
+          test "$(dpkg-parsechangelog -S Version)" = "0.3.64"
+          appstreamcli validate debian/infiltrator-software.metainfo.xml
+          python3 tests/source_contracts.py
+          git diff --check
+          git config user.name 'Shannon Smith'
+          git config user.email 'infiltratr@yandex.com'
+          git add VERSION README.md debian/changelog debian/infiltrator-software.metainfo.xml .github/scripts/release_0364.py .github/workflows/release-prep-0.3.64.yml
+          git commit -m 'Release 0.3.64: remove residual polling and align Common shell'
+          git push origin HEAD:main
