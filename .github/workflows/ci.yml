@@ -483,7 +483,15 @@ jobs:
           assert "search-shortcut" not in app
           assert "titlebar-button" not in app
           assert "titlebar-window-separator" not in app
-          assert "linear-gradient(to right, #06131f, #08263a)" in theme
+          assert "linear-gradient(to right, #06131f, #08263a)" not in theme
+          assert "linear-gradient(105deg, #2f67ff, #5137d8)" not in theme
+          assert '<< ".nav-row:selected { background: " << select_bg' in theme
+          assert '<< ".sidebar { background: " << panel' in theme
+          assert "infiltratr_ascii_contains_ci" in theme
+          assert '"shell-header"' in app
+          assert '"app-shell"' in app
+          assert "transitional APT compatibility planner" not in app
+          assert "theme_button" not in app
           assert "min-height: 58px" in theme
           assert "button.window-control { min-width: 30px; min-height: 30px" in theme
 
@@ -498,7 +506,7 @@ jobs:
           assert "titlebar-mark-bar" not in app
           assert ".titlebar-mark-bar" not in theme
 
-          # Sidebar convergence: target-like semantic icons, vivid selection,
+          # Sidebar convergence: semantic icons and Common-driven selection,
           # real update badge and an actual Preferences entry.
           assert '"go-home-symbolic"' in app
           assert '"view-grid-symbolic"' in app
