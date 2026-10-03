@@ -10,7 +10,7 @@ Infiltrator Software is the software-management application for the Infiltrator 
 **Language:** C++17 application/core with native GTK4 Linux shell; C11 Common foundation  
 **Shared foundation:** Common 1.19.36  
 **Current package compatibility:** Debian repositories and .deb packages; Flatpak and AppStream catalogue integration  
-**0.4 direction:** native Infiltrator Debian-compatibility engine with no apt, apt-get or apt-cache process dependency  
+**0.4 direction:** native Infiltrator Debian-compatibility engine for inventory, refresh and resolution; constrained compatibility execution for final .deb mutation  
 **Licence:** GPL-3.0-or-later
 
 ## Product principles
@@ -28,9 +28,9 @@ The application must answer:
 - Can an interrupted or failed operation be diagnosed and recovered?
 - What application identity, icon and metadata are authoritative?
 
-The UI is package-system-neutral. Debian repositories, .deb packages, AppStream and Flatpak remain supported formats and ecosystems. APT command-line programs are an implementation detail of the 0.3 line, not part of the product contract. Read-only package metadata refresh is unprivileged: checking for updates must never ask for administrator credentials. Authorization is reserved for actual system mutation.
+The UI is package-system-neutral. Debian repositories, .deb packages, AppStream and Flatpak remain supported formats and ecosystems. Normal GUI inventory, repository refresh and transaction planning no longer depend on apt, apt-get or apt-cache processes. Read-only package metadata refresh is unprivileged: checking for updates must never ask for administrator credentials. Authorization is reserved for actual system mutation.
 
-The 0.4 architecture replaces those APT command invocations with a native Infiltrator package engine. The engine reads Debian repository metadata directly, applies host compatibility policy including APT preferences and phased-update eligibility when selecting candidates, maintains its own derived package-state database, resolves updates and transactions itself, and uses a constrained privileged executor for final package writes. dpkg remains the temporary .deb payload installer until a later native installer exists.
+The native Infiltrator package engine reads Debian repository metadata directly, applies host compatibility policy including APT preferences and phased-update eligibility when selecting candidates, maintains its own derived package-state database, resolves updates and transactions itself, and uses a constrained privileged executor for final package writes. The privileged compatibility executor still uses the host's low-level Debian package-management boundary for mutation while that final execution layer is being replaced; dpkg remains the .deb payload installer.
 
 ## Linux Mint Update Manager replacement status
 
@@ -80,7 +80,7 @@ See [Performance](docs/PERFORMANCE.md) and [State](docs/STATE.md).
 
 ## Package architecture
 
-The target 0.4 dependency direction is:
+The current dependency direction is:
 
     GTK4 UI ───────────────┐
     XApp panel indicator ──┼──> Infiltrator package engine
@@ -95,9 +95,9 @@ The target 0.4 dependency direction is:
                                                     │
                                                     └── constrained privileged executor
                                                                 │
-                                                                └── dpkg (.deb payloads)
+                                                                └── dpkg/.deb compatibility boundary
 
-The application does not call apt, apt-get or apt-cache in the target architecture. It also does not depend on APT's private binary cache files.
+The GUI and shared engine do not invoke apt, apt-get or apt-cache for normal inventory, refresh or transaction planning. They also do not depend on APT's private binary cache files. The constrained privileged executor remains the compatibility boundary for final Debian package mutation until the native payload installer replaces it.
 
 This is not a package-format rewrite. Debian repositories and .deb packages remain supported.
 
@@ -135,14 +135,15 @@ See [UI Design](docs/UI_DESIGN.md) and the [Software UI Vision](docs/UI_VISION.m
 ## Architecture
 
     src/
-    ├── app/                 GTK4 application shell
+    ├── app/                 GTK4 application shell and page controllers
+    ├── client/              shared package-engine D-Bus client
     ├── core/                package/application and transaction model
+    ├── engine/              native Debian state, repository and resolver engine
     ├── catalogue/           Infiltrator + AppStream catalogue sources
+    ├── external/            Flatpak and Cinnamon/Nemo update providers
     ├── sources/             repository/source modelling
-    ├── helper/              constrained privileged helpers
+    ├── helper/              constrained privileged compatibility helpers
     ├── tray/                XApp desktop-panel indicator
-    ├── backend/             backend-neutral compatibility contracts
-    ├── backends/apt/        0.3 legacy APT implementation to be retired in 0.4
     └── infiltratr-common/   exact Common 1.19.36 gitlink
 
     tests/                   regression and contract tests
@@ -152,19 +153,15 @@ See [UI Design](docs/UI_DESIGN.md) and the [Software UI Vision](docs/UI_VISION.m
 
 0.3/0.3.1 made Updates operational using an APT-backed implementation and added the Mint-style panel status process.
 
-0.4 replaces the APT process dependency with the native Debian-compatibility engine, introduces shared package state, removes duplicate update scans, makes page loading lazy, and establishes measurable startup/performance requirements. Existing Debian repositories, .deb packages, AppStream and Flatpak support remain.
+The native-engine migration has now crossed the GUI boundary: Installed, Updates, Discover planning, repository refresh, kernel inventory and the panel indicator use native shared state and native transaction planning. The old GUI `AptBackend` implementation and its backend abstraction have been removed rather than retained as an iterative fallback.
 
-The first client cutover is now implemented: Installed, ordinary Updates inventory and native update planning use the shared D-Bus engine when a published generation is available, while the panel indicator subscribes to engine state/health changes instead of owning a second resolver. The direct Debian installed-state reader remains a no-process fallback when shared state is unavailable; configured-source reconciliation and publication are now owned by the native engine.
+Installed keeps one deliberately small no-process recovery path that reads `/var/lib/dpkg/status` directly if the shared engine is unavailable. It is separated from the package engine so fallback inventory cannot accidentally pull the full resolver/repository stack into the GUI.
 
-Discover install, update and removal workflows are now operational. Install/update resolves a complete native transaction when shared state is available, with the transitional APT planner retained only as a compatibility fallback for those non-removal operations. Removal is native-only: installed dependency/provides/Essential metadata is preserved in the shared generation, reverse dependencies are checked before authorization, and Essential-package removal fails closed. Every operation shows the complete resolved change set before authorization and executes only the exact approved mutations through the constrained privileged helper.
+Discover install, update and removal workflows are native-planner only. Every operation shows the complete resolved change set before authorization and executes only the exact approved mutations through the constrained privileged helper. Updates uses the same native preflight planner for per-package, arbitrary subset and all-updates operations.
 
-Updates now supports per-package and arbitrary subset selection as well as all-updates operation. The same native preflight planner resolves the selected roots and all required dependency changes before authorization.
+Read-only refresh and planning no longer spawn APT programs. The remaining compatibility layer is the privileged execution boundary: immediately before mutation it refreshes and re-simulates the reviewed exact operation set against current host package state. Installs/upgrades must retain their approved package identities, architectures and exact versions; approved removals must retain their exact installed versions. Any added, missing or changed mutation aborts before package mutation.
 
-The privileged compatibility boundary re-simulates the approved exact operation set after its root-owned metadata refresh. Installs/upgrades must retain their approved package identities, architectures and exact versions; approved removals must retain their exact installed versions. Any added, missing or changed mutation aborts before package mutation.
-
-Native reconciliation now turns configured repository sources plus installed dpkg state into coherent shared generations through the engine refresh path. The remaining compatibility layer is an execution boundary rather than an inventory/resolution architecture.
-
-The 0.4 design is documented before implementation so code cannot accidentally preserve the startup and coupling problems exposed by 0.3.
+The Updates page also avoids the old double external scan: initial hydration discovers Flatpak/Cinnamon state once, while the immediately following repository-metadata refresh reuses that external snapshot instead of repeating Flatpak processes and Cinnamon HTTPS catalogue requests.
 
 ## Repository policy
 
