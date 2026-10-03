@@ -10,6 +10,11 @@ infiltrator-software (0.3.65) unstable; urgency=high
   * Force sidebar selection through Common's selection background/foreground
     pair with application-level row specificity, preventing desktop GTK themes
     from painting selected navigation rows black in day mode.
+  * Standardise the visible InfiltratorOS shell with System Settings without
+    flattening Software's graphical identity: 58 px header geometry, 205 px
+    navigation rail, 16 px content gutters, 18 px hero radius and matching
+    hero subtitle scale now share one suite rhythm while artwork, gradients,
+    semantic colour and product-specific dashboard components remain intact.
   * Re-verify the suite-current Common 1.19.38 pin at
     7070c5812b50821fd7580101cb2289a3184f6b2c against System Settings 0.4.54.
 

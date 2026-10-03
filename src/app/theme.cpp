@@ -301,7 +301,7 @@ void ThemeController::apply()
         << "headerbar.infiltrator-titlebar { min-height: 58px; "
         << "background: " << panel << "; "
         << "color: " << text << "; border-bottom: 1px solid " << border
-        << "; padding: 6px 10px; }"
+        << "; padding: 0 10px; }"
         << ".titlebar-brand { padding: 2px 4px; }"
         << ".titlebar-brand-icon { background: " << card
         << "; border: 1px solid " << border
@@ -333,7 +333,7 @@ void ThemeController::apply()
 
         << ".sidebar { background: " << panel
         << "; border-right: 1px solid " << border
-        << "; padding: 12px 9px; min-width: 195px; }"
+        << "; padding: 12px 9px; min-width: 205px; }"
         << ".nav-list { background: transparent; }"
         << ".nav-row { min-height: 50px; margin: 2px 4px; padding: 7px 9px; "
         << "border: 1px solid transparent; border-radius: "
@@ -385,7 +385,7 @@ void ThemeController::apply()
         << ".appearance-title { font-size: 12px; font-weight: "
         << typography->ui_bold_weight << "; color: " << text << "; }"
 
-        << ".content { padding: 12px 16px 16px 16px; background: "
+        << ".content { padding: 16px; background: "
         << background << "; }"
         << ".page-scroller { background: " << background << "; }"
         << ".page-scroller scrollbar { min-width: 10px; }"
@@ -455,8 +455,8 @@ void ThemeController::apply()
         << select_fg << "; }"
 
         << ".discover-welcome { min-height: 166px; background: #07102d; "
-        << "border: 1px solid #4f63c9; border-radius: "
-        << metrics->card_radius << "px; box-shadow: 0 12px 30px rgba(0,0,0,0.20); }"
+        << "border: 1px solid #4f63c9; border-radius: 18px; "
+        << "box-shadow: 0 12px 30px rgba(0,0,0,0.20); }"
         << ".welcome-artwork { background: #07102d; opacity: 1; }"
         << ".welcome-artwork-veil { "
         << "background-image: linear-gradient(90deg, "
@@ -468,7 +468,7 @@ void ThemeController::apply()
         << ".welcome-title { font-family: \"" << typography->ui_family
         << "\"; font-size: 34px; font-weight: " << typography->ui_bold_weight
         << "; color: #ffffff; }"
-        << ".welcome-subtitle { color: #d8e1f5; font-size: 13px; font-weight: "
+        << ".welcome-subtitle { color: #d8e1f5; font-size: 15px; font-weight: "
         << typography->ui_regular_weight << "; }"
         << ".welcome-artwork-error { min-height: 166px; background: #07102d; }"
         << ".discover-dashboard { margin-top: 1px; margin-bottom: 1px; }"
