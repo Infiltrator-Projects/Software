@@ -646,7 +646,13 @@ void ThemeController::apply()
         << "button.source-state-toggle.state-available:hover label { color: "
         << info << "; opacity: 1; }"
         << ".discover-details { min-height: 32px; }"
-        << ".updates-action-bar { border-color: " << warning_border
+        << ".page-updates .hero-panel { padding: 10px 14px; }"
+        << ".page-updates .page-icon { min-width: 44px; min-height: 44px; }"
+        << ".page-updates .stat-card { padding: 8px 10px; }"
+        << ".page-updates .stat-icon-well { min-width: 34px; min-height: 34px; }"
+        << ".page-updates .stat-value { font-size: 16px; }"
+        << ".updates-selection-tools button { min-height: 28px; padding: 4px 8px; }"
+        << ".updates-action-bar { padding: 8px 10px; border-color: " << warning_border
         << "; background-image: linear-gradient(90deg, " << card << ", "
         << surface << "); }"
         << ".update-transaction-panel { background-image: linear-gradient(135deg, "
@@ -687,11 +693,9 @@ void ThemeController::apply()
         << ".updates-status-icon { color: " << warning << "; }"
         << ".updates-section-icon { color: " << warning << "; }"
         << ".update-group-row { background: transparent; }"
-        << ".update-group-header { margin: 9px 6px 5px 6px; padding: 10px 12px; "
-        << "background-image: linear-gradient(90deg, " << panel << ", "
-        << surface << "); border: 1px solid " << border << "; border-radius: "
-        << metrics->small_radius << "px; }"
-        << ".update-group-icon-well { min-width: 38px; min-height: 38px; "
+        << ".update-group-header { margin: 6px 6px 2px 6px; padding: 6px 8px; "
+        << "background: transparent; border: 0; border-radius: 0; }"
+        << ".update-group-icon-well { min-width: 32px; min-height: 32px; "
         << "background: " << card << "; border: 1px solid " << warning_border
         << "; border-radius: " << metrics->small_radius << "px; }"
         << ".update-group-icon-well image { color: " << warning << "; }"
@@ -703,22 +707,21 @@ void ThemeController::apply()
         << "border-radius: 999px; background: " << warning
         << "; color: " << accent_fg << "; font-weight: "
         << typography->ui_bold_weight << "; }"
-        << ".update-item { margin: 4px 5px; padding: 11px 12px; background: "
-        << card << "; border: 1px solid " << border << "; border-radius: "
-        << metrics->small_radius << "px; }"
-        << ".update-item:hover { background: " << card_hover
-        << "; border-color: " << warning_border << "; }"
+        << ".update-item { margin: 0 4px; padding: 7px 8px; background: "
+        << card << "; border: 0; border-bottom: 1px solid " << border
+        << "; border-radius: 0; }"
+        << ".update-item:hover { background: " << card_hover << "; }"
         << ".update-icon-well { background: " << surface
         << "; border: 1px solid " << status_border << "; border-radius: "
         << metrics->small_radius << "px; }"
         << ".update-name { font-family: \"" << typography->ui_family
-        << "\"; font-size: 14px; font-weight: " << typography->ui_bold_weight
+        << "\"; font-size: 13px; font-weight: " << typography->ui_bold_weight
         << "; color: " << heading << "; }"
         << ".update-security-chip { padding: 3px 7px; border-radius: 7px; "
         << "background: " << warning_muted << "; border: 1px solid " << warning_border
         << "; color: " << warning << "; font-size: 10px; font-weight: "
         << typography->ui_bold_weight << "; }"
-        << ".update-details-button { min-height: 30px; padding: 4px 10px; "
+        << ".update-details-button { min-height: 28px; padding: 3px 9px; "
         << "background: " << surface << "; border: 1px solid " << border
         << "; border-radius: 8px; color: " << text << "; }"
         << ".update-details-button:hover { background: " << card_hover << "; }"
@@ -726,6 +729,8 @@ void ThemeController::apply()
         << metrics->card_radius << "px; background: " << warning_muted
         << "; border: 1px solid " << warning_border << "; color: " << warning << "; }"
         << ".reboot-required-copy { color: " << text << "; }"
+        << ".update-recommendation-chip { padding: 2px 7px; font-size: 9px; }"
+        << ".update-meta-separator { color: " << detail_label << "; font-size: 10px; }"
         << ".update-kind-chip { padding: 2px 7px; border-radius: 999px; "
         << "border: 1px solid " << status_border << "; color: " << kicker
         << "; font-size: 9px; font-weight: " << typography->ui_bold_weight << "; }"

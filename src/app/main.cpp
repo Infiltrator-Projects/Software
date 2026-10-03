@@ -5003,13 +5003,13 @@ GtkWidget *make_update_row(
     WindowState *state,
     const PackageRecord &package)
 {
-    GtkWidget *row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
+    GtkWidget *row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
     gtk_widget_add_css_class(row, "package-row");
     gtk_widget_add_css_class(row, "update-item");
-    gtk_widget_set_margin_top(row, 5);
-    gtk_widget_set_margin_bottom(row, 5);
-    gtk_widget_set_margin_start(row, 6);
-    gtk_widget_set_margin_end(row, 6);
+    gtk_widget_set_margin_top(row, 2);
+    gtk_widget_set_margin_bottom(row, 2);
+    gtk_widget_set_margin_start(row, 4);
+    gtk_widget_set_margin_end(row, 4);
 
     const std::string identity_key = update_identity(package);
     GtkWidget *selected = gtk_check_button_new();
@@ -5036,9 +5036,9 @@ GtkWidget *make_update_row(
         gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
     gtk_widget_add_css_class(
         icon_well, "update-icon-well");
-    gtk_widget_set_size_request(icon_well, 46, 46);
+    gtk_widget_set_size_request(icon_well, 40, 40);
     GtkWidget *icon =
-        make_icon(update_icon_name(package), 24);
+        make_icon(update_icon_name(package), 22);
     gtk_widget_add_css_class(icon, "package-icon");
     gtk_widget_set_halign(icon, GTK_ALIGN_CENTER);
     gtk_widget_set_valign(icon, GTK_ALIGN_CENTER);
@@ -5046,11 +5046,11 @@ GtkWidget *make_update_row(
     gtk_box_append(GTK_BOX(row), icon_well);
 
     GtkWidget *identity =
-        gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
+        gtk_box_new(GTK_ORIENTATION_VERTICAL, 3);
     gtk_widget_set_hexpand(identity, true);
 
     GtkWidget *title_line =
-        gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+        gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 7);
     GtkWidget *name =
         make_label(package.name.c_str(), "update-name");
     gtk_label_set_ellipsize(
@@ -5066,6 +5066,22 @@ GtkWidget *make_update_row(
             kind_text.c_str(),
             "update-kind-chip");
     gtk_box_append(GTK_BOX(title_line), kind);
+
+    GtkWidget *recommended =
+        make_label(
+            package.system_critical
+                ? "System-critical"
+                : "Recommended",
+            package.system_critical
+                ? "state-warning"
+                : "state-available");
+    gtk_widget_add_css_class(
+        recommended, "update-recommendation-chip");
+    gtk_widget_set_valign(
+        recommended, GTK_ALIGN_CENTER);
+    gtk_box_append(
+        GTK_BOX(title_line), recommended);
+
     if (package.security_update) {
         GtkWidget *security =
             make_label(
@@ -5077,7 +5093,18 @@ GtkWidget *make_update_row(
     }
     gtk_box_append(GTK_BOX(identity), title_line);
 
-    GtkWidget *version_line =
+    std::string source_name = package.repository_origin;
+    if (source_name.empty()) {
+        source_name = package.repository_site;
+    }
+    if (source_name.empty()) {
+        source_name = package.source;
+    }
+    if (source_name.empty()) {
+        source_name = "Repository";
+    }
+
+    GtkWidget *meta_line =
         gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 7);
     GtkWidget *from =
         make_label(
@@ -5091,26 +5118,15 @@ GtkWidget *make_update_row(
         make_label(
             package.available_version.c_str(),
             "version-chip-new");
-    gtk_box_append(GTK_BOX(version_line), from);
-    gtk_box_append(GTK_BOX(version_line), arrow);
-    gtk_box_append(GTK_BOX(version_line), to);
-    gtk_box_append(GTK_BOX(identity), version_line);
+    gtk_box_append(GTK_BOX(meta_line), from);
+    gtk_box_append(GTK_BOX(meta_line), arrow);
+    gtk_box_append(GTK_BOX(meta_line), to);
+    gtk_box_append(
+        GTK_BOX(meta_line),
+        make_label("•", "update-meta-separator", 0.5F));
 
-    std::string source_name = package.repository_origin;
-    if (source_name.empty()) {
-        source_name = package.repository_site;
-    }
-    if (source_name.empty()) {
-        source_name = package.source;
-    }
-    if (source_name.empty()) {
-        source_name = "Repository";
-    }
-
-    GtkWidget *source_line =
-        gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 7);
     GtkWidget *source_icon =
-        make_icon("network-workgroup-symbolic", 14);
+        make_icon("network-workgroup-symbolic", 13);
     gtk_widget_add_css_class(
         source_icon, "update-source-icon");
     GtkWidget *source =
@@ -5118,8 +5134,9 @@ GtkWidget *make_update_row(
             source_name.c_str(), "update-source");
     gtk_label_set_ellipsize(
         GTK_LABEL(source), PANGO_ELLIPSIZE_END);
-    gtk_box_append(GTK_BOX(source_line), source_icon);
-    gtk_box_append(GTK_BOX(source_line), source);
+    gtk_widget_set_hexpand(source, true);
+    gtk_box_append(GTK_BOX(meta_line), source_icon);
+    gtk_box_append(GTK_BOX(meta_line), source);
 
     std::string policy_name = "Repository default";
     if (package.policy_provider == "host-apt-preferences") {
@@ -5146,27 +5163,17 @@ GtkWidget *make_update_row(
         explanation += " " + package.selection_reason;
     }
     gtk_widget_set_tooltip_text(
-        source_line, explanation.c_str());
+        meta_line, explanation.c_str());
 
-    gtk_box_append(GTK_BOX(identity), source_line);
+    gtk_box_append(GTK_BOX(identity), meta_line);
     gtk_box_append(GTK_BOX(row), identity);
-
-    GtkWidget *recommended =
-        make_label(
-            package.system_critical
-                ? "System-critical"
-                : "Recommended",
-            package.system_critical
-                ? "state-warning"
-                : "state-available");
-    gtk_widget_set_valign(
-        recommended, GTK_ALIGN_CENTER);
-    gtk_box_append(GTK_BOX(row), recommended);
 
     GtkWidget *details =
         gtk_button_new_with_label("Details");
     gtk_widget_add_css_class(
         details, "update-details-button");
+    gtk_widget_set_valign(
+        details, GTK_ALIGN_CENTER);
     auto *package_copy =
         new PackageRecord(package);
     g_object_set_data_full(
@@ -7229,7 +7236,7 @@ void restart_system_clicked(
 
 GtkWidget *make_updates_page(WindowState *state)
 {
-    GtkWidget *page = gtk_box_new(GTK_ORIENTATION_VERTICAL, 16);
+    GtkWidget *page = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
     gtk_widget_add_css_class(page, "content");
     gtk_widget_add_css_class(page, "page-updates");
 
@@ -7289,10 +7296,9 @@ GtkWidget *make_updates_page(WindowState *state)
     g_signal_connect(
         select_all, "clicked",
         G_CALLBACK(updates_select_all_clicked), state);
-    gtk_box_append(GTK_BOX(controls), select_all);
 
     state->updates_security =
-        gtk_button_new_with_label("Security only");
+        gtk_button_new_with_label("Security");
     gtk_widget_add_css_class(
         state->updates_security,
         "discover-details");
@@ -7304,12 +7310,9 @@ GtkWidget *make_updates_page(WindowState *state)
         "clicked",
         G_CALLBACK(select_security_updates),
         state);
-    gtk_box_append(
-        GTK_BOX(controls),
-        state->updates_security);
 
     GtkWidget *kernel_only =
-        gtk_button_new_with_label("Kernel only");
+        gtk_button_new_with_label("Kernel");
     gtk_widget_add_css_class(
         kernel_only,
         "discover-details");
@@ -7321,17 +7324,13 @@ GtkWidget *make_updates_page(WindowState *state)
         "clicked",
         G_CALLBACK(select_kernel_updates),
         state);
-    gtk_box_append(
-        GTK_BOX(controls),
-        kernel_only);
 
     GtkWidget *clear_selection =
-        gtk_button_new_with_label("Clear selection");
+        gtk_button_new_with_label("Clear");
     gtk_widget_add_css_class(clear_selection, "discover-details");
     g_signal_connect(
         clear_selection, "clicked",
         G_CALLBACK(updates_clear_selection_clicked), state);
-    gtk_box_append(GTK_BOX(controls), clear_selection);
 
     state->updates_refresh =
         gtk_button_new_with_label("Check again");
@@ -7547,6 +7546,24 @@ GtkWidget *make_updates_page(WindowState *state)
     gtk_box_append(GTK_BOX(heading_copy), heading_note);
     gtk_box_append(GTK_BOX(heading_row), heading_icon);
     gtk_box_append(GTK_BOX(heading_row), heading_copy);
+
+
+    GtkWidget *selection_tools =
+        gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+    gtk_widget_add_css_class(
+        selection_tools, "updates-selection-tools");
+    gtk_widget_set_valign(
+        selection_tools, GTK_ALIGN_CENTER);
+    gtk_box_append(
+        GTK_BOX(selection_tools), select_all);
+    gtk_box_append(
+        GTK_BOX(selection_tools), state->updates_security);
+    gtk_box_append(
+        GTK_BOX(selection_tools), kernel_only);
+    gtk_box_append(
+        GTK_BOX(selection_tools), clear_selection);
+    gtk_box_append(
+        GTK_BOX(heading_row), selection_tools);
     gtk_box_append(GTK_BOX(card), heading_row);
 
     GtkWidget *list = gtk_list_box_new();
