@@ -1,0 +1,56 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: Fix transaction dialog declaration
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/fix-dialog-declaration.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: github.event.head_commit.message == 'Prepare transaction dialog declaration correction'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Correct declaration
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('src/app/system_view.cpp')
+          text = p.read_text()
+          old = '''GtkWidget *make_transaction_confirmation_dialog(
+              GtkWindow *parent,
+              const char *title,
+              const std::string &heading,
+              const char *accept_label);
+          '''
+          new = '''GtkWidget *make_transaction_confirmation_dialog(
+              GtkWindow *parent,
+              const char *title,
+              const std::string &heading,
+              const char *accept_label,
+              const TransactionPlan &plan);
+          '''
+          if text.count(old) != 1:
+              raise SystemExit('transaction dialog forward declaration drifted')
+          text = text.replace(old, new, 1)
+          p.write_text(text)
+          assert text.count('const TransactionPlan &plan);') == 1
+          PY
+          rm .github/workflows/fix-dialog-declaration.yml
+          git diff --check
+          git config user.name 'Shannon Smith'
+          git config user.email 'infiltratr@yandex.com'
+          git add src/app/system_view.cpp .github/workflows/fix-dialog-declaration.yml
+          git commit -m 'Fix transaction dialog declaration after cleanup'
+          git push origin HEAD:main
