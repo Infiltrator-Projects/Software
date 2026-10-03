@@ -34,6 +34,11 @@
   <url type="homepage">https://github.com/Infiltrator-Projects/Software</url>
 
   <releases>
+    <release version="0.3.64" date="2026-10-03">
+      <description>
+        <p>Removes the remaining two-second tray poll, switches runtime changes to event-driven monitors, and aligns shell geometry with current InfiltratorOS/Common metrics.</p>
+      </description>
+    </release>
     <release version="0.3.63" date="2026-10-03">
       <description>
         <p>Eliminates redundant tray polling I/O and final decorative shell residue while aligning Software with System Settings 0.4.52 and Common 1.19.38.</p>

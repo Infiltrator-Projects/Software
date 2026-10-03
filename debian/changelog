@@ -1,3 +1,18 @@
+infiltrator-software (0.3.64) unstable; urgency=high
+
+  * Replace the resident tray's two-second filesystem/process polling with
+    event-driven GFileMonitor watches for preferences, runtime state and
+    installed executable replacement.
+  * Align Software shell radii and title semantics with current
+    InfiltratorOS/System Settings by consuming Common design metrics for
+    search, window controls, navigation wells and card surfaces.
+  * Strengthen source-contract guards against reintroducing rapid tray
+    polling or hard-coded shell geometry.
+  * Re-verify the exact suite-current Common 1.19.38 pin at
+    7070c5812b50821fd7580101cb2289a3184f6b2c.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Sat, 03 Oct 2026 14:42:00 +1000
+
 infiltrator-software (0.3.63) unstable; urgency=high
 
   * Stop the resident tray from re-reading preferences/runtime state and
