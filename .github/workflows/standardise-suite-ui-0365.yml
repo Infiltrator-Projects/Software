@@ -1,0 +1,68 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: Standardise Software suite shell 0.3.65
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/standardise-suite-ui-0365.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.event.head_commit.message == 'Stage Software suite shell alignment'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+          submodules: false
+      - name: Align suite shell without flattening product identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/app/theme.cpp')
+          text = path.read_text()
+
+          replacements = [
+              ('background: " << panel << "; "\n        << "color: " << text << "; border-bottom: 1px solid " << border\n        << "; padding: 6px 10px; }"',
+               'background: " << panel << "; "\n        << "color: " << text << "; border-bottom: 1px solid " << border\n        << "; padding: 0 10px; }"'),
+              ('<< "; padding: 12px 9px; min-width: 195px; }"',
+               '<< "; padding: 12px 9px; min-width: 205px; }"'),
+              ('<< ".content { padding: 12px 16px 16px 16px; background: "',
+               '<< ".content { padding: 16px; background: "'),
+              ('<< ".discover-welcome { min-height: 166px; background: #07102d; "\n        << "border: 1px solid #4f63c9; border-radius: "\n        << metrics->card_radius << "px; box-shadow: 0 12px 30px rgba(0,0,0,0.20); }"',
+               '<< ".discover-welcome { min-height: 166px; background: #07102d; "\n        << "border: 1px solid #4f63c9; border-radius: 18px; "\n        << "box-shadow: 0 12px 30px rgba(0,0,0,0.20); }"'),
+              ('<< ".welcome-subtitle { color: #d8e1f5; font-size: 13px; font-weight: "',
+               '<< ".welcome-subtitle { color: #d8e1f5; font-size: 15px; font-weight: "'),
+          ]
+          for old, new in replacements:
+              if old not in text:
+                  raise SystemExit(f'missing Software theme anchor: {old[:72]!r}')
+              text = text.replace(old, new, 1)
+          path.write_text(text)
+
+          changelog = Path('debian/changelog')
+          c = changelog.read_text()
+          anchor = '''  * Force sidebar selection through Common's selection background/foreground\n    pair with application-level row specificity, preventing desktop GTK themes\n    from painting selected navigation rows black in day mode.\n'''
+          insert = anchor + '''  * Standardise the visible InfiltratorOS shell with System Settings without\n    flattening Software's graphical identity: 58 px header geometry, 205 px\n    navigation rail, 16 px content gutters, 18 px hero radius and matching\n    hero subtitle scale now share one suite rhythm while artwork, gradients,\n    semantic colour and product-specific dashboard components remain intact.\n'''
+          if anchor not in c:
+              raise SystemExit('Software changelog anchor missing')
+          c = c.replace(anchor, insert, 1)
+          changelog.write_text(c)
+
+          Path('.github/workflows/standardise-suite-ui-0365.yml').unlink()
+          PY
+
+          git diff --check
+          git config user.name 'Shannon Smith'
+          git config user.email 'infiltratr@yandex.com'
+          git add -A
+          git commit -m 'Release 0.3.65: align suite shell geometry'
+          git push origin HEAD:main
