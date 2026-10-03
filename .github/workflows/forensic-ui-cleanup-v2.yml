@@ -1,0 +1,290 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: Retry audited UI cleanup
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/forensic-ui-cleanup-v2.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    if: github.event.head_commit.message == 'Retry audited UI cleanup with structural source matching'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out exact main commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Apply cleanup
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+          test "$(tr -d '[:space:]' < VERSION)" = "0.3.60"
+          test "$(tr -d '[:space:]' < src/infiltratr-common/VERSION)" = "1.19.36"
+          test "$(git -C src/infiltratr-common rev-parse HEAD)" = "5e129851bbd7ac0b94bd8c2f48f32924016bdbda"
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              n = text.count(old)
+              if n != 1:
+                  raise SystemExit(f'{path}: expected 1 occurrence, found {n}: {old[:90]!r}')
+              p.write_text(text.replace(old, new, 1))
+
+          def remove_final_arg_calls(path, name):
+              p = Path(path)
+              text = p.read_text()
+              needle = name + '('
+              positions = []
+              at = 0
+              while True:
+                  pos = text.find(needle, at)
+                  if pos < 0: break
+                  positions.append(pos)
+                  at = pos + len(needle)
+              changed = 0
+              for pos in reversed(positions):
+                  op = pos + len(name)
+                  depth = 0; quote = None; esc = False; cp = None
+                  for i in range(op, len(text)):
+                      ch = text[i]
+                      if quote:
+                          if esc: esc = False
+                          elif ch == '\\': esc = True
+                          elif ch == quote: quote = None
+                          continue
+                      if ch in ('"', "'"): quote = ch; continue
+                      if ch == '(': depth += 1
+                      elif ch == ')':
+                          depth -= 1
+                          if depth == 0: cp = i; break
+                  if cp is None: raise SystemExit(f'{path}: unmatched {name}')
+                  j = cp + 1
+                  while j < len(text) and text[j].isspace(): j += 1
+                  if j >= len(text) or text[j] != ';':
+                      continue
+                  inside = text[op + 1:cp]
+                  depth = 0; quote = None; esc = False; commas = []
+                  for off, ch in enumerate(inside):
+                      if quote:
+                          if esc: esc = False
+                          elif ch == '\\': esc = True
+                          elif ch == quote: quote = None
+                          continue
+                      if ch in ('"', "'"): quote = ch
+                      elif ch in '([{': depth += 1
+                      elif ch in ')]}': depth -= 1
+                      elif ch == ',' and depth == 0: commas.append(off)
+                  if not commas: raise SystemExit(f'{path}: no removable final argument')
+                  cut = op + 1 + commas[-1]
+                  text = text[:cut] + text[cp:]
+                  changed += 1
+              if changed == 0: raise SystemExit(f'{path}: no {name} calls changed')
+              p.write_text(text)
+              return changed
+
+          main = Path('src/app/main.cpp')
+          text = main.read_text()
+          old_sig = '''GtkWidget *make_transaction_confirmation_dialog(
+              GtkWindow *parent,
+              const char *title,
+              const std::string &heading,
+              const char *accept_label,
+              const TransactionPlan &plan,
+              const bool from_engine)
+          '''
+          new_sig = '''GtkWidget *make_transaction_confirmation_dialog(
+              GtkWindow *parent,
+              const char *title,
+              const std::string &heading,
+              const char *accept_label,
+              const TransactionPlan &plan)
+          '''
+          if text.count(old_sig) != 1: raise SystemExit('main.cpp: dialog signature drifted')
+          text = text.replace(old_sig, new_sig, 1)
+
+          start = text.index('    if (plan.download_bytes > 0U) {', text.index('make_transaction_confirmation_dialog('))
+          end = text.index('    GtkWidget *summary_label =', start)
+          native_summary = '''    if (plan.download_bytes > 0U) {
+              summary << "  Download: " << display_size(plan.download_bytes) << ".";
+          }
+          if (plan.disk_delta_bytes != 0) {
+              summary << "  Disk change: "
+                      << display_disk_delta(plan.disk_delta_bytes) << ".";
+          }
+          if (plan.touches_system) {
+              summary << "\\nThis transaction includes system-critical components.";
+          }
+          summary << "\\nResolved by the native package engine against state "
+                  << "generation " << plan.state_generation << ".";
+
+          '''
+          text = text[:start] + native_summary + text[end:]
+
+          old_result = '''struct DiscoverPlanResult {
+              std::optional<TransactionPlan> plan;
+              std::string error;
+              bool from_engine{false};
+          };
+          '''
+          new_result = '''struct DiscoverPlanResult {
+              std::optional<TransactionPlan> plan;
+              std::string error;
+          };
+          '''
+          if text.count(old_result) != 1: raise SystemExit('main.cpp: DiscoverPlanResult drifted')
+          text = text.replace(old_result, new_result, 1)
+          assignment = '        result->from_engine = result->plan.has_value();\n'
+          if text.count(assignment) != 1: raise SystemExit('main.cpp: planner-origin assignment drifted')
+          text = text.replace(assignment, '', 1)
+          main.write_text(text)
+          if remove_final_arg_calls('src/app/main.cpp', 'make_transaction_confirmation_dialog') < 2:
+              raise SystemExit('main.cpp: expected multiple transaction confirmation calls')
+
+          replace_once('src/app/system_view.cpp',
+          '''GtkWidget *make_transaction_confirmation_dialog(
+              GtkWindow *parent,
+              const char *title,
+              const std::string &heading,
+              const char *accept_label,
+              const TransactionPlan &plan,
+              bool from_engine);
+          ''',
+          '''GtkWidget *make_transaction_confirmation_dialog(
+              GtkWindow *parent,
+              const char *title,
+              const std::string &heading,
+              const char *accept_label,
+              const TransactionPlan &plan);
+          ''')
+          if remove_final_arg_calls('src/app/system_view.cpp', 'make_transaction_confirmation_dialog') < 1:
+              raise SystemExit('system_view.cpp: expected transaction confirmation call')
+
+          replace_once('src/app/window_state.hpp', '    GtkWidget *theme_button{};\n', '')
+
+          replace_once('src/app/theme.cpp', '#include <infiltratr/config.h>\n', '#include <infiltratr/config.h>\n#include <infiltratr/core.h>\n')
+          replace_once('src/app/theme.cpp',
+          '''    if (theme_name != nullptr) {
+                  gchar *lower = g_ascii_strdown(theme_name, -1);
+                  dark = dark ||
+                         (lower != nullptr &&
+                          std::strstr(lower, "dark") != nullptr);
+                  g_free(lower);
+                  g_free(theme_name);
+              }
+          ''',
+          '''    if (theme_name != nullptr) {
+                  dark = dark ||
+                         infiltratr_ascii_contains_ci(theme_name, "dark");
+                  g_free(theme_name);
+              }
+          ''')
+          replace_once('src/app/theme.cpp',
+              '    const std::string card_hover = colour(palette->card_hover_rgb);\n',
+              '    const std::string card_hover = colour(palette->card_hover_rgb);\n    const std::string surface_hover = colour(palette->surface_hover_rgb);\n')
+          replace_once('src/app/theme.cpp', '    const std::string titlebar = colour(palette->titlebar_rgb);\n', '')
+          replace_once('src/app/theme.cpp',
+          '''        << "headerbar.infiltrator-titlebar { min-height: 58px; "
+                  << "background-image: linear-gradient(to right, #06131f, #08263a); "
+          ''',
+          '''        << "headerbar.infiltrator-titlebar { min-height: 58px; "
+                  << "background: " << panel << "; "
+          ''')
+          replace_once('src/app/theme.cpp',
+          '''        << ".sidebar { background-image: linear-gradient(180deg, "
+                  << panel << ", " << titlebar << "); border-right: 1px solid "
+                  << border << "; }"
+                  << ".nav-list { background: transparent; }"
+                  << ".nav-row { margin: 4px 0; padding: 5px 7px; "
+                  << "border: 1px solid transparent; border-radius: 12px; }"
+                  << ".nav-row:hover { background: " << card_hover << "; }"
+                  << ".nav-row:selected { background-image: linear-gradient(105deg, "
+                  << "#2f67ff, #5137d8); border-color: #6f6dff; "
+                  << "box-shadow: 0 7px 18px rgba(20,32,95,0.34); }"
+                  << ".nav-icon-well { min-width: 42px; min-height: 42px; "
+                  << "background: transparent; border: 1px solid transparent; "
+                  << "border-radius: 10px; }"
+                  << ".nav-row:selected .nav-icon-well { "
+                  << "background: rgba(255,255,255,0.13); "
+                  << "border-color: rgba(255,255,255,0.12); }"
+          ''',
+          '''        << ".sidebar { background: " << panel
+                  << "; border-right: 1px solid " << border
+                  << "; padding: 12px 9px; }"
+                  << ".nav-list { background: transparent; }"
+                  << ".nav-row { min-height: 50px; margin: 2px 4px; padding: 7px 9px; "
+                  << "border: 1px solid transparent; border-radius: 12px; }"
+                  << ".nav-row:hover { background: " << surface_hover << "; }"
+                  << ".nav-row:selected { background: " << select_bg
+                  << "; border-color: " << neutral << "; box-shadow: none; }"
+                  << ".nav-icon-well { min-width: 38px; min-height: 38px; "
+                  << "background: " << surface << "; border: 1px solid " << border
+                  << "; border-radius: 11px; padding: 5px; }"
+          ''')
+          replace_once('src/app/theme.cpp',
+          '''        << ".nav-row:selected .nav-label { color: #ffffff; }"
+                  << ".nav-row:selected .nav-subtitle { color: rgba(255,255,255,0.82); }"
+          ''',
+          '''        << ".nav-row:selected .nav-label, .nav-row:selected .nav-subtitle { color: "
+                  << accent_fg << "; }"
+          ''')
+          replace_once('src/app/theme.cpp',
+              '        << ".nav-row:selected image { color: #ffffff; }"\n',
+              '        << ".nav-row:selected image { color: " << accent_fg << "; }"\n')
+
+          replace_once('src/app/main.cpp',
+              '    gtk_widget_add_css_class(\n        bar, "infiltrator-titlebar");\n',
+              '    gtk_widget_add_css_class(\n        bar, "infiltrator-titlebar");\n    gtk_widget_add_css_class(bar, "shell-header");\n')
+          replace_once('src/app/main.cpp',
+              '    GtkWidget *root = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);\n    gtk_window_set_child(GTK_WINDOW(window), root);\n',
+              '    GtkWidget *root = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);\n    gtk_widget_add_css_class(root, "app-shell");\n    gtk_window_set_child(GTK_WINDOW(window), root);\n')
+
+          ci = Path('.github/workflows/ci.yml')
+          text = ci.read_text()
+          old_assert = '          assert "linear-gradient(to right, #06131f, #08263a)" in theme\n'
+          if text.count(old_assert) != 1: raise SystemExit('ci.yml: old titlebar assertion drifted')
+          text = text.replace(old_assert,
+              '          assert "linear-gradient(to right, #06131f, #08263a)" not in theme\n'
+              '          assert "linear-gradient(105deg, #2f67ff, #5137d8)" not in theme\n'
+              '          assert \'<< ".nav-row:selected { background: " << select_bg\' in theme\n'
+              '          assert \'<< ".sidebar { background: " << panel\' in theme\n'
+              '          assert "infiltratr_ascii_contains_ci" in theme\n'
+              '          assert \'"shell-header"\' in app\n'
+              '          assert \'"app-shell"\' in app\n'
+              '          assert "transitional APT compatibility planner" not in app\n'
+              '          assert "theme_button" not in app\n', 1)
+          text = text.replace('# Sidebar convergence: target-like semantic icons, vivid selection,\n', '# Sidebar convergence: semantic icons and Common-driven selection,\n')
+          ci.write_text(text)
+
+          app_text = '\n'.join(p.read_text() for p in Path('src/app').glob('*.[ch]pp'))
+          theme_text = Path('src/app/theme.cpp').read_text()
+          assert 'transitional APT compatibility planner' not in app_text
+          assert 'not reported by the compatibility planner' not in app_text
+          assert 'theme_button' not in app_text
+          assert 'AptBackend' not in app_text
+          assert 'linear-gradient(to right, #06131f, #08263a)' not in theme_text
+          assert 'linear-gradient(105deg, #2f67ff, #5137d8)' not in theme_text
+          assert 'infiltratr_ascii_contains_ci' in theme_text
+          cmake = Path('CMakeLists.txt').read_text()
+          assert 'INFILTRATR_COMMON_EXPECTED_VERSION "1.19.36"' in cmake
+          assert 'INFILTRATR_COMMON_EXPECTED_COMMIT "5e129851bbd7ac0b94bd8c2f48f32924016bdbda"' in cmake
+          PY
+
+          rm .github/workflows/forensic-ui-cleanup.yml .github/workflows/forensic-ui-cleanup-v2.yml
+          git diff --check
+          git config user.name 'Shannon Smith'
+          git config user.email 'infiltratr@yandex.com'
+          git add src/app/main.cpp src/app/system_view.cpp src/app/window_state.hpp src/app/theme.cpp .github/workflows/ci.yml .github/workflows/forensic-ui-cleanup.yml .github/workflows/forensic-ui-cleanup-v2.yml
+          git commit -m 'Clean remaining UI transition code and align shell'
+          git push origin HEAD:main
