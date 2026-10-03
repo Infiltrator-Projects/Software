@@ -34,6 +34,11 @@
   <url type="homepage">https://github.com/Infiltrator-Projects/Software</url>
 
   <releases>
+    <release version="0.3.68" date="2026-10-03">
+      <description>
+        <p>Aligns the Details action with the update-row title badges while keeping version and repository metadata on the compact secondary line.</p>
+      </description>
+    </release>
     <release version="0.3.67" date="2026-10-03">
       <description>
         <p>Restores a compact Updates hierarchy with aligned semantic badges, list-local selection controls and flatter update rows without changing the colour palette.</p>

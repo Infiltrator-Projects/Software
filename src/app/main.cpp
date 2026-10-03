@@ -5091,6 +5091,27 @@ GtkWidget *make_update_row(
             GTK_BOX(title_line),
             security);
     }
+
+    GtkWidget *details =
+        gtk_button_new_with_label("Details");
+    gtk_widget_add_css_class(
+        details, "update-details-button");
+    gtk_widget_set_valign(
+        details, GTK_ALIGN_CENTER);
+    auto *package_copy =
+        new PackageRecord(package);
+    g_object_set_data_full(
+        G_OBJECT(details),
+        "update-package",
+        package_copy,
+        package_record_destroy);
+    g_signal_connect(
+        details,
+        "clicked",
+        G_CALLBACK(update_details_clicked),
+        state);
+    gtk_box_append(GTK_BOX(title_line), details);
+
     gtk_box_append(GTK_BOX(identity), title_line);
 
     std::string source_name = package.repository_origin;
@@ -5167,26 +5188,6 @@ GtkWidget *make_update_row(
 
     gtk_box_append(GTK_BOX(identity), meta_line);
     gtk_box_append(GTK_BOX(row), identity);
-
-    GtkWidget *details =
-        gtk_button_new_with_label("Details");
-    gtk_widget_add_css_class(
-        details, "update-details-button");
-    gtk_widget_set_valign(
-        details, GTK_ALIGN_CENTER);
-    auto *package_copy =
-        new PackageRecord(package);
-    g_object_set_data_full(
-        G_OBJECT(details),
-        "update-package",
-        package_copy,
-        package_record_destroy);
-    g_signal_connect(
-        details,
-        "clicked",
-        G_CALLBACK(update_details_clicked),
-        state);
-    gtk_box_append(GTK_BOX(row), details);
 
     return row;
 }

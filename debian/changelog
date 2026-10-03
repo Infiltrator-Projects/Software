@@ -1,3 +1,13 @@
+infiltrator-software (0.3.68) unstable; urgency=high
+
+  * Place the Details action on the same title baseline as the package type,
+    Recommended/System-critical and Security badges instead of centring it
+    against the full two-line update row.
+  * Preserve version and repository metadata on the compact secondary line and
+    add a source-contract guard so Details cannot drift back to the outer row.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Sat, 03 Oct 2026 19:25:00 +1000
+
 infiltrator-software (0.3.67) unstable; urgency=high
 
   * Rebuild update rows so Application/System type, Recommended/System-critical
