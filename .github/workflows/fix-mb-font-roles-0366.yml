@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   patch:
-    if: github.event.head_commit.message == 'Repair Software 0.3.66 MB typography fix'
+    if: github.event.head_commit.message == 'Retry Software 0.3.66 MB typography fix'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -30,30 +30,30 @@ jobs:
 
           # Software ships exactly three canonical MB Corpo faces. Keep every
           # requested weight mapped to a real shipped face: UI regular/bold use
-          # MB Corpo S, while the condensed MB Corpo A face is regular-only.
+          # MB Corpo S, while MB Corpo A Cond is the regular display face only.
           theme_path = Path('src/app/theme.cpp')
           theme = theme_path.read_text()
 
-          selectors = (
-              '.preferences-title',
-              '.card-title',
-              '.dashboard-card-value',
-              '.catalogue-section-title',
-              '.source-name',
-              '.update-group-title',
-              '.update-name',
-          )
-          for selector in selectors:
-              old = '<< "' + selector + r' { font-family: \"' + '" << typography->brand_family'
-              new = '<< "' + selector + r' { font-family: \"' + '" << typography->ui_family'
-              if old not in theme:
-                  raise SystemExit(f'missing typography selector anchor: {selector}')
-              theme = theme.replace(old, new, 1)
+          # Reserve the condensed display family only for the two deliberate
+          # display-name roles. Every other CSS role uses the real MB Corpo S
+          # regular/bold family so GTK/Pango never synthesizes a nonexistent
+          # 700-weight MB Corpo A Cond face.
+          allowed_brand_selectors = ('.hero-title', '.discover-name')
+          rewritten = []
+          for line in theme.splitlines(keepends=True):
+              if ('font-family:' in line and
+                  'typography->brand_family' in line and
+                  not any(selector in line for selector in allowed_brand_selectors)):
+                  line = line.replace('typography->brand_family', 'typography->ui_family')
+              rewritten.append(line)
+          theme = ''.join(rewritten)
 
-          # The condensed family is now reserved for its real 400-weight display
-          # role only. No synthetic 700-weight condensed face is requested.
-          if theme.count('typography->brand_family') != 3:
-              raise SystemExit('unexpected MB Corpo A use remains in theme.cpp')
+          remaining_brand = [
+              line.strip() for line in theme.splitlines()
+              if 'typography->brand_family' in line
+          ]
+          if len(remaining_brand) != 3:
+              raise SystemExit('unexpected MB Corpo A uses remain: ' + repr(remaining_brand))
           if theme.count('typography->brand_weight') != 2:
               raise SystemExit('unexpected MB Corpo A weight use remains in theme.cpp')
           theme_path.write_text(theme)
@@ -61,7 +61,7 @@ jobs:
           contracts_path = Path('tests/source_contracts.py')
           contracts = contracts_path.read_text()
           anchor = '''assert "titlebar-mark-bar" not in app\nassert ".titlebar-mark-bar" not in theme\n'''
-          insert = anchor + '''\n# Typography is strict: Software packages only the three canonical MB Corpo\n# faces. The condensed MB Corpo A face exists only at weight 400, so section\n# headings that need 700 must use the real MB Corpo S bold face instead of\n# asking GTK/Pango to synthesize a nonexistent condensed bold face.\nassert theme.count("typography->brand_family") == 3\nassert theme.count("typography->brand_weight") == 2\nhero_brand = '<< ".hero-title { font-family: ' + r'\\"' + '" << typography->brand_family'\ndiscover_brand = '<< ".discover-name { font-family: ' + r'\\"' + '" << typography->brand_family'\nassert hero_brand in theme\nassert discover_brand in theme\nfor selector in (\n    ".preferences-title",\n    ".card-title",\n    ".dashboard-card-value",\n    ".catalogue-section-title",\n    ".source-name",\n    ".update-group-title",\n    ".update-name",\n):\n    marker = '<< "' + selector + ' { font-family: ' + r'\\"' + '" << typography->ui_family'\n    assert marker in theme\n'''
+          insert = anchor + '''\n# Typography is strict: Software packages only the three canonical MB Corpo\n# faces. MB Corpo A Cond is a 400-weight display face; all regular/bold UI roles\n# use the real MB Corpo S regular/bold faces instead of synthetic font weights.\nassert theme.count("typography->brand_family") == 3\nassert theme.count("typography->brand_weight") == 2\nfor selector in (".hero-title", ".discover-name"):\n    start = theme.index(f'<< "{selector} {{ font-family:')\n    assert "typography->brand_family" in theme[start:start + 140]\nfor selector in (\n    ".preferences-title",\n    ".card-title",\n    ".dashboard-card-value",\n    ".catalogue-section-title",\n    ".source-name",\n    ".update-group-title",\n    ".update-name",\n):\n    start = theme.index(f'<< "{selector} {{ font-family:')\n    assert "typography->ui_family" in theme[start:start + 140]\n'''
           if anchor not in contracts:
               raise SystemExit('source-contract typography insertion anchor missing')
           contracts = contracts.replace(anchor, insert, 1)
