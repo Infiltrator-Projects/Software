@@ -7770,6 +7770,80 @@ gboolean periodic_updates_refresh(gpointer user_data)
     return G_SOURCE_CONTINUE;
 }
 
+void stop_updates_refresh_timer(WindowState *state)
+{
+    if (state == nullptr || state->updates_refresh_timer_id == 0U) {
+        return;
+    }
+    g_source_remove(state->updates_refresh_timer_id);
+    state->updates_refresh_timer_id = 0U;
+}
+
+void start_updates_refresh_timer(WindowState *state)
+{
+    if (state == nullptr || state->updates_refresh_timer_id != 0U) {
+        return;
+    }
+    state->updates_refresh_timer_id =
+        g_timeout_add_seconds(60U, periodic_updates_refresh, state);
+}
+
+bool ensure_page_constructed(WindowState *state, const int index)
+{
+    if (state == nullptr || state->stack == nullptr ||
+        index < 0 || index >= 7) {
+        return false;
+    }
+
+    static constexpr const char *page_names[] = {
+        "discover", "installed", "updates", "system",
+        "repositories", "history", "repair"
+    };
+    if (gtk_stack_get_child_by_name(
+            state->stack, page_names[index]) != nullptr) {
+        return true;
+    }
+
+    GtkWidget *page = nullptr;
+    switch (index) {
+    case 0:
+        page = make_discover_page(state);
+        break;
+    case 1:
+        page = create_installed_page(
+            &state->installed, state->window);
+        break;
+    case 2:
+        page = make_updates_page(state);
+        break;
+    case 3:
+        page = make_system_page(state);
+        break;
+    case 4:
+        page = make_repositories_page(state);
+        break;
+    case 5:
+        page = create_history_controller_page(
+            &state->history,
+            state->window,
+            history_controller_changed,
+            state);
+        break;
+    case 6:
+        page = make_repair_page(state);
+        break;
+    default:
+        break;
+    }
+    if (page == nullptr) {
+        return false;
+    }
+
+    gtk_stack_add_named(
+        state->stack, page, page_names[index]);
+    return true;
+}
+
 void refresh_page_if_needed(WindowState *state, const int index)
 {
     if (state == nullptr || !state->window_presented) {
@@ -7851,6 +7925,14 @@ void navigation_changed(
     }
 
     auto *state = static_cast<WindowState *>(user_data);
+    if (!ensure_page_constructed(state, index)) {
+        return;
+    }
+    if (index == 2) {
+        start_updates_refresh_timer(state);
+    } else {
+        stop_updates_refresh_timer(state);
+    }
     gtk_stack_set_visible_child_name(state->stack, page_names[index]);
 
     /*
@@ -8553,15 +8635,6 @@ void activate(GtkApplication *application, gpointer)
         G_OBJECT(window), "infiltrator-window-state",
         state, destroy_window_state);
 
-    /*
-     * Keep the Updates page current while it remains open.  This timer does
-     * not block the UI and only starts an unprivileged metadata refresh when
-     * the last successful refresh is stale.
-     */
-    state->updates_refresh_timer_id =
-        g_timeout_add_seconds(
-            60U, periodic_updates_refresh, state);
-
     GtkWidget *header = make_header_bar(state);
     gtk_window_set_titlebar(GTK_WINDOW(window), header);
 
@@ -8578,14 +8651,14 @@ void activate(GtkApplication *application, gpointer)
     GtkWidget *stack = gtk_stack_new();
     state->stack = GTK_STACK(stack);
     /*
-     * Navigation is a state change, not a long-running visual operation.
-     * A crossfade keeps both pages mapped while the destination page starts
-     * its lazy catalogue work; if that work delays a frame, GTK can leave a
-     * half-faded source page visible for seconds.  Switch pages atomically so
-     * the user always sees exactly one page.
+     * Page trees are now constructed before they become visible and their
+     * expensive refresh work starts only from the subsequent idle callback.
+     * That makes the InfiltratorOS 110 ms shell crossfade safe again without
+     * allowing backend work to hold a half-painted transition on screen.
      */
     gtk_stack_set_transition_type(
-        state->stack, GTK_STACK_TRANSITION_TYPE_NONE);
+        state->stack, GTK_STACK_TRANSITION_TYPE_CROSSFADE);
+    gtk_stack_set_transition_duration(state->stack, 110U);
     gtk_widget_set_hexpand(stack, true);
     gtk_widget_set_vexpand(stack, true);
 
@@ -8598,45 +8671,18 @@ void activate(GtkApplication *application, gpointer)
         stack,
         1, 0, 5, 1);
 
+    /*
+     * First paint owns only Discover.  Every other page is constructed on
+     * first navigation, matching the lazy-module lifecycle used by current
+     * InfiltratorOS System Settings.  This removes six inactive GTK widget
+     * trees from Software startup without changing their refresh semantics.
+     */
     gtk_stack_add_named(
         state->stack,
         make_discover_page(state),
         "discover");
-    gtk_stack_add_named(
-        state->stack,
-        create_installed_page(
-            &state->installed,
-            GTK_WINDOW(window)),
-        "installed");
-    gtk_stack_add_named(
-        state->stack,
-        make_updates_page(state),
-        "updates");
-    gtk_stack_add_named(
-        state->stack,
-        make_system_page(state),
-        "system");
-    gtk_stack_add_named(
-        state->stack,
-        make_repositories_page(state),
-        "repositories");
-    gtk_stack_add_named(
-        state->stack,
-        create_history_controller_page(
-            &state->history,
-            GTK_WINDOW(window),
-            history_controller_changed,
-            state),
-        "history");
-    gtk_stack_add_named(
-        state->stack,
-        make_repair_page(state),
-        "repair");
 
     const int initial_page = open_updates ? 2 : 0;
-    gtk_stack_set_visible_child_name(
-        state->stack,
-        initial_page == 2 ? "updates" : "discover");
     select_page(state, initial_page);
     gtk_box_append(GTK_BOX(root), make_status_bar());
 

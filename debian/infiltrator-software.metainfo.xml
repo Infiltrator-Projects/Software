@@ -34,6 +34,11 @@
   <url type="homepage">https://github.com/Infiltrator-Projects/Software</url>
 
   <releases>
+    <release version="0.3.65" date="2026-10-03">
+      <description>
+        <p>Lazily constructs inactive pages, scopes update refresh timing to the Updates page and aligns page transitions with the current InfiltratorOS shell cadence.</p>
+      </description>
+    </release>
     <release version="0.3.64" date="2026-10-03">
       <description>
         <p>Removes the remaining two-second tray poll, switches runtime changes to event-driven monitors, and aligns shell geometry with current InfiltratorOS/Common metrics.</p>
