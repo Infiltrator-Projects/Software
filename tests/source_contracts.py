@@ -421,7 +421,9 @@ assert "titlebar-button" not in app
 assert "titlebar-window-separator" not in app
 assert "linear-gradient(to right, #06131f, #08263a)" not in theme
 assert "linear-gradient(105deg, #2f67ff, #5137d8)" not in theme
-assert '<< ".nav-row:selected { background: " << select_bg' in theme
+assert '<< ".nav-list row.nav-row:selected { background-color: " << select_bg' in theme
+assert '<< ".nav-list row.nav-row:selected .nav-label, "' in theme
+assert '<< ".nav-list row.nav-row:selected image { color: " << select_fg' in theme
 assert '<< ".sidebar { background: " << panel' in theme
 assert "infiltratr_ascii_contains_ci" in theme
 assert '"shell-header"' in app
