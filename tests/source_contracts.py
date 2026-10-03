@@ -85,7 +85,11 @@ assert "evaluate_update_notification" in tray
 assert "refresh_schedule_enabled" in tray
 assert "hide_tray" in tray
 assert "refresh_runtime_inputs" in tray
-assert "if (runtime_changed)" in tray
+assert "install_file_monitors" in tray
+assert "g_file_monitor_directory" in tray
+assert "runtime_file_changed" in tray
+assert "installed_executable_changed" in tray
+assert "g_timeout_add_seconds(2U, state_tick" not in tray
 assert "const std::string override = read_override();" not in tray
 assert '"--security-only"' in cli
 assert '"--kernel-only"' in cli
@@ -323,6 +327,12 @@ assert "history-transaction-card" in history_view
 assert "repair-action-panel" in app
 assert ".hero-ribbon-a" not in theme
 assert ".nav-icon-well" in theme
+assert "metrics->control_radius" in theme
+assert "metrics->small_radius" in theme
+assert "metrics->card_radius" in theme
+assert "border-radius: 14px; padding: 8px 12px" not in theme
+assert "border-radius: 8px; box-shadow: none" not in theme
+assert "border-radius: 11px; padding: 5px" not in theme
 
 # Second visual pass: Discover shortcuts, grouped Updates and the
 # Repair health overview are product-level GUI contracts.

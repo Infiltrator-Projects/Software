@@ -305,23 +305,24 @@ void ThemeController::apply()
         << ".titlebar-brand { padding: 2px 4px; }"
         << ".titlebar-brand-icon { background: " << card
         << "; border: 1px solid " << border
-        << "; border-radius: 12px; padding: 7px; }"
+        << "; border-radius: " << metrics->card_radius << "px; padding: 7px; }"
         << ".titlebar-logo { min-width: 48px; min-height: 32px; }"
         << ".titlebar-logo-fallback { color: " << neutral << "; }"
         << ".titlebar-title { font-family: \"" << typography->ui_family
         << "\"; font-size: 20px; font-weight: " << typography->ui_bold_weight
-        << "; color: " << title << "; }"
+        << "; color: " << heading << "; }"
         << ".titlebar-subtitle { color: " << summary << "; font-size: 11px; font-weight: "
         << typography->ui_regular_weight << "; }"
         << ".global-search { min-width: 180px; min-height: 34px; "
         << "background: " << input << "; color: " << text
         << "; border: 1px solid " << status_border
-        << "; border-radius: 14px; padding: 8px 12px; box-shadow: none; }"
+        << "; border-radius: " << metrics->control_radius
+        << "px; padding: 8px 12px; box-shadow: none; }"
         << ".global-search:focus { border-color: " << neutral << "; box-shadow: none; }"
         << ".titlebar-header-end { margin-left: 10px; }"
         << "headerbar.infiltrator-titlebar button.window-control { min-width: 30px; min-height: 30px; "
         << "padding: 4px; background: transparent; border: 1px solid transparent; "
-        << "border-radius: 8px; box-shadow: none; }"
+        << "border-radius: " << metrics->small_radius << "px; box-shadow: none; }"
         << "headerbar.infiltrator-titlebar button.window-control image { color: " << text << "; opacity: 1; }"
         << "headerbar.infiltrator-titlebar button.window-control:hover { background: "
         << card_hover << "; border-color: " << border << "; }"
@@ -335,13 +336,15 @@ void ThemeController::apply()
         << "; padding: 12px 9px; min-width: 195px; }"
         << ".nav-list { background: transparent; }"
         << ".nav-row { min-height: 50px; margin: 2px 4px; padding: 7px 9px; "
-        << "border: 1px solid transparent; border-radius: 12px; }"
+        << "border: 1px solid transparent; border-radius: "
+        << metrics->card_radius << "px; }"
         << ".nav-row:hover { background: " << surface_hover << "; }"
         << ".nav-row:selected { background: " << select_bg
         << "; border-color: " << neutral << "; box-shadow: none; }"
         << ".nav-icon-well { min-width: 38px; min-height: 38px; "
         << "background: " << surface << "; border: 1px solid " << border
-        << "; border-radius: 11px; padding: 5px; }"
+        << "; border-radius: " << metrics->control_radius
+        << "px; padding: 5px; }"
         << ".nav-label { font-size: 14px; font-weight: "
         << typography->ui_bold_weight << "; color: " << text << "; }"
         << ".nav-subtitle { font-size: 11px; color: " << summary << "; }"
@@ -355,11 +358,13 @@ void ThemeController::apply()
         << typography->ui_bold_weight << "; box-shadow: none; }"
         << "button.sidebar-settings { margin-top: 8px; padding: 10px 12px; "
         << "background: " << card << "; border: 1px solid " << border
-        << "; border-radius: 12px; box-shadow: none; }"
+        << "; border-radius: " << metrics->card_radius
+        << "px; box-shadow: none; }"
         << "button.sidebar-settings:hover { background: " << card_hover
         << "; border-color: " << neutral << "; }"
         << ".settings-icon-well { min-width: 42px; min-height: 42px; "
-        << "background: transparent; border-radius: 10px; }"
+        << "background: transparent; border-radius: "
+        << metrics->control_radius << "px; }"
         << ".settings-icon-well image { color: " << neutral << "; }"
         << ".settings-title { font-size: 14px; font-weight: "
         << typography->ui_bold_weight << "; color: " << text << "; }"

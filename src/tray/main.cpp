@@ -83,6 +83,9 @@ struct TrayState {
     gint64 started_us{0};
     gint64 last_metadata_refresh_us{0};
     bool replacement_exec_failed{false};
+    GFileMonitor *preferences_monitor{};
+    GFileMonitor *override_monitor{};
+    GFileMonitor *executable_monitor{};
 };
 
 constexpr const char *kInstalledTrayPath =
@@ -868,36 +871,153 @@ gboolean scheduled_check(gpointer user_data)
     return G_SOURCE_CONTINUE;
 }
 
-gboolean state_tick(gpointer user_data)
+bool monitored_event_matches(
+    GFile *file,
+    GFile *other_file,
+    const std::filesystem::path &target)
+{
+    const auto matches =
+        [&](GFile *candidate) {
+            if (candidate == nullptr) {
+                return false;
+            }
+            gchar *raw_path = g_file_get_path(candidate);
+            if (raw_path == nullptr) {
+                return false;
+            }
+            const bool same =
+                std::filesystem::path(raw_path) == target;
+            g_free(raw_path);
+            return same;
+        };
+    return matches(file) || matches(other_file);
+}
+
+void replace_running_tray_if_needed(TrayState *state)
+{
+    if (state == nullptr || state->replacement_exec_failed ||
+        !installed_tray_replaced()) {
+        return;
+    }
+
+    /*
+     * dpkg replaces the executable atomically. React to the directory event
+     * instead of polling /proc and /usr/bin every two seconds for the entire
+     * desktop session. The lock fd is O_CLOEXEC, so the replacement image
+     * reacquires the normal single-instance lock.
+     */
+    (void)execl(
+        kInstalledTrayPath,
+        "infiltrator-software-tray",
+        "--replace",
+        static_cast<char *>(nullptr));
+    state->replacement_exec_failed = true;
+    g_warning(
+        "Unable to replace stale Software tray executable: %s",
+        g_strerror(errno));
+}
+
+void runtime_file_changed(
+    GFileMonitor *,
+    GFile *file,
+    GFile *other_file,
+    GFileMonitorEvent,
+    gpointer user_data)
 {
     auto *state = static_cast<TrayState *>(user_data);
     if (state == nullptr) {
-        return G_SOURCE_CONTINUE;
-    }
-    const bool runtime_changed = refresh_runtime_inputs(state);
-    if (!state->replacement_exec_failed &&
-        installed_tray_replaced()) {
-        /*
-         * Future package upgrades can replace the tray while it is resident.
-         * Re-exec the installed image as soon as that happens.  The lock fd is
-         * O_CLOEXEC, so the new image reacquires the same single-instance lock
-         * rather than leaving an obsolete process in the panel.
-         */
-        (void)execl(
-            kInstalledTrayPath,
-            "infiltrator-software-tray",
-            "--replace",
-            static_cast<char *>(nullptr));
-        state->replacement_exec_failed = true;
-        g_warning(
-            "Unable to replace stale Software tray executable: %s",
-            g_strerror(errno));
+        return;
     }
 
-    if (runtime_changed) {
+    const std::filesystem::path preferences =
+        software_preferences_path();
+    const std::filesystem::path override = state_file();
+    if (!monitored_event_matches(file, other_file, preferences) &&
+        !monitored_event_matches(file, other_file, override)) {
+        return;
+    }
+
+    if (refresh_runtime_inputs(state)) {
         render(state);
     }
-    return G_SOURCE_CONTINUE;
+}
+
+void installed_executable_changed(
+    GFileMonitor *,
+    GFile *file,
+    GFile *other_file,
+    GFileMonitorEvent,
+    gpointer user_data)
+{
+    if (!monitored_event_matches(
+            file,
+            other_file,
+            std::filesystem::path(kInstalledTrayPath))) {
+        return;
+    }
+    replace_running_tray_if_needed(
+        static_cast<TrayState *>(user_data));
+}
+
+GFileMonitor *monitor_parent_directory(
+    const std::filesystem::path &target,
+    GCallback callback,
+    TrayState *state)
+{
+    if (target.empty() || target.parent_path().empty()) {
+        return nullptr;
+    }
+
+    GFile *directory =
+        g_file_new_for_path(target.parent_path().c_str());
+    if (directory == nullptr) {
+        return nullptr;
+    }
+
+    GError *error = nullptr;
+    GFileMonitor *monitor =
+        g_file_monitor_directory(
+            directory,
+            G_FILE_MONITOR_NONE,
+            nullptr,
+            &error);
+    g_object_unref(directory);
+    if (monitor == nullptr) {
+        if (error != nullptr) {
+            g_debug(
+                "Unable to monitor %s: %s",
+                target.parent_path().c_str(),
+                error->message);
+            g_error_free(error);
+        }
+        return nullptr;
+    }
+
+    g_signal_connect(monitor, "changed", callback, state);
+    return monitor;
+}
+
+void install_file_monitors(TrayState *state)
+{
+    if (state == nullptr) {
+        return;
+    }
+
+    state->preferences_monitor =
+        monitor_parent_directory(
+            software_preferences_path(),
+            G_CALLBACK(runtime_file_changed),
+            state);
+    state->override_monitor =
+        monitor_parent_directory(
+            state_file(),
+            G_CALLBACK(runtime_file_changed),
+            state);
+    state->executable_monitor =
+        monitor_parent_directory(
+            std::filesystem::path(kInstalledTrayPath),
+            G_CALLBACK(installed_executable_changed),
+            state);
 }
 
 gboolean clear_opening_software(gpointer user_data)
@@ -1018,6 +1138,7 @@ int main(int argc, char **argv)
         G_CALLBACK(quit_menu_item), &state);
 
     subscribe_engine(&state);
+    install_file_monitors(&state);
     render(&state);
     g_idle_add(
         [](gpointer data) -> gboolean {
@@ -1028,12 +1149,20 @@ int main(int argc, char **argv)
         },
         &state);
     g_timeout_add_seconds(60U, scheduled_check, &state);
-    g_timeout_add_seconds(2U, state_tick, &state);
 
     gtk_main();
 
     if (state.opening_reset_id != 0U) {
         g_source_remove(state.opening_reset_id);
+    }
+    if (state.preferences_monitor != nullptr) {
+        g_object_unref(state.preferences_monitor);
+    }
+    if (state.override_monitor != nullptr) {
+        g_object_unref(state.override_monitor);
+    }
+    if (state.executable_monitor != nullptr) {
+        g_object_unref(state.executable_monitor);
     }
     if (state.engine_connection != nullptr) {
         if (state.state_signal_id != 0U) {
