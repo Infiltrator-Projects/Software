@@ -1,3 +1,17 @@
+infiltrator-software (0.3.61) unstable; urgency=high
+
+  * Remove the final retired GUI compatibility-planner state and messaging so
+    transaction review has one native package-engine path.
+  * Remove dead titlebar state and use Common 1.19.36 helpers for system-theme
+    matching instead of retaining a local case-folding implementation.
+  * Align the Software shell with the current InfiltratorOS/System Settings
+    standard: Common-driven solid header/sidebar surfaces, standard navigation
+    spacing/icon wells, neutral selected borders and no legacy gradient/shadow.
+  * Add CI guards that reject reintroduction of the retired planner/UI paths and
+    confirm the exact latest Common 1.19.36 pin.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Sat, 03 Oct 2026 11:34:00 +1000
+
 infiltrator-software (0.3.60) unstable; urgency=high
 
   * Remove the retired GUI AptBackend, package-backend abstraction and
