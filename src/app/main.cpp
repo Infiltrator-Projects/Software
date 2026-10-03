@@ -7687,7 +7687,6 @@ GtkWidget *make_nav_row(
     const char *icon_name,
     const char *text,
     const char *subtitle,
-    const char *semantic_class,
     GtkWidget **badge_out = nullptr)
 {
     GtkWidget *row_box =
@@ -7743,10 +7742,6 @@ GtkWidget *make_nav_row(
         gtk_list_box_row_new();
     gtk_widget_add_css_class(
         row, "nav-row");
-    if (semantic_class != nullptr) {
-        gtk_widget_add_css_class(
-            row, semantic_class);
-    }
     gtk_list_box_row_set_child(
         GTK_LIST_BOX_ROW(row), row_box);
     return row;
@@ -7922,11 +7917,6 @@ GtkWidget *make_navigation(WindowState *state)
         "document-open-recent-symbolic",
         "applications-engineering-symbolic"
     };
-    static constexpr const char *semantic_classes[] = {
-        "nav-discover", "nav-installed", "nav-updates", "nav-system",
-        "nav-repositories", "nav-history", "nav-repair"
-    };
-
     GtkWidget *outer =
         gtk_box_new(
             GTK_ORIENTATION_VERTICAL, 0);
@@ -7963,7 +7953,6 @@ GtkWidget *make_navigation(WindowState *state)
                 icons[index],
                 labels[index],
                 subtitles[index],
-                semantic_classes[index],
                 badge));
     }
 
@@ -8276,7 +8265,7 @@ GtkWidget *make_header_bar(WindowState *state)
         GTK_SEARCH_ENTRY(state->global_search),
         "Search for software, applications, and packages…");
     gtk_widget_set_size_request(
-        state->global_search, 180, -1 /* legacy CI marker: state->global_search, 320, -1 */);
+        state->global_search, 200, -1);
     g_signal_connect(
         state->global_search,
         "search-changed",

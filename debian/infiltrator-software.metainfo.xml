@@ -34,6 +34,11 @@
   <url type="homepage">https://github.com/Infiltrator-Projects/Software</url>
 
   <releases>
+    <release version="0.3.63" date="2026-10-03">
+      <description>
+        <p>Eliminates redundant tray polling I/O and final decorative shell residue while aligning Software with System Settings 0.4.52 and Common 1.19.38.</p>
+      </description>
+    </release>
     <release version="0.3.62" date="2026-10-03">
       <description>
         <p>Moves Discover indexing off the GTK thread, avoids redundant global theme restyling, converges shell geometry and card surfaces with current System Settings, and updates to Common 1.19.38.</p>

@@ -13,6 +13,7 @@
 #include <charconv>
 #include <csignal>
 #include <ctime>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <fcntl.h>
@@ -31,6 +32,7 @@ using infiltrator::software::EngineClient;
 using infiltrator::software::PackageRecord;
 using infiltrator::software::SoftwarePreferences;
 using infiltrator::software::load_software_preferences;
+using infiltrator::software::software_preferences_path;
 using infiltrator::software::update_is_ignored;
 using infiltrator::software::UpdateNotificationResult;
 using infiltrator::software::evaluate_update_notification;
@@ -50,6 +52,19 @@ struct CheckTaskData {
     bool refresh_metadata{false};
 };
 
+struct FileStamp {
+    bool exists{false};
+    std::uintmax_t size{0U};
+    std::filesystem::file_time_type modified{};
+};
+
+bool operator==(const FileStamp &left, const FileStamp &right) noexcept
+{
+    return left.exists == right.exists &&
+           left.size == right.size &&
+           left.modified == right.modified;
+}
+
 struct TrayState {
     XAppStatusIcon *icon{};
     bool checking{false};
@@ -61,6 +76,10 @@ struct TrayState {
     guint state_signal_id{0U};
     guint health_signal_id{0U};
     SoftwarePreferences preferences{};
+    std::string override_state;
+    FileStamp preferences_stamp{};
+    FileStamp override_stamp{};
+    bool runtime_inputs_initialized{false};
     gint64 started_us{0};
     gint64 last_metadata_refresh_us{0};
     bool replacement_exec_failed{false};
@@ -292,6 +311,63 @@ std::string read_override()
     return value;
 }
 
+FileStamp file_stamp(const std::filesystem::path &path)
+{
+    FileStamp stamp;
+    if (path.empty()) {
+        return stamp;
+    }
+    std::error_code ec;
+    stamp.exists = std::filesystem::exists(path, ec) && !ec;
+    if (!stamp.exists) {
+        return stamp;
+    }
+    if (std::filesystem::is_regular_file(path, ec) && !ec) {
+        stamp.size = std::filesystem::file_size(path, ec);
+        if (ec) stamp.size = 0U;
+    }
+    ec.clear();
+    stamp.modified = std::filesystem::last_write_time(path, ec);
+    if (ec) stamp.modified = {};
+    return stamp;
+}
+
+bool refresh_runtime_inputs(TrayState *state, const bool force = false)
+{
+    if (state == nullptr) {
+        return false;
+    }
+
+    bool changed = false;
+    const std::filesystem::path preferences_path =
+        software_preferences_path();
+    const FileStamp preferences_now = file_stamp(preferences_path);
+    if (force || !state->runtime_inputs_initialized ||
+        !(preferences_now == state->preferences_stamp)) {
+        SoftwarePreferences preferences;
+        std::string error;
+        if (load_software_preferences(preferences, error)) {
+            state->preferences = std::move(preferences);
+        } else if (!error.empty()) {
+            g_debug("Unable to reload Software preferences: %s", error.c_str());
+        }
+        state->preferences_stamp = preferences_now;
+        changed = true;
+    }
+
+    const std::filesystem::path override_path = state_file();
+    const FileStamp override_now = file_stamp(override_path);
+    if (force || !state->runtime_inputs_initialized ||
+        !(override_now == state->override_stamp)) {
+        state->override_state = read_override();
+        state->override_stamp = override_now;
+        changed = true;
+    }
+
+    state->runtime_inputs_initialized = true;
+    return changed;
+}
+
 std::int64_t last_successful_update()
 {
     std::int64_t latest = 0;
@@ -451,15 +527,7 @@ void render(TrayState *state)
         return;
     }
 
-    std::string preference_error;
-    SoftwarePreferences preferences;
-    if (load_software_preferences(
-            preferences,
-            preference_error)) {
-        state->preferences = std::move(preferences);
-    }
-
-    const std::string override = read_override();
+    const std::string &override = state->override_state;
     if (override == "installing") {
         xapp_status_icon_set_icon_name(
             state->icon, "infiltrator-software-installing-symbolic");
@@ -654,7 +722,8 @@ void begin_check(
     if (state == nullptr || state->checking) {
         return;
     }
-    if (!read_override().empty()) {
+    (void)refresh_runtime_inputs(state);
+    if (!state->override_state.empty()) {
         render(state);
         return;
     }
@@ -771,13 +840,7 @@ gboolean scheduled_check(gpointer user_data)
         return G_SOURCE_CONTINUE;
     }
 
-    std::string preference_error;
-    SoftwarePreferences preferences;
-    if (load_software_preferences(
-            preferences,
-            preference_error)) {
-        state->preferences = std::move(preferences);
-    }
+    (void)refresh_runtime_inputs(state);
 
     if (!state->preferences.refresh_schedule_enabled) {
         return G_SOURCE_CONTINUE;
@@ -808,8 +871,11 @@ gboolean scheduled_check(gpointer user_data)
 gboolean state_tick(gpointer user_data)
 {
     auto *state = static_cast<TrayState *>(user_data);
-    if (state != nullptr &&
-        !state->replacement_exec_failed &&
+    if (state == nullptr) {
+        return G_SOURCE_CONTINUE;
+    }
+    const bool runtime_changed = refresh_runtime_inputs(state);
+    if (!state->replacement_exec_failed &&
         installed_tray_replaced()) {
         /*
          * Future package upgrades can replace the tray while it is resident.
@@ -828,7 +894,9 @@ gboolean state_tick(gpointer user_data)
             g_strerror(errno));
     }
 
-    render(state);
+    if (runtime_changed) {
+        render(state);
+    }
     return G_SOURCE_CONTINUE;
 }
 
@@ -915,10 +983,7 @@ int main(int argc, char **argv)
 
     TrayState state;
     state.started_us = g_get_monotonic_time();
-    std::string preference_error;
-    (void)load_software_preferences(
-        state.preferences,
-        preference_error);
+    (void)refresh_runtime_inputs(&state, true);
     state.icon =
         xapp_status_icon_new_with_name("infiltrator-software-updater");
     if (state.icon == nullptr) {
