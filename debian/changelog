@@ -1,3 +1,19 @@
+infiltrator-software (0.3.60) unstable; urgency=high
+
+  * Remove the retired GUI AptBackend, package-backend abstraction and
+    associated regression test so ordinary Software operation has one
+    native package planning/inventory path instead of legacy fallback code.
+  * Avoid repeating Flatpak and Cinnamon discovery during the immediate
+    Debian metadata refresh after Updates first paints its cached/native
+    state, eliminating duplicate provider processes and network work.
+  * Isolate the direct dpkg installed-state fallback from the full package
+    engine, remove obsolete Discover Spotlight UI/theme state, and align
+    architecture/performance documentation with the implemented design.
+  * Preserve lazy startup, virtualized catalogue rendering, operation-specific
+    engine timeouts and the previously released VM/kernel CPU reductions.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Sat, 03 Oct 2026 10:20:00 +1000
+
 infiltrator-software (0.3.59) unstable; urgency=high
 
   * Replace repeated full package-catalogue scans in Linux kernel inventory

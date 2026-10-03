@@ -34,6 +34,11 @@
   <url type="homepage">https://github.com/Infiltrator-Projects/Software</url>
 
   <releases>
+    <release version="0.3.60" date="2026-10-03">
+      <description>
+        <p>Completes the native-path performance cleanup by removing the retired GUI APT backend, avoiding duplicate Flatpak/Cinnamon refresh work, isolating the lightweight installed-state fallback and deleting obsolete Discover Spotlight UI state.</p>
+      </description>
+    </release>
     <release version="0.3.59" date="2026-10-01">
       <description>
         <p>Fixes Linux kernel-manager timeouts by indexing package candidates once and giving computed kernel inventory a realistic bounded D-Bus response window.</p>
