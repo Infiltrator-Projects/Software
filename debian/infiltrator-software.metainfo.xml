@@ -34,6 +34,11 @@
   <url type="homepage">https://github.com/Infiltrator-Projects/Software</url>
 
   <releases>
+    <release version="0.3.67" date="2026-10-03">
+      <description>
+        <p>Restores a compact Updates hierarchy with aligned semantic badges, list-local selection controls and flatter update rows without changing the colour palette.</p>
+      </description>
+    </release>
     <release version="0.3.66" date="2026-10-03">
       <description>
         <p>Enforces the canonical three-face MB Corpo typography contract and removes synthetic condensed-bold rendering from Software UI roles.</p>

@@ -1,3 +1,19 @@
+infiltrator-software (0.3.67) unstable; urgency=high
+
+  * Rebuild update rows so Application/System type, Recommended/System-critical
+    and Security badges share one title baseline instead of being laid out in
+    different vertical coordinate systems.
+  * Collapse version and repository metadata into one compact secondary line and
+    flatten nested group/item boxes so the update list reads as one hierarchy.
+  * Move Select all, Security, Kernel and Clear beside the Available updates
+    heading, leaving the top action strip for status, refresh and installation.
+  * Tighten Updates-only hero, summary cards, section headers and row geometry
+    without changing the current InfiltratorOS colour palette.
+  * Add source-contract coverage for the update-row chip alignment and selection
+    toolbar placement to prevent the same layout regression returning.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Sat, 03 Oct 2026 18:20:00 +1000
+
 infiltrator-software (0.3.66) unstable; urgency=high
 
   * Enforce the canonical three-face MB Corpo typography contract throughout

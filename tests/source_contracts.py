@@ -139,6 +139,14 @@ ui_vision = Path("docs/UI_VISION.md").read_text()
 assert Path("docs/design/software-ui-target.jpg").is_file()
 assert "graphical" in ui_vision.lower()
 
+# Update-row hierarchy is structural: type/recommendation/security badges share
+# one title line, while selection filters belong to the update-list heading.
+assert 'gtk_box_append(\n        GTK_BOX(title_line), recommended);' in app
+assert 'gtk_box_append(GTK_BOX(row), recommended);' not in app
+assert '"update-recommendation-chip"' in app
+assert '"updates-selection-tools"' in app
+assert 'GtkWidget *meta_line =' in app
+
 assert "refresh_updates(state, true)" in app
 assert "engine.refresh(result->error)" in app
 assert "backend.refresh_metadata(result->error)" not in app
