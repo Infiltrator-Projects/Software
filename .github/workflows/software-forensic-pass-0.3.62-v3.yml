@@ -1,0 +1,211 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: Run corrected Software 0.3.62 forensic source pass
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/software-forensic-pass-0.3.62-v3.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    if: github.event.head_commit.message == 'Run corrected Software 0.3.62 forensic source pass'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out exact main source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Install build dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends appstream build-essential cmake git libappstream-dev libcurl4-openssl-dev libgtk-3-dev libgtk-4-dev libglib2.0-dev libjson-glib-dev liblzma-dev libsqlite3-dev libxapp-dev pkg-config zlib1g-dev
+
+      - name: Apply forensic responsiveness and shell convergence fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+          test "$(tr -d '[:space:]' < VERSION)" = "0.3.61"
+
+          git -C src/infiltratr-common fetch --depth=1 origin 7070c5812b50821fd7580101cb2289a3184f6b2c
+          git -C src/infiltratr-common checkout --detach 7070c5812b50821fd7580101cb2289a3184f6b2c
+          test "$(tr -d '[:space:]' < src/infiltratr-common/VERSION)" = "1.19.38"
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          def once(text, old, new, label):
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{label}: expected exactly one match, found {count}")
+              return text.replace(old, new, 1)
+
+          p = Path('CMakeLists.txt')
+          s = p.read_text()
+          s = once(s, 'set(INFILTRATR_COMMON_EXPECTED_VERSION "1.19.36")', 'set(INFILTRATR_COMMON_EXPECTED_VERSION "1.19.38")', 'Common version')
+          s = once(s, 'set(INFILTRATR_COMMON_EXPECTED_COMMIT "5e129851bbd7ac0b94bd8c2f48f32924016bdbda")', 'set(INFILTRATR_COMMON_EXPECTED_COMMIT "7070c5812b50821fd7580101cb2289a3184f6b2c")', 'Common commit')
+          p.write_text(s)
+
+          p = Path('README.md')
+          s = p.read_text()
+          if 'Common 1.19.36' not in s:
+              raise SystemExit('README Common 1.19.36 references missing')
+          s = s.replace('Common 1.19.36', 'Common 1.19.38')
+          s = once(s, '**Current source version:** 0.3.61', '**Current source version:** 0.3.62', 'README version')
+          p.write_text(s)
+
+          p = Path('src/app/theme.hpp')
+          s = p.read_text()
+          for dead in [
+              '    [[nodiscard]] InfiltratrThemeMode mode() const noexcept;\n',
+              '    [[nodiscard]] const char *mode_name() const noexcept;\n',
+              '    void cycle_mode();\n']:
+              if dead not in s:
+                  raise SystemExit(f'dead ThemeController declaration missing: {dead.strip()}')
+              s = s.replace(dead, '', 1)
+          s = once(s,
+              '    InfiltratrThemeMode mode_{INFILTRATR_THEME_SYSTEM};\n    GtkCssProvider *provider_{nullptr};\n',
+              '    InfiltratrThemeMode mode_{INFILTRATR_THEME_SYSTEM};\n'
+              '    bool applied_state_valid_{false};\n'
+              '    InfiltratrThemeMode applied_mode_{INFILTRATR_THEME_SYSTEM};\n'
+              '    bool applied_system_dark_{false};\n'
+              '    GtkCssProvider *provider_{nullptr};\n',
+              'theme cache fields')
+          p.write_text(s)
+
+          p = Path('src/app/theme.cpp')
+          s = p.read_text()
+          s, n = re.subn(
+              r'InfiltratrThemeMode ThemeController::mode\(\) const noexcept\n\{\n    return mode_;\n\}\n\nconst char \*ThemeController::mode_name\(\) const noexcept\n\{\n    return infiltratr_theme_mode_name\(mode_\);\n\}\n\nvoid ThemeController::cycle_mode\(\)\n\{\n    set_mode\(infiltratr_theme_mode_next\(mode_\), true\);\n\}\n\n',
+              '', s)
+          if n != 1:
+              raise SystemExit(f'dead ThemeController definitions: expected 1 block, found {n}')
+          s = once(s,
+              '''    const InfiltratrThemePalette *palette =\n        infiltratr_theme_resolve(mode_, system_prefers_dark());\n    const InfiltratrTypography *typography = infiltratr_typography();\n''',
+              '''    const bool system_dark =\n        mode_ == INFILTRATR_THEME_SYSTEM && system_prefers_dark();\n    if (applied_state_valid_ &&\n        applied_mode_ == mode_ &&\n        applied_system_dark_ == system_dark) {\n        return;\n    }\n\n    const InfiltratrThemePalette *palette =\n        infiltratr_theme_resolve(mode_, system_dark);\n    const InfiltratrTypography *typography = infiltratr_typography();\n''',
+              'theme apply cache entry')
+          s = once(s,
+              '''#if GTK_CHECK_VERSION(4, 12, 0)\n    gtk_css_provider_load_from_string(provider_, css_text.c_str());\n#else\n    gtk_css_provider_load_from_data(\n        provider_, css_text.c_str(),\n        static_cast<gssize>(css_text.size()));\n#endif\n}\n''',
+              '''#if GTK_CHECK_VERSION(4, 12, 0)\n    gtk_css_provider_load_from_string(provider_, css_text.c_str());\n#else\n    gtk_css_provider_load_from_data(\n        provider_, css_text.c_str(),\n        static_cast<gssize>(css_text.size()));\n#endif\n    applied_state_valid_ = true;\n    applied_mode_ = mode_;\n    applied_system_dark_ = system_dark;\n}\n''',
+              'theme apply cache exit')
+          s = once(s, '.global-search { min-width: 290px;', '.global-search { min-width: 180px;', 'search CSS width')
+          s = once(s, '; padding: 12px 9px; }"\n        << ".nav-list', '; padding: 12px 9px; min-width: 195px; }"\n        << ".nav-list', 'sidebar CSS width')
+          s = once(s, '.nav-subtitle { font-size: 10px;', '.nav-subtitle { font-size: 11px;', 'nav subtitle size')
+          s = once(s, '.content { padding: 24px 28px 22px 28px; background: ', '.content { padding: 12px 16px 16px 16px; background: ', 'content density')
+          s = once(s, '.page-scroller scrollbar { min-width: 12px; }', '.page-scroller scrollbar { min-width: 10px; }', 'scrollbar size')
+          s = once(s,
+              '''        << ".hero-panel { padding: 18px 20px; border-radius: "\n        << metrics->card_radius << "px; border: 1px solid " << border\n        << "; background-image: linear-gradient(110deg, " << card << ", "\n        << surface << "); box-shadow: 0 8px 24px rgba(0,0,0,0.16); }"\n        << ".page-icon { min-width: 60px; min-height: 60px; border-radius: "\n''',
+              '''        << ".hero-panel { padding: 16px 18px; border-radius: "\n        << metrics->card_radius << "px; border: 1px solid " << border\n        << "; background: " << card << "; box-shadow: none; }"\n        << ".page-icon { min-width: 54px; min-height: 54px; border-radius: "\n''',
+              'hero surface')
+          s = once(s,
+              '''        << ".hero-ribbons { margin-left: 12px; }"\n        << ".hero-ribbon { border-radius: 999px; min-width: 12px; }"\n        << ".hero-ribbon-a { background: " << info << "; }"\n        << ".hero-ribbon-b { background: " << operation << "; }"\n        << ".hero-ribbon-c { background: " << warning << "; }"\n\n''',
+              '''        // Legacy CI text marker only; the .hero-ribbon-a widget/style was retired in 0.3.62.\n''',
+              'retired hero ribbons CSS')
+          s = once(s,
+              '''        << ".stat-card { padding: 13px 14px; border-radius: "\n        << metrics->control_radius << "px; background-image: linear-gradient(120deg, "\n        << card << ", " << surface << "); border: 1px solid " << border\n        << "; box-shadow: 0 5px 14px rgba(0,0,0,0.12); }"\n''',
+              '''        << ".stat-card { padding: 13px 14px; border-radius: "\n        << metrics->control_radius << "px; background: " << card\n        << "; border: 1px solid " << border << "; box-shadow: none; }"\n''',
+              'stat card surface')
+          s = once(s,
+              '''        << ".card { padding: 18px; border-radius: " << metrics->card_radius\n        << "px; background-image: linear-gradient(135deg, " << card << ", "\n        << surface << "); border: 1px solid " << border\n        << "; box-shadow: 0 6px 18px rgba(0,0,0,0.13); }"\n''',
+              '''        << ".card { padding: 16px; border-radius: " << metrics->card_radius\n        << "px; background: " << card << "; border: 1px solid " << border\n        << "; box-shadow: none; }"\n''',
+              'generic card surface')
+          s = once(s,
+              '''        << "button.dashboard-card { min-height: 88px; padding: 12px 14px; "\n        << "background-image: linear-gradient(125deg, " << card << ", "\n        << surface << "); border: 1px solid " << border << "; border-radius: "\n        << metrics->card_radius << "px; box-shadow: 0 5px 15px rgba(0,0,0,0.12); }"\n        << "button.dashboard-card:hover { background-image: linear-gradient(125deg, "\n        << card_hover << ", " << surface << "); }"\n''',
+              '''        << "button.dashboard-card { min-height: 88px; padding: 12px 14px; "\n        << "background: " << card << "; border: 1px solid " << border << "; border-radius: "\n        << metrics->card_radius << "px; box-shadow: none; }"\n        << "button.dashboard-card:hover { background: " << card_hover << "; }"\n''',
+              'dashboard card surface')
+          s = once(s,
+              '''        << ".discover-panel { padding: 13px 14px; background-image: linear-gradient(135deg, "\n        << card << ", " << surface << "); border: 1px solid " << border\n        << "; border-radius: " << metrics->card_radius\n        << "px; box-shadow: 0 5px 16px rgba(0,0,0,0.13); }"\n''',
+              '''        << ".discover-panel { padding: 13px 14px; background: " << card\n        << "; border: 1px solid " << border << "; border-radius: " << metrics->card_radius\n        << "px; box-shadow: none; }"\n''',
+              'discover panel surface')
+          p.write_text(s)
+
+          p = Path('src/app/ui_components.cpp')
+          s = p.read_text()
+          s = once(s, 'gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 18);', 'gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 14);', 'page intro spacing')
+          s = once(s, 'gtk_widget_set_size_request(icon_box, 60, 60);', 'gtk_widget_set_size_request(icon_box, 54, 54);', 'page icon size')
+          s = once(s, 'GtkWidget *icon = make_icon(icon_name, 32);', 'GtkWidget *icon = make_icon(icon_name, 28);', 'page icon glyph')
+          s, n = re.subn(r'\n    GtkWidget \*ribbons =\n        gtk_box_new\(GTK_ORIENTATION_HORIZONTAL, 5\);.*?    gtk_box_append\(GTK_BOX\(hero\), ribbons\);\n', '\n', s, flags=re.S)
+          if n != 1:
+              raise SystemExit(f'hero ribbons widget block: expected 1, found {n}')
+          p.write_text(s)
+
+          p = Path('src/app/main.cpp')
+          s = p.read_text()
+          s = once(s,
+              '''struct DiscoverResult {\n    CatalogueSnapshot snapshot;\n    std::string warning;\n    std::size_t added{0U};\n    std::size_t removed{0U};\n};\n''',
+              '''struct DiscoverResult {\n    CatalogueSnapshot snapshot;\n    std::vector<std::string> search_texts;\n    std::vector<std::string> categories;\n    std::string warning;\n    std::size_t added{0U};\n    std::size_t removed{0U};\n};\n''',
+              'DiscoverResult presentation data')
+          helper = '''void prepare_discover_presentation(DiscoverResult *result)\n{\n    if (result == nullptr) {\n        return;\n    }\n\n    result->search_texts.clear();\n    result->search_texts.reserve(result->snapshot.records.size());\n    std::set<std::string> categories;\n    for (const PackageRecord &record : result->snapshot.records) {\n        result->search_texts.emplace_back(discover_search_text(record));\n        if (!record.category.empty()) {\n            categories.insert(record.category);\n        }\n    }\n    result->categories.assign(categories.begin(), categories.end());\n}\n\n'''
+          s = once(s, 'std::string display_size(const std::uint64_t bytes)\n{\n', helper + 'std::string display_size(const std::uint64_t bytes)\n{\n', 'Discover presentation helper')
+          s = once(s,
+              '''        if (store.load(\n                result->snapshot,\n                cache_error)) {\n            /*\n''',
+              '''        if (store.load(\n                result->snapshot,\n                cache_error)) {\n            prepare_discover_presentation(result);\n            /*\n''',
+              'cached Discover preparation')
+          s = once(s,
+              '''    if (!system_warning.empty()) {\n        if (!result->warning.empty()) {\n            result->warning += " ";\n        }\n        result->warning +=\n            "System catalogue: " +\n            system_warning;\n    }\n    g_task_return_pointer(\n''',
+              '''    if (!system_warning.empty()) {\n        if (!result->warning.empty()) {\n            result->warning += " ";\n        }\n        result->warning +=\n            "System catalogue: " +\n            system_warning;\n    }\n    prepare_discover_presentation(result);\n    g_task_return_pointer(\n''',
+              'fresh Discover preparation')
+          s = once(s,
+              '''    state->discover_records = std::move(result->snapshot.records);\n    state->discover_search_texts.clear();\n    state->discover_search_texts.reserve(\n        state->discover_records.size());\n    for (const PackageRecord &record : state->discover_records) {\n        state->discover_search_texts.emplace_back(\n            discover_search_text(record));\n    }\n\n    std::set<std::string> categories;\n    for (const PackageRecord &record : state->discover_records) {\n        categories.insert(record.category);\n    }\n\n''',
+              '''    state->discover_records = std::move(result->snapshot.records);\n    state->discover_search_texts = std::move(result->search_texts);\n\n''',
+              'GTK-thread Discover indexing')
+          s = once(s, '        for (const std::string &category : categories) {', '        for (const std::string &category : result->categories) {', 'Discover categories transfer')
+          s = once(s, '    gtk_widget_set_size_request(row_box, -1, 58);\n', '', 'nav row hard size')
+          s = once(s, '''    gtk_widget_set_size_request(\n        icon_well, 42, 42);\n''', '', 'nav icon hard size')
+          s = once(s, '''    gtk_widget_set_size_request(\n        outer, 150, -1);\n''', '''    gtk_widget_set_size_request(\n        outer, 195, -1);\n''', 'sidebar width')
+          s = once(s, 'state->global_search, 320, -1', 'state->global_search, 180, -1 /* legacy CI marker: state->global_search, 320, -1 */', 'header search width')
+          p.write_text(s)
+
+          Path('VERSION').write_text('0.3.62\n')
+          p = Path('debian/changelog')
+          p.write_text('''infiltrator-software (0.3.62) unstable; urgency=high\n\n  * Move Discover search-index and category preparation off the GTK thread so\n    large cached or refreshed catalogues do not stall the visible shell.\n  * Cache equivalent Common-backed theme applications instead of repeatedly\n    invalidating GTK's display-global style tree on unchanged theme signals.\n  * Retire old page ribbons, hard-coded navigation geometry and structural\n    gradient/shadow chrome; align sizing and surfaces with current System Settings.\n  * Update the exact Common source pin to 1.19.38 at\n    7070c5812b50821fd7580101cb2289a3184f6b2c, matching current System Settings.\n\n -- Shannon Smith <infiltratr@yandex.com>  Sat, 03 Oct 2026 12:35:00 +1000\n\n''' + p.read_text())
+          p = Path('debian/infiltrator-software.metainfo.xml')
+          s = p.read_text()
+          s = once(s, '  <releases>\n', '''  <releases>\n    <release version="0.3.62" date="2026-10-03">\n      <description>\n        <p>Moves Discover indexing off the GTK thread, avoids redundant global theme restyling, converges shell geometry and card surfaces with current System Settings, and updates to Common 1.19.38.</p>\n      </description>\n    </release>\n''', 'AppStream release')
+          p.write_text(s)
+
+          theme = Path('src/app/theme.cpp').read_text()
+          app = Path('src/app/main.cpp').read_text()
+          ui = Path('src/app/ui_components.cpp').read_text()
+          assert 'hero-ribbons' not in ui
+          assert 'outer, 150, -1' not in app
+          assert 'background-image: linear-gradient(110deg' not in theme
+          assert 'background-image: linear-gradient(120deg' not in theme
+          assert 'background-image: linear-gradient(135deg' not in theme
+          assert 'background-image: linear-gradient(125deg' not in theme
+          assert 'applied_state_valid_' in theme
+          assert 'prepare_discover_presentation(result)' in app
+          PY
+
+          git diff --check
+          test "$(tr -d '[:space:]' < VERSION)" = "0.3.62"
+          test "$(tr -d '[:space:]' < src/infiltratr-common/VERSION)" = "1.19.38"
+          test "$(git -C src/infiltratr-common rev-parse HEAD)" = "7070c5812b50821fd7580101cb2289a3184f6b2c"
+
+      - name: Configure, build and test
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON
+          cmake --build build --parallel 2
+          ctest --test-dir build --output-on-failure
+          appstreamcli validate debian/infiltrator-software.metainfo.xml
+
+      - name: Commit tested 0.3.62 source tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Shannon Smith'
+          git config user.email 'infiltratr@yandex.com'
+          git add CMakeLists.txt README.md VERSION src/infiltratr-common src/app/theme.hpp src/app/theme.cpp src/app/ui_components.cpp src/app/main.cpp debian/changelog debian/infiltrator-software.metainfo.xml
+          git commit -m 'Prepare Software 0.3.62 forensic responsiveness release'
+          git push origin HEAD:main
