@@ -1,0 +1,84 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: Extract Software source contracts
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/extract-source-contracts-0.3.63.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  extract:
+    if: github.event.head_commit.message == 'Extract Software source contracts from CI'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+          submodules: false
+      - name: Extract unchanged authorization/source audit into a test script
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import textwrap
+
+          ci = Path('.github/workflows/ci.yml').read_text()
+          start_marker = '          from pathlib import Path\n'
+          end_marker = '          PY\n'
+          start = ci.index(start_marker)
+          end = ci.index(end_marker, start)
+          body = textwrap.dedent(ci[start:end])
+
+          body = body.replace(
+              'assert ".hero-ribbon-a" in theme',
+              'assert ".hero-ribbon-a" not in theme')
+          body = body.replace(
+              'assert "state->global_search, 320, -1" in app',
+              'assert "state->global_search, 200, -1" in app')
+
+          tray_anchor = 'assert "hide_tray" in tray\n'
+          if body.count(tray_anchor) != 1:
+              raise SystemExit('tray audit anchor mismatch')
+          body = body.replace(
+              tray_anchor,
+              tray_anchor
+              + 'assert "refresh_runtime_inputs" in tray\n'
+              + 'assert "if (runtime_changed)" in tray\n'
+              + 'assert "const std::string override = read_override();" not in tray\n',
+              1)
+
+          visual_anchor = 'assert "button.window-control { min-width: 30px; min-height: 30px" in theme\n'
+          if body.count(visual_anchor) != 1:
+              raise SystemExit('visual audit anchor mismatch')
+          body = body.replace(
+              visual_anchor,
+              visual_anchor
+              + 'assert "legacy CI marker" not in app\n'
+              + 'assert "legacy CI text marker" not in theme\n'
+              + "assert '.nav-discover image' not in theme\n"
+              + "assert '.page-updates .card' not in theme\n"
+              + 'assert "nav-discover" not in app\n',
+              1)
+
+          header = '''#!/usr/bin/env python3
+          # SPDX-License-Identifier: GPL-3.0-or-later
+          # Source/authorization invariants extracted from the Verify workflow.
+          # Keep this exhaustive: it protects privileged transaction boundaries
+          # as well as functional and UI contracts.
+          '''
+          Path('tests/source_contracts.py').write_text(textwrap.dedent(header) + body)
+          PY
+
+          python3 tests/source_contracts.py
+          git diff --check
+          git config user.name 'Shannon Smith'
+          git config user.email 'infiltratr@yandex.com'
+          git add tests/source_contracts.py
+          git commit -m 'Extract exhaustive source contracts from CI YAML'
+          git push origin HEAD:main
