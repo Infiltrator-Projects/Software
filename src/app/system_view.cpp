@@ -41,7 +41,8 @@ GtkWidget *make_transaction_confirmation_dialog(
     GtkWindow *parent,
     const char *title,
     const std::string &heading,
-    const char *accept_label);
+    const char *accept_label,
+    const TransactionPlan &plan);
 
 struct SystemResult {
     unsigned int generation{0U};
