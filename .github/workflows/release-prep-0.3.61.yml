@@ -1,0 +1,83 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: Prepare Software 0.3.61 release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/release-prep-0.3.61.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    if: github.event.head_commit.message == 'Prepare Software 0.3.61 release'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out exact main commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+          submodules: false
+
+      - name: Prepare immutable 0.3.61 release commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+          test "$(tr -d '[:space:]' < VERSION)" = "0.3.60"
+          test "$(dpkg-parsechangelog -S Version)" = "0.3.60"
+          ! grep -q 'release version="0.3.61"' debian/infiltrator-software.metainfo.xml
+
+          cat > /tmp/changelog-head <<'EOF'
+          infiltrator-software (0.3.61) unstable; urgency=high
+
+            * Remove the final retired GUI compatibility-planner state and messaging so
+              transaction review has one native package-engine path.
+            * Remove dead titlebar state and use Common 1.19.36 helpers for system-theme
+              matching instead of retaining a local case-folding implementation.
+            * Align the Software shell with the current InfiltratorOS/System Settings
+              standard: Common-driven solid header/sidebar surfaces, standard navigation
+              spacing/icon wells, neutral selected borders and no legacy gradient/shadow.
+            * Add CI guards that reject reintroduction of the retired planner/UI paths and
+              confirm the exact latest Common 1.19.36 pin.
+
+           -- Shannon Smith <infiltratr@yandex.com>  Sat, 03 Oct 2026 11:34:00 +1000
+
+          EOF
+          cat debian/changelog >> /tmp/changelog-head
+          mv /tmp/changelog-head debian/changelog
+
+          printf '0.3.61\n' > VERSION
+          sed -i 's/\*\*Current source version:\*\* 0\.3\.60/**Current source version:** 0.3.61/' README.md
+          grep -q '\*\*Current source version:\*\* 0\.3\.61' README.md
+
+          awk '
+            /^  <releases>$/ && !done {
+              print
+              print "    <release version=\"0.3.61\" date=\"2026-10-03\">"
+              print "      <description>"
+              print "        <p>Removes final compatibility-planner UI residue, aligns the shell with the current InfiltratorOS standard and verifies the latest Common 1.19.36 integration.</p>"
+              print "      </description>"
+              print "    </release>"
+              done=1
+              next
+            }
+            { print }
+          ' debian/infiltrator-software.metainfo.xml > /tmp/metainfo.xml
+          test "$(grep -c 'release version=\"0.3.61\"' /tmp/metainfo.xml)" -eq 1
+          mv /tmp/metainfo.xml debian/infiltrator-software.metainfo.xml
+
+          rm .github/workflows/release-prep-0.3.61.yml
+
+          test "$(dpkg-parsechangelog -S Version)" = "0.3.61"
+          appstreamcli validate debian/infiltrator-software.metainfo.xml
+          git diff --check
+
+          git config user.name 'Shannon Smith'
+          git config user.email 'infiltratr@yandex.com'
+          git add VERSION README.md debian/changelog debian/infiltrator-software.metainfo.xml .github/workflows/release-prep-0.3.61.yml
+          git commit -m 'Release 0.3.61: align shell and retire final UI residue'
+          git push origin HEAD:main
