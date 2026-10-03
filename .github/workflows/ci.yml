@@ -520,7 +520,7 @@ jobs:
           assert "nav-chevron" not in app
           assert ".nav-badge" in theme
           assert "button.sidebar-settings" in theme
-          assert "#2f67ff" in theme
+          assert '<< ".nav-row:hover { background: " << surface_hover' in theme
 
           # Sixth visual pass: Discover now follows the target's dashboard
           # composition with featured cards, a right rail and health banner.
