@@ -1,0 +1,224 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: One-shot Details alignment correction
+
+on:
+  push:
+    branches: [fix/details-alignment-0.3.68]
+
+permissions:
+  contents: write
+
+jobs:
+  patch-test-commit:
+    if: ${{ !contains(github.event.head_commit.message, '[details-align-applied]') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Check out branch and Common
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Align Details with update title badges
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(text: str, old: str, new: str, label: str) -> str:
+              if old not in text:
+                  raise SystemExit(f"missing patch anchor: {label}")
+              return text.replace(old, new, 1)
+
+          app_path = Path("src/app/main.cpp")
+          app = app_path.read_text()
+
+          old_title_tail = '''    if (package.security_update) {
+        GtkWidget *security =
+            make_label(
+                "SECURITY",
+                "update-security-chip");
+        gtk_box_append(
+            GTK_BOX(title_line),
+            security);
+    }
+    gtk_box_append(GTK_BOX(identity), title_line);
+'''
+          new_title_tail = '''    if (package.security_update) {
+        GtkWidget *security =
+            make_label(
+                "SECURITY",
+                "update-security-chip");
+        gtk_box_append(
+            GTK_BOX(title_line),
+            security);
+    }
+
+    GtkWidget *details =
+        gtk_button_new_with_label("Details");
+    gtk_widget_add_css_class(
+        details, "update-details-button");
+    gtk_widget_set_valign(
+        details, GTK_ALIGN_CENTER);
+    auto *package_copy =
+        new PackageRecord(package);
+    g_object_set_data_full(
+        G_OBJECT(details),
+        "update-package",
+        package_copy,
+        package_record_destroy);
+    g_signal_connect(
+        details,
+        "clicked",
+        G_CALLBACK(update_details_clicked),
+        state);
+    gtk_box_append(GTK_BOX(title_line), details);
+
+    gtk_box_append(GTK_BOX(identity), title_line);
+'''
+          app = replace_once(
+              app,
+              old_title_tail,
+              new_title_tail,
+              "title-line Details placement")
+
+          old_outer_details = '''    gtk_box_append(GTK_BOX(identity), meta_line);
+    gtk_box_append(GTK_BOX(row), identity);
+
+    GtkWidget *details =
+        gtk_button_new_with_label("Details");
+    gtk_widget_add_css_class(
+        details, "update-details-button");
+    gtk_widget_set_valign(
+        details, GTK_ALIGN_CENTER);
+    auto *package_copy =
+        new PackageRecord(package);
+    g_object_set_data_full(
+        G_OBJECT(details),
+        "update-package",
+        package_copy,
+        package_record_destroy);
+    g_signal_connect(
+        details,
+        "clicked",
+        G_CALLBACK(update_details_clicked),
+        state);
+    gtk_box_append(GTK_BOX(row), details);
+
+    return row;
+'''
+          new_outer_details = '''    gtk_box_append(GTK_BOX(identity), meta_line);
+    gtk_box_append(GTK_BOX(row), identity);
+
+    return row;
+'''
+          app = replace_once(
+              app,
+              old_outer_details,
+              new_outer_details,
+              "remove outer-row Details placement")
+          app_path.write_text(app)
+
+          contracts_path = Path("tests/source_contracts.py")
+          contracts = contracts_path.read_text()
+          contracts = replace_once(
+              contracts,
+              'assert \'GtkWidget *meta_line =\' in app\n',
+              'assert \'GtkWidget *meta_line =\' in app\n'
+              'assert \'gtk_box_append(GTK_BOX(title_line), details);\' in app\n'
+              'assert \'gtk_box_append(GTK_BOX(row), details);\' not in app\n',
+              "Details baseline source contract")
+          contracts_path.write_text(contracts)
+
+          version_path = Path("VERSION")
+          version = version_path.read_text()
+          version = replace_once(version, "0.3.67\n", "0.3.68\n", "VERSION")
+          version_path.write_text(version)
+
+          readme_path = Path("README.md")
+          readme = readme_path.read_text()
+          readme = replace_once(
+              readme,
+              "**Current source version:** 0.3.67<br>",
+              "**Current source version:** 0.3.68<br>",
+              "README version")
+          readme_path.write_text(readme)
+
+          changelog_path = Path("debian/changelog")
+          changelog = changelog_path.read_text()
+          changelog_entry = '''infiltrator-software (0.3.68) unstable; urgency=high
+
+  * Place the Details action on the same title baseline as the package type,
+    Recommended/System-critical and Security badges instead of centring it
+    against the full two-line update row.
+  * Preserve version and repository metadata on the compact secondary line and
+    add a source-contract guard so Details cannot drift back to the outer row.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Sat, 03 Oct 2026 19:25:00 +1000
+
+'''
+          changelog_path.write_text(changelog_entry + changelog)
+
+          meta_path = Path("debian/infiltrator-software.metainfo.xml")
+          meta = meta_path.read_text()
+          release_anchor = '''  <releases>
+    <release version="0.3.67" date="2026-10-03">
+'''
+          release_insert = '''  <releases>
+    <release version="0.3.68" date="2026-10-03">
+      <description>
+        <p>Aligns the Details action with the update-row title badges while keeping version and repository metadata on the compact secondary line.</p>
+      </description>
+    </release>
+    <release version="0.3.67" date="2026-10-03">
+'''
+          meta = replace_once(
+              meta,
+              release_anchor,
+              release_insert,
+              "AppStream release")
+          meta_path.write_text(meta)
+          PY
+
+      - name: Install build dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends appstream build-essential cmake debhelper dpkg-dev dbus-daemon gdb git gpgv libappstream-dev libcurl4-openssl-dev libgtk-3-dev libgtk-4-dev libglib2.0-dev libjson-glib-dev liblzma-dev libsqlite3-dev libxapp-dev pkg-config xvfb zlib1g-dev
+
+      - name: Configure, build and test
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --parallel 2
+          ctest --test-dir build --output-on-failure
+          python3 tests/source_contracts.py
+          appstreamcli validate debian/infiltrator-software.metainfo.xml
+
+      - name: Graphical Updates launch smoke test
+        shell: bash
+        run: |
+          set -uo pipefail
+          set +e
+          timeout 12s xvfb-run -a ./build/infiltrator-software --updates >launch.out 2>launch.err
+          status=$?
+          set -e
+          cat launch.out || true
+          cat launch.err || true
+          if [[ "$status" -ne 124 ]]; then
+            echo "Software exited unexpectedly during Updates launch smoke test: $status" >&2
+            exit "$status"
+          fi
+
+      - name: Commit tested alignment correction
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/one-shot-details-align.yml
+          git config user.name "Shannon Smith"
+          git config user.email "infiltratr@yandex.com"
+          git add src/app/main.cpp tests/source_contracts.py VERSION README.md debian/changelog debian/infiltrator-software.metainfo.xml .github/workflows/one-shot-details-align.yml
+          git diff --cached --check
+          git commit -m "Release 0.3.68: align update Details action [details-align-applied]"
+          git push origin HEAD:fix/details-alignment-0.3.68
