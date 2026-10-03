@@ -378,7 +378,7 @@ void ThemeController::apply()
         << ".settings-subtitle { font-size: 10px; color: " << summary << "; }"
         << ".settings-chevron { font-size: 22px; color: " << detail_label << "; }"
         << ".preferences-page { background: " << background << "; }"
-        << ".preferences-title { font-family: \"" << typography->brand_family
+        << ".preferences-title { font-family: \"" << typography->ui_family
         << "\"; font-size: 22px; font-weight: " << typography->ui_bold_weight
         << "; color: " << heading << "; }"
         << ".preferences-copy { font-size: 11px; color: " << note << "; }"
@@ -434,7 +434,7 @@ void ThemeController::apply()
         << "px; background: " << card << "; border: 1px solid " << border
         << "; box-shadow: none; }"
         << ".card-info { border-color: " << info << "; }"
-        << ".card-title { font-family: \"" << typography->brand_family
+        << ".card-title { font-family: \"" << typography->ui_family
         << "\"; font-size: 16px; font-weight: " << typography->ui_bold_weight
         << "; color: " << heading << "; }"
         << ".card-copy { font-size: 12px; color: " << note << "; }"
@@ -481,7 +481,7 @@ void ThemeController::apply()
         << panel << "; border: 1px solid " << status_border << "; }"
         << ".dashboard-card-title { font-size: 11px; font-weight: "
         << typography->ui_bold_weight << "; color: " << text << "; }"
-        << ".dashboard-card-value { font-family: \"" << typography->brand_family
+        << ".dashboard-card-value { font-family: \"" << typography->ui_family
         << "\"; font-size: 20px; font-weight: " << typography->ui_bold_weight
         << "; color: " << heading << "; }"
         << ".dashboard-card-note { font-size: 9px; color: " << summary << "; }"
@@ -565,7 +565,7 @@ void ThemeController::apply()
         << ".discover-status { font-size: 11px; color: " << summary << "; }"
         << ".catalogue-section-heading { margin-top: 2px; padding: 2px 3px; }"
         << ".catalogue-section-icon { color: " << info << "; }"
-        << ".catalogue-section-title { font-family: \"" << typography->brand_family
+        << ".catalogue-section-title { font-family: \"" << typography->ui_family
         << "\"; font-size: 18px; font-weight: " << typography->ui_bold_weight
         << "; color: " << heading << "; }"
         << ".catalogue-section-note { font-size: 10px; color: " << summary << "; }"
@@ -608,7 +608,7 @@ void ThemeController::apply()
         << metrics->card_radius << "px; }"
         << ".source-card:hover { background: " << card_hover << "; }"
         << ".source-icon { color: " << operation << "; }"
-        << ".source-name { font-family: \"" << typography->brand_family
+        << ".source-name { font-family: \"" << typography->ui_family
         << "\"; font-size: 16px; font-weight: "
         << typography->ui_bold_weight << "; color: " << heading << "; }"
         << ".source-meta { font-size: 11px; font-weight: "
@@ -695,7 +695,7 @@ void ThemeController::apply()
         << "background: " << card << "; border: 1px solid " << warning_border
         << "; border-radius: " << metrics->small_radius << "px; }"
         << ".update-group-icon-well image { color: " << warning << "; }"
-        << ".update-group-title { font-family: \"" << typography->brand_family
+        << ".update-group-title { font-family: \"" << typography->ui_family
         << "\"; font-size: 15px; font-weight: " << typography->ui_bold_weight
         << "; color: " << heading << "; }"
         << ".update-group-subtitle { font-size: 10px; color: " << summary << "; }"
@@ -711,7 +711,7 @@ void ThemeController::apply()
         << ".update-icon-well { background: " << surface
         << "; border: 1px solid " << status_border << "; border-radius: "
         << metrics->small_radius << "px; }"
-        << ".update-name { font-family: \"" << typography->brand_family
+        << ".update-name { font-family: \"" << typography->ui_family
         << "\"; font-size: 14px; font-weight: " << typography->ui_bold_weight
         << "; color: " << heading << "; }"
         << ".update-security-chip { padding: 3px 7px; border-radius: 7px; "
@@ -771,7 +771,7 @@ void ThemeController::apply()
         << success << "; }"
         << ".repair-overview-attention .repair-overview-icon-well image { color: "
         << fault << "; }"
-        << ".repair-overview-title { font-family: \"" << typography->brand_family
+        << ".repair-overview-title { font-family: \"" << typography->ui_family
         << "\"; font-size: 21px; font-weight: " << typography->ui_bold_weight
         << "; color: " << heading << "; }"
         << ".repair-overview-copy { font-size: 11px; color: " << note << "; }"

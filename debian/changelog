@@ -1,3 +1,15 @@
+infiltrator-software (0.3.66) unstable; urgency=high
+
+  * Enforce the canonical three-face MB Corpo typography contract throughout
+    Software: MB Corpo S regular/bold for UI text and emphasis, with MB Corpo A
+    Cond regular reserved for its real 400-weight display role.
+  * Stop requesting synthetic 700-weight MB Corpo A Cond text for preferences,
+    cards, dashboard values, catalogue/source headings and update rows.
+  * Add source-contract coverage that rejects future condensed-bold regressions
+    and keeps every bold UI role on the shipped MB Corpo S bold face.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Sat, 03 Oct 2026 16:55:00 +1000
+
 infiltrator-software (0.3.65) unstable; urgency=high
 
   * Construct Installed, Updates, System, Repositories, History and Repair

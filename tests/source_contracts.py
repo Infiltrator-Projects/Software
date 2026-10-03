@@ -449,6 +449,26 @@ assert len(decoded_logo) > 5000
 assert "titlebar-mark-bar" not in app
 assert ".titlebar-mark-bar" not in theme
 
+# Typography is strict: Software packages only the three canonical MB Corpo
+# faces. MB Corpo A Cond is a 400-weight display face; all regular/bold UI roles
+# use the real MB Corpo S regular/bold faces instead of synthetic font weights.
+assert theme.count("typography->brand_family") == 3
+assert theme.count("typography->brand_weight") == 2
+for selector in (".hero-title", ".discover-name"):
+    start = theme.index(f'<< "{selector} {{ font-family:')
+    assert "typography->brand_family" in theme[start:start + 140]
+for selector in (
+    ".preferences-title",
+    ".card-title",
+    ".dashboard-card-value",
+    ".catalogue-section-title",
+    ".source-name",
+    ".update-group-title",
+    ".update-name",
+):
+    start = theme.index(f'<< "{selector} {{ font-family:')
+    assert "typography->ui_family" in theme[start:start + 140]
+
 # Sidebar convergence: semantic icons and Common-driven selection,
 # real update badge and an actual Preferences entry.
 assert '"go-home-symbolic"' in app

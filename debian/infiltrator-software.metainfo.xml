@@ -34,6 +34,11 @@
   <url type="homepage">https://github.com/Infiltrator-Projects/Software</url>
 
   <releases>
+    <release version="0.3.66" date="2026-10-03">
+      <description>
+        <p>Enforces the canonical three-face MB Corpo typography contract and removes synthetic condensed-bold rendering from Software UI roles.</p>
+      </description>
+    </release>
     <release version="0.3.65" date="2026-10-03">
       <description>
         <p>Lazily constructs inactive pages, scopes update refresh timing to the Updates page and aligns page transitions with the current InfiltratorOS shell cadence.</p>
