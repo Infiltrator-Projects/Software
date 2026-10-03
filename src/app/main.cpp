@@ -356,8 +356,7 @@ GtkWidget *make_transaction_confirmation_dialog(
     const char *title,
     const std::string &heading,
     const char *accept_label,
-    const TransactionPlan &plan,
-    const bool from_engine)
+    const TransactionPlan &plan)
 {
     GtkWidget *dialog = gtk_dialog_new_with_buttons(
         title,
@@ -388,25 +387,17 @@ GtkWidget *make_transaction_confirmation_dialog(
                     ? " package change."
                     : " package changes.");
     if (plan.download_bytes > 0U) {
-        summary << "  Download: " << display_size(plan.download_bytes) << ".";
-    } else if (!from_engine) {
-        summary << "  Download size: not reported by the compatibility planner.";
-    }
-    if (plan.disk_delta_bytes != 0) {
-        summary << "  Disk change: "
-                << display_disk_delta(plan.disk_delta_bytes) << ".";
-    } else if (!from_engine) {
-        summary << "  Disk change: not reported by the compatibility planner.";
-    }
-    if (plan.touches_system) {
-        summary << "\nThis transaction includes system-critical components.";
-    }
-    if (from_engine) {
-        summary << "\nResolved by the native package engine against state "
-                << "generation " << plan.state_generation << ".";
-    } else {
-        summary << "\nResolved by the transitional APT compatibility planner.";
-    }
+    summary << "  Download: " << display_size(plan.download_bytes) << ".";
+}
+if (plan.disk_delta_bytes != 0) {
+    summary << "  Disk change: "
+            << display_disk_delta(plan.disk_delta_bytes) << ".";
+}
+if (plan.touches_system) {
+    summary << "\nThis transaction includes system-critical components.";
+}
+summary << "\nResolved by the native package engine against state "
+        << "generation " << plan.state_generation << ".";
 
     GtkWidget *summary_label =
         make_label(summary.str().c_str(), "detail-note");
@@ -3624,7 +3615,6 @@ struct DiscoverPlanTaskData {
 struct DiscoverPlanResult {
     std::optional<TransactionPlan> plan;
     std::string error;
-    bool from_engine{false};
 };
 
 struct DiscoverInstallOperation {
@@ -3697,7 +3687,6 @@ void discover_plan_worker(
                 }
             }
         }
-        result->from_engine = result->plan.has_value();
     }
 
     g_task_return_pointer(
@@ -4048,8 +4037,7 @@ void discover_plan_complete(
                 ? "Remove"
                 : task_data->action == TransactionAction::upgrade
                     ? "Update" : "Install",
-            plan,
-            true);
+            plan);
     g_signal_connect(
         dialog, "response",
         G_CALLBACK(discover_install_confirm_response),
@@ -7100,8 +7088,7 @@ void update_plan_complete(
             "Review updates",
             heading.str(),
             "Install updates",
-            plan,
-            true);
+            plan);
     g_signal_connect(
         dialog, "response",
         G_CALLBACK(update_confirm_response), state);
@@ -8196,6 +8183,7 @@ GtkWidget *make_header_bar(WindowState *state)
     GtkWidget *bar = gtk_header_bar_new();
     gtk_widget_add_css_class(
         bar, "infiltrator-titlebar");
+    gtk_widget_add_css_class(bar, "shell-header");
     gtk_header_bar_set_show_title_buttons(
         GTK_HEADER_BAR(bar), false);
 
@@ -8581,6 +8569,7 @@ void activate(GtkApplication *application, gpointer)
     gtk_window_set_titlebar(GTK_WINDOW(window), header);
 
     GtkWidget *root = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    gtk_widget_add_css_class(root, "app-shell");
     gtk_window_set_child(GTK_WINDOW(window), root);
 
     GtkWidget *body = gtk_grid_new();

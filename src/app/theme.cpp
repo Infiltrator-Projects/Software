@@ -2,6 +2,7 @@
 #include "app/theme.hpp"
 
 #include <infiltratr/config.h>
+#include <infiltratr/core.h>
 #include <infiltratr/posix.h>
 
 #include <cstdio>
@@ -238,11 +239,8 @@ bool ThemeController::system_prefers_dark() const
 
     bool dark = prefer_dark != FALSE;
     if (theme_name != nullptr) {
-        gchar *lower = g_ascii_strdown(theme_name, -1);
         dark = dark ||
-               (lower != nullptr &&
-                std::strstr(lower, "dark") != nullptr);
-        g_free(lower);
+               infiltratr_ascii_contains_ci(theme_name, "dark");
         g_free(theme_name);
     }
     return dark;
@@ -283,8 +281,8 @@ void ThemeController::apply()
     const std::string info = colour(palette->info_rgb);
     const std::string operation = colour(palette->operation_rgb);
     const std::string card_hover = colour(palette->card_hover_rgb);
+    const std::string surface_hover = colour(palette->surface_hover_rgb);
     const std::string operation_hover = colour(palette->operation_hover_rgb);
-    const std::string titlebar = colour(palette->titlebar_rgb);
     const std::string connection = colour(palette->connection_rgb);
     const std::string connection_border = colour(palette->connection_border_rgb);
     const std::string heading = colour(palette->heading_rgb);
@@ -308,7 +306,7 @@ void ThemeController::apply()
         << "; color: " << text << "; }"
 
         << "headerbar.infiltrator-titlebar { min-height: 58px; "
-        << "background-image: linear-gradient(to right, #06131f, #08263a); "
+        << "background: " << panel << "; "
         << "color: " << text << "; border-bottom: 1px solid " << border
         << "; padding: 6px 10px; }"
         << ".titlebar-brand { padding: 2px 4px; }"
@@ -339,27 +337,23 @@ void ThemeController::apply()
         << "headerbar.infiltrator-titlebar button.window-close-control:hover image { color: "
         << accent_fg << "; }"
 
-        << ".sidebar { background-image: linear-gradient(180deg, "
-        << panel << ", " << titlebar << "); border-right: 1px solid "
-        << border << "; }"
+        << ".sidebar { background: " << panel
+        << "; border-right: 1px solid " << border
+        << "; padding: 12px 9px; }"
         << ".nav-list { background: transparent; }"
-        << ".nav-row { margin: 4px 0; padding: 5px 7px; "
+        << ".nav-row { min-height: 50px; margin: 2px 4px; padding: 7px 9px; "
         << "border: 1px solid transparent; border-radius: 12px; }"
-        << ".nav-row:hover { background: " << card_hover << "; }"
-        << ".nav-row:selected { background-image: linear-gradient(105deg, "
-        << "#2f67ff, #5137d8); border-color: #6f6dff; "
-        << "box-shadow: 0 7px 18px rgba(20,32,95,0.34); }"
-        << ".nav-icon-well { min-width: 42px; min-height: 42px; "
-        << "background: transparent; border: 1px solid transparent; "
-        << "border-radius: 10px; }"
-        << ".nav-row:selected .nav-icon-well { "
-        << "background: rgba(255,255,255,0.13); "
-        << "border-color: rgba(255,255,255,0.12); }"
+        << ".nav-row:hover { background: " << surface_hover << "; }"
+        << ".nav-row:selected { background: " << select_bg
+        << "; border-color: " << neutral << "; box-shadow: none; }"
+        << ".nav-icon-well { min-width: 38px; min-height: 38px; "
+        << "background: " << surface << "; border: 1px solid " << border
+        << "; border-radius: 11px; padding: 5px; }"
         << ".nav-label { font-size: 14px; font-weight: "
         << typography->ui_bold_weight << "; color: " << text << "; }"
         << ".nav-subtitle { font-size: 10px; color: " << summary << "; }"
-        << ".nav-row:selected .nav-label { color: #ffffff; }"
-        << ".nav-row:selected .nav-subtitle { color: rgba(255,255,255,0.82); }"
+        << ".nav-row:selected .nav-label, .nav-row:selected .nav-subtitle { color: "
+        << accent_fg << "; }"
         << ".nav-row image { opacity: 1; }"
         << ".nav-discover image { color: #55a8ff; }"
         << ".nav-installed image { color: #55e58b; }"
@@ -368,7 +362,7 @@ void ThemeController::apply()
         << ".nav-repositories image { color: #50e58a; }"
         << ".nav-history image { color: #45a8ff; }"
         << ".nav-repair image { color: #ff6572; }"
-        << ".nav-row:selected image { color: #ffffff; }"
+        << ".nav-row:selected image { color: " << accent_fg << "; }"
         << ".nav-badge { min-width: 24px; min-height: 24px; padding: 0 7px; "
         << "border-radius: 999px; background: #ff4758; color: #ffffff; "
         << "font-size: 10px; font-weight: " << typography->ui_bold_weight

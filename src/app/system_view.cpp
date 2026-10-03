@@ -41,9 +41,7 @@ GtkWidget *make_transaction_confirmation_dialog(
     GtkWindow *parent,
     const char *title,
     const std::string &heading,
-    const char *accept_label,
-    const TransactionPlan &plan,
-    bool from_engine);
+    const char *accept_label);
 
 struct SystemResult {
     unsigned int generation{0U};
@@ -901,8 +899,7 @@ void release_upgrade_plan_complete(
             "Review operating-system upgrade",
             heading,
             "Upgrade release",
-            result->plan,
-            true);
+            result->plan);
     G_GNUC_BEGIN_IGNORE_DEPRECATIONS
     GtkWidget *content =
         gtk_dialog_get_content_area(GTK_DIALOG(dialog));

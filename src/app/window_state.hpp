@@ -24,7 +24,6 @@ struct WindowState {
     GtkWindow *window{};
     GtkStack *stack{};
     ThemeController theme;
-    GtkWidget *theme_button{};
     GtkWidget *maximize_button{};
     GtkWidget *global_search{};
     bool search_syncing{false};
