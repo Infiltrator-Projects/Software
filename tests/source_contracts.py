@@ -146,6 +146,8 @@ assert 'gtk_box_append(GTK_BOX(row), recommended);' not in app
 assert '"update-recommendation-chip"' in app
 assert '"updates-selection-tools"' in app
 assert 'GtkWidget *meta_line =' in app
+assert 'gtk_box_append(GTK_BOX(title_line), details);' in app
+assert 'gtk_box_append(GTK_BOX(row), details);' not in app
 
 assert "refresh_updates(state, true)" in app
 assert "engine.refresh(result->error)" in app
