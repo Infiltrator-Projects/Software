@@ -339,8 +339,14 @@ void ThemeController::apply()
         << "border: 1px solid transparent; border-radius: "
         << metrics->card_radius << "px; }"
         << ".nav-row:hover { background: " << surface_hover << "; }"
-        << ".nav-row:selected { background: " << select_bg
-        << "; border-color: " << neutral << "; box-shadow: none; }"
+        /*
+         * Use the Common selection pair explicitly and out-rank desktop-theme
+         * GtkListBoxRow defaults.  Older Mint/GTK themes can otherwise paint a
+         * selected row near-black even while Software is using the day palette.
+         */
+        << ".nav-list row.nav-row:selected { background-color: " << select_bg
+        << "; color: " << select_fg << "; border-color: " << neutral
+        << "; box-shadow: none; }"
         << ".nav-icon-well { min-width: 38px; min-height: 38px; "
         << "background: " << surface << "; border: 1px solid " << border
         << "; border-radius: " << metrics->control_radius
@@ -348,10 +354,11 @@ void ThemeController::apply()
         << ".nav-label { font-size: 14px; font-weight: "
         << typography->ui_bold_weight << "; color: " << text << "; }"
         << ".nav-subtitle { font-size: 11px; color: " << summary << "; }"
-        << ".nav-row:selected .nav-label, .nav-row:selected .nav-subtitle { color: "
-        << accent_fg << "; }"
+        << ".nav-list row.nav-row:selected .nav-label, "
+        << ".nav-list row.nav-row:selected .nav-subtitle { color: "
+        << select_fg << "; }"
         << ".nav-row image { opacity: 1; color: " << neutral << "; }"
-        << ".nav-row:selected image { color: " << accent_fg << "; }"
+        << ".nav-list row.nav-row:selected image { color: " << select_fg << "; }"
         << ".nav-badge { min-width: 24px; min-height: 24px; padding: 0 7px; "
         << "border-radius: 999px; background: " << fault << "; color: "
         << accent_fg << "; font-size: 10px; font-weight: "

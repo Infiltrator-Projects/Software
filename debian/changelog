@@ -7,6 +7,9 @@ infiltrator-software (0.3.65) unstable; urgency=high
     installing a lifetime wake-up source on every Software launch.
   * Restore the current InfiltratorOS 110 ms page crossfade now that page
     construction precedes visibility and backend refresh starts from idle.
+  * Force sidebar selection through Common's selection background/foreground
+    pair with application-level row specificity, preventing desktop GTK themes
+    from painting selected navigation rows black in day mode.
   * Re-verify the suite-current Common 1.19.38 pin at
     7070c5812b50821fd7580101cb2289a3184f6b2c against System Settings 0.4.54.
 
