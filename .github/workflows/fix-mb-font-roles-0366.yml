@@ -1,0 +1,108 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: Fix Software 0.3.66 MB typography roles
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/fix-mb-font-roles-0366.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.event.head_commit.message == 'Stage Software 0.3.66 MB typography fix'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+          submodules: false
+
+      - name: Enforce canonical MB Corpo font roles and release 0.3.66
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          # Software ships exactly three canonical MB Corpo faces.  Keep every
+          # requested weight mapped to a real shipped face: UI regular/bold use
+          # MB Corpo S, while the condensed MB Corpo A face is regular-only.
+          theme_path = Path('src/app/theme.cpp')
+          theme = theme_path.read_text()
+
+          selectors = (
+              '.preferences-title',
+              '.card-title',
+              '.dashboard-card-value',
+              '.catalogue-section-title',
+              '.source-name',
+              '.update-group-title',
+              '.update-name',
+          )
+          for selector in selectors:
+              old = f'<< "{selector} {{ font-family: \\\"" << typography->brand_family'
+              new = f'<< "{selector} {{ font-family: \\\"" << typography->ui_family'
+              if old not in theme:
+                  raise SystemExit(f'missing typography selector anchor: {selector}')
+              theme = theme.replace(old, new, 1)
+
+          # The condensed family is now reserved for its real 400-weight display
+          # role only.  No synthetic 700-weight condensed face is requested.
+          if theme.count('typography->brand_family') != 3:
+              raise SystemExit('unexpected MB Corpo A use remains in theme.cpp')
+          if theme.count('typography->brand_weight') != 2:
+              raise SystemExit('unexpected MB Corpo A weight use remains in theme.cpp')
+          theme_path.write_text(theme)
+
+          contracts_path = Path('tests/source_contracts.py')
+          contracts = contracts_path.read_text()
+          anchor = '''assert "titlebar-mark-bar" not in app\nassert ".titlebar-mark-bar" not in theme\n'''
+          insert = anchor + '''\n# Typography is strict: Software packages only the three canonical MB Corpo\n# faces.  The condensed MB Corpo A face exists only at weight 400, so section\n# headings that need 700 must use the real MB Corpo S bold face instead of\n# asking GTK/Pango to synthesize a nonexistent condensed bold face.\nassert theme.count("typography->brand_family") == 3\nassert theme.count("typography->brand_weight") == 2\nassert '<< ".hero-title { font-family: \\\\"" << typography->brand_family' in theme\nassert '<< ".discover-name { font-family: \\\\"" << typography->brand_family' in theme\nfor selector in (\n    ".preferences-title",\n    ".card-title",\n    ".dashboard-card-value",\n    ".catalogue-section-title",\n    ".source-name",\n    ".update-group-title",\n    ".update-name",\n):\n    assert f'<< "{selector} {{ font-family: \\\\"" << typography->ui_family' in theme\n'''
+          if anchor not in contracts:
+              raise SystemExit('source-contract typography insertion anchor missing')
+          contracts = contracts.replace(anchor, insert, 1)
+          contracts_path.write_text(contracts)
+
+          version_path = Path('VERSION')
+          if version_path.read_text().strip() != '0.3.65':
+              raise SystemExit('unexpected current Software version')
+          version_path.write_text('0.3.66\n')
+
+          readme_path = Path('README.md')
+          readme = readme_path.read_text()
+          old = '**Current source version:** 0.3.65<br>'
+          new = '**Current source version:** 0.3.66<br>'
+          if old not in readme:
+              raise SystemExit('README version anchor missing')
+          readme_path.write_text(readme.replace(old, new, 1))
+
+          changelog_path = Path('debian/changelog')
+          changelog = changelog_path.read_text()
+          if not changelog.startswith('infiltrator-software (0.3.65)'):
+              raise SystemExit('unexpected changelog head')
+          stanza = '''infiltrator-software (0.3.66) unstable; urgency=high\n\n  * Enforce the canonical three-face MB Corpo typography contract throughout\n    Software: MB Corpo S regular/bold for UI text and emphasis, with MB Corpo A\n    Cond regular reserved for its real 400-weight display role.\n  * Stop requesting synthetic 700-weight MB Corpo A Cond text for preferences,\n    cards, dashboard values, catalogue/source headings and update rows.\n  * Add source-contract coverage that rejects future condensed-bold regressions\n    and keeps every bold UI role on the shipped MB Corpo S bold face.\n\n -- Shannon Smith <infiltratr@yandex.com>  Sat, 03 Oct 2026 16:55:00 +1000\n\n'''
+          changelog_path.write_text(stanza + changelog)
+
+          metainfo_path = Path('debian/infiltrator-software.metainfo.xml')
+          metainfo = metainfo_path.read_text()
+          anchor = '  <releases>\n'
+          release = '''  <releases>\n    <release version="0.3.66" date="2026-10-03">\n      <description>\n        <p>Enforces the canonical three-face MB Corpo typography contract and removes synthetic condensed-bold rendering from Software UI roles.</p>\n      </description>\n    </release>\n'''
+          if anchor not in metainfo:
+              raise SystemExit('metainfo releases anchor missing')
+          metainfo_path.write_text(metainfo.replace(anchor, release, 1))
+
+          # The one-shot patch workflow must not remain as product residue.
+          Path('.github/workflows/fix-mb-font-roles-0366.yml').unlink()
+          PY
+
+          python3 tests/source_contracts.py
+          git diff --check
+          git config user.name 'Shannon Smith'
+          git config user.email 'infiltratr@yandex.com'
+          git add -A
+          git commit -m 'Release 0.3.66: enforce canonical MB font roles'
+          git push origin HEAD:main
