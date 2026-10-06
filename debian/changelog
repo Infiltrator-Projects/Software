@@ -1,3 +1,17 @@
+infiltrator-software (0.3.71) unstable; urgency=high
+
+  * Route kernel, repository and repair consequences through one explicit app
+    coordinator instead of making page views refresh unrelated pages directly.
+  * Replace magic navigation-row coupling with named application-page routing.
+  * Move System package-engine loading and Repair diagnostics behind dedicated
+    data boundaries so GTK views no longer own reconciliation work.
+  * Give transaction-review UI and update runtime-state persistence dedicated
+    app components and remove those responsibilities from page-view contracts.
+  * Narrow the transitional app-shell contract to the few refresh hooks still
+    implemented by the legacy shell while preserving existing UI behaviour.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Tue, 06 Oct 2026 20:45:00 +1100
+
 infiltrator-software (0.3.70) unstable; urgency=high
 
   * Remove pasted console/tool truncation artefacts from the Debian changelog
