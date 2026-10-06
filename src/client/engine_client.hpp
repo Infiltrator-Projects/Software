@@ -3,7 +3,6 @@
 #define INFILTRATOR_SOFTWARE_ENGINE_CLIENT_HPP
 
 #include "core/model.hpp"
-#include "engine/kernel_inventory.hpp"
 
 #include <optional>
 #include <string>
