@@ -27,6 +27,12 @@ struct SystemPageState {
     bool system_loaded{false};
 };
 
+inline bool system_page_loaded(
+    const SystemPageState &state) noexcept
+{
+    return state.system_loaded;
+}
+
 GtkWidget *make_system_page(WindowState *state);
 void refresh_system(WindowState *state, bool refresh_metadata);
 void system_manage_kernels_clicked(GtkButton *button, gpointer user_data);
