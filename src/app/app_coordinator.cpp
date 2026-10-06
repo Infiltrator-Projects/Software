@@ -2,16 +2,14 @@
 #include "app/app_coordinator.hpp"
 
 #include "app/app_shell_contract.hpp"
+#include "app/discover_state.hpp"
 #include "app/history_controller.hpp"
 #include "app/installed_controller.hpp"
 #include "app/repair_view.hpp"
 #include "app/repository_controller.hpp"
 #include "app/system_view.hpp"
+#include "app/updates_controller.hpp"
 #include "app/window_state.hpp"
-
-#include <gtk/gtk.h>
-
-#include <string>
 
 namespace infiltrator::software::app {
 
@@ -19,17 +17,19 @@ void notify_kernel_state_changed(WindowState *state)
 {
     if (state == nullptr) return;
 
-    if (state->system_loaded) {
+    if (system_page_loaded(state->system)) {
         refresh_system(state, false);
     }
-    if (state->updates_loaded) {
+    if (updates_controller_loaded(state->updates)) {
         refresh_updates(state, false);
     }
-    if (state->installed.loaded) {
+    if (infiltrator::software::installed_controller_loaded(
+            state->installed)) {
         infiltrator::software::refresh_installed_controller(
             &state->installed);
     }
-    if (state->history.loaded) {
+    if (infiltrator::software::history_controller_loaded(
+            state->history)) {
         infiltrator::software::refresh_history_controller(
             &state->history);
     }
@@ -42,7 +42,7 @@ void notify_repository_state_changed(WindowState *state)
     infiltrator::software::refresh_repository_controller(
         &state->repositories);
     refresh_discover(state, true);
-    if (state->updates_loaded) {
+    if (updates_controller_loaded(state->updates)) {
         refresh_updates(state, true);
     }
 }
@@ -52,13 +52,10 @@ void notify_repository_snapshot_changed(WindowState *state)
     if (state == nullptr) return;
 
     rebuild_discover_repository_preview(state);
-    if (state->discover_repositories_summary != nullptr) {
-        const std::string count =
-            std::to_string(state->repositories.records.size());
-        gtk_label_set_text(
-            GTK_LABEL(state->discover_repositories_summary),
-            count.c_str());
-    }
+    set_discover_repository_summary(
+        state->discover,
+        infiltrator::software::repository_record_count(
+            state->repositories));
 }
 
 void notify_repair_state_changed(WindowState *state)
@@ -66,10 +63,11 @@ void notify_repair_state_changed(WindowState *state)
     if (state == nullptr) return;
 
     refresh_repair(state, false);
-    if (state->updates_loaded) {
+    if (updates_controller_loaded(state->updates)) {
         refresh_updates(state, false);
     }
-    if (state->installed.loaded) {
+    if (infiltrator::software::installed_controller_loaded(
+            state->installed)) {
         infiltrator::software::refresh_installed_controller(
             &state->installed);
     }
