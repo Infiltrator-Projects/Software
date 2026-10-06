@@ -6,7 +6,9 @@
 
 #include <gtk/gtk.h>
 
+#include <filesystem>
 #include <string>
+#include <string_view>
 
 namespace infiltrator::software::app {
 
@@ -20,6 +22,8 @@ struct WindowState;
 void refresh_updates(WindowState *state, bool refresh_metadata);
 void refresh_discover(WindowState *state, bool force_refresh);
 void rebuild_discover_repository_preview(WindowState *state);
+std::filesystem::path update_runtime_state_path();
+void set_update_runtime_state(std::string_view value);
 
 GtkWidget *make_transaction_confirmation_dialog(
     GtkWindow *parent,
