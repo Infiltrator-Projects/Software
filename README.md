@@ -6,7 +6,7 @@
 
 Infiltrator Software is the software-management application for the Infiltrator project family. It presents software discovery, installation, removal, updates, system components, repositories, release channels, history and repair as one coherent graphical product.
 
-**Current source version:** 0.3.68<br>
+**Current source version:** 0.3.69<br>
 **Language:** C++17 application/core with native GTK4 Linux shell; C11 Common foundation  
 **Shared foundation:** Common 1.19.38<br>
 **Current package compatibility:** Debian repositories and .deb packages; Flatpak and AppStream catalogue integration  
@@ -155,7 +155,7 @@ See [UI Design](docs/UI_DESIGN.md) and the [Software UI Vision](docs/UI_VISION.m
 
 The native-engine migration has now crossed the GUI boundary: Installed, Updates, Discover planning, repository refresh, kernel inventory and the panel indicator use native shared state and native transaction planning. The old GUI `AptBackend` implementation and its backend abstraction have been removed rather than retained as an iterative fallback.
 
-Installed keeps one deliberately small no-process recovery path that reads `/var/lib/dpkg/status` directly if the shared engine is unavailable. It is separated from the package engine so fallback inventory cannot accidentally pull the full resolver/repository stack into the GUI.
+Installed native package state is now strictly engine-owned. If the shared engine is unavailable, the GUI reports that condition rather than silently constructing a second package-state view from `/var/lib/dpkg/status`.
 
 Discover install, update and removal workflows are native-planner only. Every operation shows the complete resolved change set before authorization and executes only the exact approved mutations through the constrained privileged helper. Updates uses the same native preflight planner for per-package, arbitrary subset and all-updates operations.
 
