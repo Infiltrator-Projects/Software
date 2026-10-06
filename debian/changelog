@@ -1,3 +1,14 @@
+infiltrator-software (0.3.72) unstable; urgency=high
+
+  * Move Discover, Updates, System and Repair mutable page state out of the
+    shared WindowState declaration and into the page/controller that owns it.
+  * Keep WindowState only as a temporary source-compatible composition bridge
+    while legacy app-shell lifecycle code is extracted incrementally.
+  * Add architecture contracts that prevent page-local state from drifting
+    back into WindowState without changing current GTK behaviour.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Tue, 06 Oct 2026 21:22:00 +1100
+
 infiltrator-software (0.3.71) unstable; urgency=high
 
   * Route kernel, repository and repair consequences through one explicit app

@@ -34,6 +34,11 @@
   <url type="homepage">https://github.com/Infiltrator-Projects/Software</url>
 
   <releases>
+    <release version="0.3.72" date="2026-10-06">
+      <description>
+        <p>Moves page-local mutable state from the shared WindowState declaration into its owning Discover, Updates, System and Repair components, hardening ownership boundaries without changing user-facing behaviour.</p>
+      </description>
+    </release>
     <release version="0.3.71" date="2026-10-06">
       <description>
         <p>Reduces app-shell coupling by centralising cross-page coordination, moving System and Repair data work behind dedicated boundaries, and separating transaction-review and runtime-state responsibilities from page views.</p>
