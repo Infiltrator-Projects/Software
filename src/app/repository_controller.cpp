@@ -2,6 +2,7 @@
 #include "app/repository_controller.hpp"
 
 #include "sources/mirror_health.hpp"
+#include "sources/source_inventory.hpp"
 
 #include <sstream>
 #include <string>
