@@ -6,6 +6,7 @@
 
 #include <gtk/gtk.h>
 
+#include <cstddef>
 #include <vector>
 
 namespace infiltrator::software {
@@ -24,6 +25,18 @@ struct RepositoryController {
     void (*changed)(gpointer){};
     gpointer callback_data{};
 };
+
+inline bool repository_controller_loaded(
+    const RepositoryController &controller) noexcept
+{
+    return controller.loaded;
+}
+
+inline std::size_t repository_record_count(
+    const RepositoryController &controller) noexcept
+{
+    return controller.records.size();
+}
 
 void configure_repository_controller(
     RepositoryController *controller,
