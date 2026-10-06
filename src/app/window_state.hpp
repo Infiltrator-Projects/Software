@@ -20,21 +20,29 @@
 
 namespace infiltrator::software::app {
 
-struct WindowState {
+/*
+ * WindowState used to be one flat mutable bag shared by every page. Keep the
+ * source-compatible member names during the 0.3 -> 0.4 migration, but split
+ * ownership by responsibility so page code can progressively accept only the
+ * state it actually needs instead of the whole application.
+ */
+struct ShellState {
     GtkWindow *window{};
     GtkStack *stack{};
     ThemeController theme;
     GtkWidget *maximize_button{};
     GtkWidget *global_search{};
     bool search_syncing{false};
-    InstalledController installed;
+    GtkListBox *navigation_list{};
+    GtkWidget *nav_updates_badge{};
+    bool window_presented{false};
+};
 
+struct DiscoverPageState {
     GtkStringList *discover_visible{};
     GtkWidget *discover_search{};
     GtkWidget *discover_category{};
     GtkStringList *discover_categories{};
-    GtkListBox *navigation_list{};
-    GtkWidget *nav_updates_badge{};
     GtkWidget *discover_status{};
     GtkWidget *discover_count{};
     GtkWidget *discover_source{};
@@ -50,9 +58,10 @@ struct WindowState {
     std::vector<PackageRecord> discover_records;
     std::vector<std::string> discover_search_texts;
     unsigned int discover_generation{0U};
+    bool discover_loaded{false};
+};
 
-    RepositoryController repositories;
-
+struct UpdatesPageState {
     GtkListBox *updates_list{};
     GtkWidget *updates_status{};
     GtkWidget *updates_count{};
@@ -63,6 +72,7 @@ struct WindowState {
     GtkWidget *updates_reboot_banner{};
     GtkWidget *updates_reboot_detail{};
     GtkWidget *updates_backend{};
+
     GtkListBox *external_updates_list{};
     GtkWidget *external_updates_status{};
     GtkWidget *external_updates_spinner{};
@@ -71,6 +81,7 @@ struct WindowState {
     std::vector<ExternalUpdate> external_update_records;
     std::unordered_set<std::string> selected_flatpak_refs;
     std::unordered_set<std::string> selected_cinnamon_refs;
+
     GtkWidget *updates_transaction_panel{};
     GtkWidget *updates_transaction_phase{};
     GtkWidget *updates_transaction_detail{};
@@ -85,6 +96,7 @@ struct WindowState {
     std::string updates_progress_phase;
     bool updates_post_install_refresh{false};
     bool updates_restart_after_verify{false};
+
     std::vector<PackageRecord> update_records;
     std::unordered_set<std::string> selected_update_ids;
     std::string pending_update_selection;
@@ -94,9 +106,11 @@ struct WindowState {
     bool external_updates_active{false};
     bool updates_auto_refresh_pending{true};
     gint64 updates_last_metadata_refresh_us{0};
-    SoftwarePreferences preferences{};
     guint updates_refresh_timer_id{0U};
+    bool updates_loaded{false};
+};
 
+struct SystemPageState {
     GtkListBox *system_list{};
     GtkWidget *system_status{};
     GtkWidget *system_count{};
@@ -108,9 +122,10 @@ struct WindowState {
     std::vector<PackageRecord> system_update_records;
     unsigned int system_generation{0U};
     bool system_busy{false};
+    bool system_loaded{false};
+};
 
-    HistoryController history;
-
+struct RepairPageState {
     GtkListBox *repair_list{};
     GtkWidget *repair_status{};
     GtkWidget *repair_engine{};
@@ -126,12 +141,19 @@ struct WindowState {
     unsigned int repair_generation{0U};
     bool repair_busy{false};
     bool repair_interrupted{false};
-
-    bool window_presented{false};
-    bool discover_loaded{false};
-    bool updates_loaded{false};
-    bool system_loaded{false};
     bool repair_loaded{false};
+};
+
+struct WindowState final :
+    ShellState,
+    DiscoverPageState,
+    UpdatesPageState,
+    SystemPageState,
+    RepairPageState {
+    InstalledController installed;
+    RepositoryController repositories;
+    HistoryController history;
+    SoftwarePreferences preferences{};
 };
 
 } // namespace infiltrator::software::app

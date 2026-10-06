@@ -62,6 +62,33 @@ struct PackageRecord {
     bool security_update{false};
 };
 
+/*
+ * KernelRecord is a client-visible domain snapshot, not an engine
+ * implementation detail. Keep it in the product-neutral core model so GUI,
+ * CLI and other clients do not need to include engine/private headers merely
+ * to consume the public EngineClient contract.
+ */
+struct KernelRecord {
+    std::string version;
+    std::string package_version;
+    std::string kernel_type;
+    std::string series;
+    std::string image_package;
+    std::string origin;
+    std::string archive;
+    std::string support_status;
+    std::string support_end;
+    bool installed{false};
+    bool active{false};
+    bool installable{false};
+    bool supported{false};
+    bool superseded{false};
+    bool end_of_life{false};
+    bool safe_to_remove{false};
+    std::vector<std::string> install_package_ids;
+    std::vector<std::string> remove_package_ids;
+};
+
 struct TransactionRequest {
     TransactionAction action{TransactionAction::install};
     std::vector<std::string> package_ids;

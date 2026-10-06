@@ -19,27 +19,6 @@ struct KernelReleaseWindow {
     int support_end_month{0};
 };
 
-struct KernelRecord {
-    std::string version;
-    std::string package_version;
-    std::string kernel_type;
-    std::string series;
-    std::string image_package;
-    std::string origin;
-    std::string archive;
-    std::string support_status;
-    std::string support_end;
-    bool installed{false};
-    bool active{false};
-    bool installable{false};
-    bool supported{false};
-    bool superseded{false};
-    bool end_of_life{false};
-    bool safe_to_remove{false};
-    std::vector<std::string> install_package_ids;
-    std::vector<std::string> remove_package_ids;
-};
-
 class KernelInventory final {
 public:
     static std::vector<KernelRecord> build(
