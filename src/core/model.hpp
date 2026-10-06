@@ -2,6 +2,7 @@
 #ifndef INFILTRATOR_SOFTWARE_MODEL_HPP
 #define INFILTRATOR_SOFTWARE_MODEL_HPP
 
+#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <string_view>
@@ -13,6 +14,7 @@ enum class Channel { stable, beta, alpha, unknown };
 enum class PackageKind { application, system, library, driver, kernel, runtime, unknown };
 enum class InstallState { not_installed, installed, upgradable };
 enum class TransactionAction { install, upgrade, remove };
+enum class SourceKind { infiltrator, apt, flatpak };
 
 struct PackageRecord {
     std::string id;
@@ -89,6 +91,19 @@ struct KernelRecord {
     std::vector<std::string> remove_package_ids;
 };
 
+/* Repository/source identity is product state consumed by the UI and engine. */
+struct SourceRecord {
+    SourceKind kind{SourceKind::apt};
+    std::string name;
+    std::string location;
+    std::string detail;
+    std::string scope;
+    std::string backing_file;
+    std::string apt_suites;
+    std::size_t entry_index{0U};
+    bool enabled{true};
+};
+
 struct TransactionRequest {
     TransactionAction action{TransactionAction::install};
     std::vector<std::string> package_ids;
@@ -128,6 +143,7 @@ struct TransactionPlan {
 std::string_view channel_name(Channel channel) noexcept;
 std::string_view package_kind_name(PackageKind kind) noexcept;
 std::string_view transaction_action_name(TransactionAction action) noexcept;
+std::string_view source_kind_name(SourceKind kind) noexcept;
 bool valid_identity(const PackageRecord &package) noexcept;
 void classify_package_role(PackageRecord &package) noexcept;
 bool is_system_component(const PackageRecord &package) noexcept;
