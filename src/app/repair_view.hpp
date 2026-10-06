@@ -27,6 +27,12 @@ struct RepairPageState {
     bool repair_loaded{false};
 };
 
+inline bool repair_page_loaded(
+    const RepairPageState &state) noexcept
+{
+    return state.repair_loaded;
+}
+
 GtkWidget *make_repair_page(WindowState *state);
 void refresh_repair(WindowState *state, bool refresh_metadata);
 
