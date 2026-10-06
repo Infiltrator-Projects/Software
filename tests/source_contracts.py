@@ -118,21 +118,31 @@ assert '"sources/source_inventory.hpp"' not in repository_controller_hpp
 assert '"core/model.hpp"' in repository_controller_hpp
 assert '"core/model.hpp"' in source_inventory_hpp
 
-# The application state is partitioned by responsibility. Existing source can
-# migrate incrementally, but new features must not recreate one flat state bag.
+# Page-local mutable state must live with the page/controller that owns it.
+# WindowState remains a temporary composition bridge, but it may not grow a
+# second copy of Updates state while that page is extracted from main.cpp.
 for state_type in (
     "struct ShellState",
     "struct DiscoverPageState",
-    "struct UpdatesPageState",
     "struct SystemPageState",
     "struct RepairPageState",
 ):
     assert state_type in window_state
+assert "struct UpdatesController" in updates_controller_hpp
+assert "UpdatesController," in window_state
 assert "struct WindowState final" in window_state
+for updates_member in (
+    "GtkListBox *updates_list",
+    "std::vector<PackageRecord> update_records",
+    "std::unordered_set<std::string> selected_update_ids",
+    "guint updates_refresh_timer_id",
+):
+    assert updates_member in updates_controller_hpp
+    assert updates_member not in window_state
 
 # Native update reconciliation, external update discovery and update planning
 # belong to the Updates controller. main.cpp owns GTK task lifetime and
-# presentation, not package-engine orchestration.
+# presentation only until that final lifecycle is moved onto the controller.
 assert '"app/updates_controller.hpp"' in main_cpp
 assert "src/app/updates_controller.cpp" in cmake
 assert "refresh_updates_data" in updates_controller
