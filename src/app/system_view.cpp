@@ -2,10 +2,10 @@
 #include "app/system_view.hpp"
 
 #include "app/app_coordinator.hpp"
-#include "app/app_shell_contract.hpp"
 #include "app/kernel_manager.hpp"
 #include "app/system_data.hpp"
 #include "app/text_utils.hpp"
+#include "app/transaction_review.hpp"
 #include "app/ui_components.hpp"
 #include "app/window_state.hpp"
 #include "core/model.hpp"
@@ -789,7 +789,7 @@ void release_upgrade_plan_complete(
         result->target_codename +
         ")?";
     GtkWidget *dialog =
-        make_transaction_confirmation_dialog(
+        make_transaction_review_dialog(
             state->window,
             "Review operating-system upgrade",
             heading,
