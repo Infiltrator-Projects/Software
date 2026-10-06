@@ -6,15 +6,13 @@
 
 #include <gtk/gtk.h>
 
+#include <cstddef>
 #include <string>
 #include <vector>
 
 namespace infiltrator::software::app {
 
-/*
- * Mutable state owned by the Discover page. Keeping this outside WindowState
- * makes the page boundary explicit while the legacy shell is decomposed.
- */
+/* Mutable state owned exclusively by the Discover page. */
 struct DiscoverPageState {
     GtkStringList *discover_visible{};
     GtkWidget *discover_search{};
@@ -37,6 +35,25 @@ struct DiscoverPageState {
     unsigned int discover_generation{0U};
     bool discover_loaded{false};
 };
+
+inline bool discover_page_loaded(
+    const DiscoverPageState &state) noexcept
+{
+    return state.discover_loaded;
+}
+
+inline void set_discover_repository_summary(
+    DiscoverPageState &state,
+    const std::size_t repository_count)
+{
+    if (state.discover_repositories_summary == nullptr) {
+        return;
+    }
+    const std::string count = std::to_string(repository_count);
+    gtk_label_set_text(
+        GTK_LABEL(state.discover_repositories_summary),
+        count.c_str());
+}
 
 } // namespace infiltrator::software::app
 
