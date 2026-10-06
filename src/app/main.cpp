@@ -10,6 +10,7 @@
 #include "app/repair_view.hpp"
 #include "app/system_view.hpp"
 #include "app/ui_components.hpp"
+#include "app/updates_controller.hpp"
 #include "app/window_state.hpp"
 #include "app/preferences_dialog.hpp"
 #include "catalogue/repository_catalogue.hpp"
@@ -2805,34 +2806,6 @@ void refresh_installed(WindowState *state)
     if (state == nullptr) return;
     refresh_installed_controller(&state->installed);
 }
-
-struct UpdatesResult {
-    unsigned int generation{0U};
-    bool refreshed_metadata{false};
-    bool external_refreshed{false};
-    std::vector<PackageRecord> records;
-    std::vector<ExternalUpdate> external_records;
-    std::string external_error;
-    std::string error;
-};
-
-struct UpdatesTaskData {
-    unsigned int generation{0U};
-    bool refresh_metadata{false};
-    bool refresh_external{true};
-    bool show_flatpak{true};
-    bool show_cinnamon{true};
-};
-
-struct UpdatePlanResult {
-    std::optional<infiltrator::software::TransactionPlan> plan;
-    std::string error;
-};
-
-struct UpdatePlanTaskData {
-    std::vector<std::string> package_ids;
-    bool install_recommends{false};
-};
 
 struct UpdateProcessRun {
     GtkWindow *window{};
@@ -5990,83 +5963,21 @@ void updates_worker(
     gpointer task_data,
     GCancellable *)
 {
-    auto *data = static_cast<UpdatesTaskData *>(task_data);
-    auto *result = new UpdatesResult{};
-    result->generation = data == nullptr ? 0U : data->generation;
-
-    /*
-     * Update inventory and repository refresh now both go through the shared
-     * native engine.  The GUI never launches an APT process merely to discover
-     * package state.  If no generation exists yet, initialise it once through
-     * the same reconciliation path before retrying the inventory read.
-     */
+    auto *data =
+        static_cast<UpdatesRefreshRequest *>(task_data);
+    auto *result = new UpdatesRefreshResult{};
     if (data == nullptr) {
-        result->error = "Update task state is unavailable.";
+        result->error =
+            "Update task state is unavailable.";
     } else {
-        result->external_refreshed = data->refresh_external;
-        EngineClient engine;
-
-        /*
-         * Ordinary inventory reads reconcile authoritative dpkg state against
-         * the already verified repository generation. This is local and fast:
-         * packages that were just installed disappear from Updates without
-         * paying for another network refresh. Explicit/periodic metadata
-         * refreshes still run the complete repository reconciliation.
-         */
-        if (data->refresh_metadata) {
-            result->refreshed_metadata = true;
-            (void)engine.refresh(result->error);
-        } else {
-            (void)engine.refresh_installed(result->error);
-        }
-
-        if (result->error.empty()) {
-            (void)engine.list_updates(
-                result->records,
-                result->error);
-        }
-
-        if (data->refresh_external && data->show_flatpak) {
-            std::vector<ExternalUpdate> flatpak;
-            std::string external_error;
-            if (discover_flatpak_updates(
-                    flatpak,
-                    external_error)) {
-                result->external_records.insert(
-                    result->external_records.end(),
-                    std::make_move_iterator(flatpak.begin()),
-                    std::make_move_iterator(flatpak.end()));
-            } else {
-                result->external_error =
-                    "Flatpak: " + external_error;
-            }
-        }
-
-        if (data->refresh_external && data->show_cinnamon) {
-            std::vector<ExternalUpdate> cinnamon;
-            std::string external_error;
-            if (discover_cinnamon_updates(
-                    cinnamon,
-                    external_error)) {
-                result->external_records.insert(
-                    result->external_records.end(),
-                    std::make_move_iterator(cinnamon.begin()),
-                    std::make_move_iterator(cinnamon.end()));
-            } else {
-                if (!result->external_error.empty()) {
-                    result->external_error += "\n";
-                }
-                result->external_error +=
-                    "Cinnamon: " + external_error;
-            }
-        }
+        *result = refresh_updates_data(*data);
     }
 
     g_task_return_pointer(
         task,
         result,
         [](gpointer pointer) {
-            delete static_cast<UpdatesResult *>(pointer);
+            delete static_cast<UpdatesRefreshResult *>(pointer);
         });
 }
 
@@ -6096,7 +6007,7 @@ void updates_complete(
     auto *state = static_cast<WindowState *>(
         g_object_get_data(
             G_OBJECT(window), "infiltrator-window-state"));
-    auto *result = static_cast<UpdatesResult *>(
+    auto *result = static_cast<UpdatesRefreshResult *>(
         g_task_propagate_pointer(G_TASK(async_result), nullptr));
 
     if (state == nullptr || result == nullptr) {
@@ -6446,7 +6357,7 @@ void refresh_updates_internal(
 
     set_update_runtime_state("checking");
 
-    auto *data = new UpdatesTaskData{
+    auto *data = new UpdatesRefreshRequest{
         state->updates_generation,
         refresh_metadata,
         refresh_external,
@@ -6460,7 +6371,7 @@ void refresh_updates_internal(
     g_task_set_task_data(
         task, data,
         [](gpointer pointer) {
-            delete static_cast<UpdatesTaskData *>(pointer);
+            delete static_cast<UpdatesRefreshRequest *>(pointer);
         });
     g_task_run_in_thread(task, updates_worker);
     g_object_unref(task);
@@ -7016,22 +6927,14 @@ void update_plan_worker(
     gpointer task_data,
     GCancellable *)
 {
-    auto *data = static_cast<UpdatePlanTaskData *>(task_data);
+    auto *data =
+        static_cast<UpdatePlanRequest *>(task_data);
     auto *result = new UpdatePlanResult{};
-
-    if (data == nullptr || data->package_ids.empty()) {
-        result->error = "No updates are available to plan.";
+    if (data == nullptr) {
+        result->error =
+            "No updates are available to plan.";
     } else {
-        infiltrator::software::TransactionRequest request;
-        request.action =
-            infiltrator::software::TransactionAction::upgrade;
-        request.package_ids = data->package_ids;
-        request.install_recommends =
-            data->install_recommends;
-
-        EngineClient engine;
-        result->plan =
-            engine.plan(request, result->error);
+        *result = plan_updates(*data);
     }
 
     g_task_return_pointer(
@@ -7162,7 +7065,7 @@ void update_install_clicked(GtkButton *, gpointer user_data)
     }
     set_update_runtime_state("checking");
 
-    auto *data = new UpdatePlanTaskData{};
+    auto *data = new UpdatePlanRequest{};
     data->install_recommends =
         state->preferences.install_recommends;
     data->package_ids.reserve(state->selected_update_ids.size());
@@ -7182,7 +7085,7 @@ void update_install_clicked(GtkButton *, gpointer user_data)
     g_task_set_task_data(
         task, data,
         [](gpointer pointer) {
-            delete static_cast<UpdatePlanTaskData *>(pointer);
+            delete static_cast<UpdatePlanRequest *>(pointer);
         });
     g_task_run_in_thread(task, update_plan_worker);
     g_object_unref(task);
