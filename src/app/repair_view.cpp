@@ -2,8 +2,8 @@
 #include "app/repair_view.hpp"
 
 #include "app/app_coordinator.hpp"
-#include "app/app_shell_contract.hpp"
 #include "app/repair_diagnostics.hpp"
+#include "app/runtime_state.hpp"
 #include "app/text_utils.hpp"
 #include "app/ui_components.hpp"
 #include "app/window_state.hpp"
@@ -272,7 +272,7 @@ void repair_complete(
     }
 
     if (result->issues.empty()) {
-        set_update_runtime_state({});
+        set_software_update_runtime_state({});
     }
 
     if (state->repair_status != nullptr) {
@@ -492,7 +492,7 @@ void repair_configure_complete(
         }
 
         if (success) {
-            set_update_runtime_state({});
+            set_software_update_runtime_state({});
             notify_repair_state_changed(state);
         } else {
             if (state->repair_recheck != nullptr) {
@@ -657,7 +657,7 @@ void repair_log_clicked(
         << "\n\n";
 
     const std::filesystem::path runtime =
-        update_runtime_state_path();
+        software_update_runtime_state_path();
     if (!runtime.empty()) {
         const std::string state_text =
             tail_text_file(
