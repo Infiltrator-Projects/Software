@@ -37,6 +37,9 @@ exact_spec = text("src/core/exact_transaction_spec.cpp")
 history = text("src/core/transaction_history.cpp")
 installed_controller = text("src/app/installed_controller.cpp")
 installed_inventory = text("src/app/installed_inventory.cpp")
+main_cpp = text("src/app/main.cpp")
+updates_controller = text("src/app/updates_controller.cpp")
+updates_controller_hpp = text("src/app/updates_controller.hpp")
 repository_controller = text("src/app/repository_controller.cpp")
 repository_controller_hpp = text("src/app/repository_controller.hpp")
 window_state = text("src/app/window_state.hpp")
@@ -82,8 +85,8 @@ assert "add_library(software-apt STATIC" not in cmake
 assert "EngineClient engine" in installed_inventory
 assert "DebianInstalledState::read" not in installed_inventory
 assert '"engine/debian_installed_state.hpp"' not in installed_inventory
-assert "engine.refresh_installed(result->error)" in app
-assert "engine.refresh(result->error)" in app
+assert "engine.refresh_installed(result.error)" in updates_controller
+assert "engine.refresh(result.error)" in updates_controller
 assert '"RefreshInstalledState"' in engine_client
 assert '<method name="RefreshInstalledState">' in engine_interface
 
@@ -106,6 +109,20 @@ for state_type in (
 ):
     assert state_type in window_state
 assert "struct WindowState final" in window_state
+
+# Native update reconciliation, external update discovery and update planning
+# belong to the Updates controller. main.cpp owns GTK task lifetime and
+# presentation, not package-engine orchestration.
+assert '"app/updates_controller.hpp"' in main_cpp
+assert "src/app/updates_controller.cpp" in cmake
+assert "refresh_updates_data" in updates_controller
+assert "plan_updates" in updates_controller
+assert "engine.list_updates(" in updates_controller
+assert "discover_flatpak_updates(" in updates_controller
+assert "discover_cinnamon_updates(" in updates_controller
+assert "engine.list_updates(" not in main_cpp
+assert "discover_flatpak_updates(" not in main_cpp
+assert "discover_cinnamon_updates(" not in main_cpp
 
 # External ecosystems remain explicit and preserve Flatpak installation scope.
 assert "discover_flatpak_updates" in app
