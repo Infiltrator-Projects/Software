@@ -34,6 +34,11 @@
   <url type="homepage">https://github.com/Infiltrator-Projects/Software</url>
 
   <releases>
+    <release version="0.3.71" date="2026-10-06">
+      <description>
+        <p>Reduces app-shell coupling by centralising cross-page coordination, moving System and Repair data work behind dedicated boundaries, and separating transaction-review and runtime-state responsibilities from page views.</p>
+      </description>
+    </release>
     <release version="0.3.70" date="2026-10-06">
       <description>
         <p>Repairs release metadata and Debian changelog integrity, removes committed tool-output artefacts, and adds CI guards that keep release identities aligned without changing the 0.3.69 runtime architecture.</p>
