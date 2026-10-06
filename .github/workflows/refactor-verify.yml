@@ -78,3 +78,32 @@ jobs:
           if [[ "$status" -ne 124 ]]; then
             exit "$status"
           fi
+
+  commit-refactor:
+    needs: verify-refactor
+    permissions:
+      contents: write
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out refactor branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refactor/updates-controller-0.3.69
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Commit exact verified extraction
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/refactor_updates_controller.py
+          if git diff --quiet; then
+            exit 0
+          fi
+          git diff --check
+          python3 tests/source_contracts.py
+          git config user.name "Shannon Smith"
+          git config user.email "infiltratr@yandex.com"
+          git add src/app/main.cpp CMakeLists.txt tests/source_contracts.py
+          git commit -m "Extract update orchestration from app shell"
+          git push origin HEAD:refactor/updates-controller-0.3.69
