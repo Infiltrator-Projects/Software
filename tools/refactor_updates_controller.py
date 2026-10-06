@@ -11,6 +11,9 @@ def once(text: str, old: str, new: str, label: str) -> str:
 
 main_path = Path("src/app/main.cpp")
 main = main_path.read_text()
+if '#include "app/updates_controller.hpp"' in main:
+    raise SystemExit(0)
+
 main = once(
     main,
     '#include "app/ui_components.hpp"\n',
