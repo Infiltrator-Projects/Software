@@ -38,8 +38,11 @@ history = text("src/core/transaction_history.cpp")
 installed_controller = text("src/app/installed_controller.cpp")
 installed_inventory = text("src/app/installed_inventory.cpp")
 main_cpp = text("src/app/main.cpp")
+discover_state = text("src/app/discover_state.hpp")
 updates_controller = text("src/app/updates_controller.cpp")
 updates_controller_hpp = text("src/app/updates_controller.hpp")
+system_view_hpp = text("src/app/system_view.hpp")
+repair_view_hpp = text("src/app/repair_view.hpp")
 repository_controller = text("src/app/repository_controller.cpp")
 repository_controller_hpp = text("src/app/repository_controller.hpp")
 window_state = text("src/app/window_state.hpp")
@@ -119,18 +122,28 @@ assert '"core/model.hpp"' in repository_controller_hpp
 assert '"core/model.hpp"' in source_inventory_hpp
 
 # Page-local mutable state must live with the page/controller that owns it.
-# WindowState remains a temporary composition bridge, but it may not grow a
-# second copy of Updates state while that page is extracted from main.cpp.
-for state_type in (
-    "struct ShellState",
-    "struct DiscoverPageState",
-    "struct SystemPageState",
-    "struct RepairPageState",
-):
-    assert state_type in window_state
+# WindowState remains a temporary source-compatibility composition bridge only;
+# it must not become the declaration site for page internals again.
+assert "struct ShellState" in window_state
+assert "struct DiscoverPageState" in discover_state
 assert "struct UpdatesController" in updates_controller_hpp
-assert "UpdatesController," in window_state
+assert "struct SystemPageState" in system_view_hpp
+assert "struct RepairPageState" in repair_view_hpp
 assert "struct WindowState final" in window_state
+for owner_type in (
+    "DiscoverPageState,",
+    "UpdatesController,",
+    "SystemPageState,",
+    "RepairPageState",
+):
+    assert owner_type in window_state
+for page_member in (
+    "discover_visible",
+    "updates_list",
+    "system_list",
+    "repair_list",
+):
+    assert page_member not in window_state
 for updates_member in (
     "GtkListBox *updates_list",
     "std::vector<PackageRecord> update_records",
@@ -138,7 +151,6 @@ for updates_member in (
     "guint updates_refresh_timer_id",
 ):
     assert updates_member in updates_controller_hpp
-    assert updates_member not in window_state
 
 # Native update reconciliation, external update discovery and update planning
 # belong to the Updates controller. main.cpp owns GTK task lifetime and
