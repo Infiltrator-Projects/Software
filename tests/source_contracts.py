@@ -38,6 +38,7 @@ history = text("src/core/transaction_history.cpp")
 installed_controller = text("src/app/installed_controller.cpp")
 installed_inventory = text("src/app/installed_inventory.cpp")
 main_cpp = text("src/app/main.cpp")
+app_coordinator = text("src/app/app_coordinator.cpp")
 discover_state = text("src/app/discover_state.hpp")
 updates_controller = text("src/app/updates_controller.cpp")
 updates_controller_hpp = text("src/app/updates_controller.hpp")
@@ -85,8 +86,6 @@ assert metainfo_releases
 assert metainfo_releases[0].get("version") == version
 
 # Release metadata must never contain copied console/tool truncation markers.
-# These strings indicate that generated output was mistaken for authoritative
-# repository content and must fail CI before a release can be produced.
 assert "Warning: truncated output" not in changelog
 assert "tokens truncated" not in changelog
 assert "Total output lines:" not in changelog
@@ -121,29 +120,33 @@ assert '"sources/source_inventory.hpp"' not in repository_controller_hpp
 assert '"core/model.hpp"' in repository_controller_hpp
 assert '"core/model.hpp"' in source_inventory_hpp
 
-# Page-local mutable state must live with the page/controller that owns it.
-# WindowState remains a temporary source-compatibility composition bridge only;
-# it must not become the declaration site for page internals again.
+# Page state is owned by named members. WindowState is a shell plus composition,
+# never a subtype of a page/controller. The explicit legacy reference aliases
+# are temporary source compatibility for main.cpp and must only shrink.
 assert "struct ShellState" in window_state
 assert "struct DiscoverPageState" in discover_state
 assert "struct UpdatesController" in updates_controller_hpp
 assert "struct SystemPageState" in system_view_hpp
 assert "struct RepairPageState" in repair_view_hpp
-assert "struct WindowState final" in window_state
-for owner_type in (
-    "DiscoverPageState,",
-    "UpdatesController,",
-    "SystemPageState,",
+assert "struct WindowState final : ShellState" in window_state
+window_state_bases = window_state.split(
+    "struct WindowState final", 1
+)[1].split("{", 1)[0]
+for page_base in (
+    "DiscoverPageState",
+    "UpdatesController",
+    "SystemPageState",
     "RepairPageState",
 ):
-    assert owner_type in window_state
-for page_member in (
-    "discover_visible",
-    "updates_list",
-    "system_list",
-    "repair_list",
+    assert page_base not in window_state_bases
+for owned_page in (
+    "DiscoverPageState discover;",
+    "UpdatesController updates;",
+    "SystemPageState system;",
+    "RepairPageState repair;",
 ):
-    assert page_member not in window_state
+    assert owned_page in window_state
+assert "do not add new aliases" in window_state
 for updates_member in (
     "GtkListBox *updates_list",
     "std::vector<PackageRecord> update_records",
@@ -151,6 +154,24 @@ for updates_member in (
     "guint updates_refresh_timer_id",
 ):
     assert updates_member in updates_controller_hpp
+
+# Cross-page coordination uses public owner boundaries. The coordinator must not
+# inspect another page's widget pointers, backing vectors or raw loaded flags.
+for forbidden_coordinator_access in (
+    "->system_loaded",
+    "->updates_loaded",
+    ".installed.loaded",
+    ".history.loaded",
+    "repositories.records",
+    "discover_repositories_summary",
+):
+    assert forbidden_coordinator_access not in app_coordinator
+assert "system_page_loaded(state->system)" in app_coordinator
+assert "updates_controller_loaded(state->updates)" in app_coordinator
+assert "installed_controller_loaded(" in app_coordinator
+assert "history_controller_loaded(" in app_coordinator
+assert "repository_record_count(" in app_coordinator
+assert "set_discover_repository_summary(" in app_coordinator
 
 # Native update reconciliation, external update discovery and update planning
 # belong to the Updates controller. main.cpp owns GTK task lifetime and
