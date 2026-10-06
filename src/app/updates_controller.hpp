@@ -15,12 +15,6 @@
 
 namespace infiltrator::software::app {
 
-/*
- * Updates owns its page-local mutable state here rather than in WindowState.
- * WindowState still inherits this controller during the 0.3 -> 0.4 migration
- * so existing call sites remain source-compatible while lifecycle/rendering is
- * moved out of the legacy app shell in small, reviewable steps.
- */
 struct UpdatesController {
     GtkListBox *updates_list{};
     GtkWidget *updates_status{};
@@ -70,6 +64,12 @@ struct UpdatesController {
     bool updates_loaded{false};
 };
 
+inline bool updates_controller_loaded(
+    const UpdatesController &controller) noexcept
+{
+    return controller.updates_loaded;
+}
+
 struct UpdatesRefreshRequest {
     unsigned int generation{0U};
     bool refresh_metadata{false};
@@ -98,11 +98,6 @@ struct UpdatePlanResult {
     std::string error;
 };
 
-/*
- * Package-engine reconciliation, external update discovery and transaction
- * planning belong to the Updates controller. The remaining GTK lifecycle is
- * being migrated from main.cpp onto this owner without changing behaviour.
- */
 UpdatesRefreshResult refresh_updates_data(
     const UpdatesRefreshRequest &request);
 
