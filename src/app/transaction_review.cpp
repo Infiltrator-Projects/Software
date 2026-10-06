@@ -63,7 +63,6 @@ std::string transaction_item_text(const TransactionItem &item)
 
 } // namespace
 
-G_GNUC_BEGIN_IGNORE_DEPRECATIONS
 GtkWidget *make_transaction_review_dialog(
     GtkWindow *parent,
     const char *title,
@@ -71,6 +70,7 @@ GtkWidget *make_transaction_review_dialog(
     const char *accept_label,
     const TransactionPlan &plan)
 {
+    G_GNUC_BEGIN_IGNORE_DEPRECATIONS
     GtkWidget *dialog = gtk_dialog_new_with_buttons(
         title,
         parent,
@@ -149,6 +149,5 @@ GtkWidget *make_transaction_review_dialog(
     gtk_box_append(GTK_BOX(content), scroller);
     return dialog;
 }
-G_GNUC_END_IGNORE_DEPRECATIONS
 
 } // namespace infiltrator::software::app
