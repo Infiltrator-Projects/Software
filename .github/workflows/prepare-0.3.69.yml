@@ -1,0 +1,65 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: Prepare Software 0.3.69 release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/prepare-0.3.69.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Prepare release metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('debian/changelog')
+          old = path.read_text()
+          if old.startswith('infiltrator-software (0.3.69) '):
+              raise SystemExit('0.3.69 changelog already present')
+
+          stanza = '''infiltrator-software (0.3.69) unstable; urgency=high
+
+  * Move public kernel and repository source records into the core model so
+    client and UI headers no longer depend on concrete engine/source backends.
+  * Move Linux Mint mirror-health probing behind the source boundary and split
+    the application state into page-oriented ownership seams.
+  * Make Installed native package state strictly engine-owned and replace
+    brittle exact-source-layout tests with durable architecture and safety
+    contracts.
+  * Extract native update reconciliation, Flatpak/Cinnamon update discovery and
+    transaction planning from main.cpp into the dedicated Updates controller.
+  * Preserve current GTK behaviour while reducing app-shell coupling, with the
+    full build, tests, launch smoke, AppStream and Debian package gates retained.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Tue, 06 Oct 2026 14:00:00 +1100
+
+'''
+          path.write_text(stanza + old)
+          Path('VERSION').write_text('0.3.69\n')
+          PY
+
+      - name: Commit exact release
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/prepare-0.3.69.yml
+          git config user.name 'Shannon Smith'
+          git config user.email 'infiltratr@yandex.com'
+          git add VERSION debian/changelog .github/workflows/prepare-0.3.69.yml
+          git commit -m 'Release 0.3.69: reduce app-shell coupling'
+          git push origin HEAD:main
