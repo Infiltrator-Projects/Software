@@ -63,10 +63,23 @@ tray = text("src/tray/main.cpp")
 cli = text("src/cli/main.cpp")
 parity = text("docs/MINTUPDATE_PARITY.md")
 control = text("debian/control")
+version = text("VERSION").strip()
+readme = text("README.md")
+changelog = text("debian/changelog")
+metainfo_path = Path("debian/infiltrator-software.metainfo.xml")
+metainfo_root = ET.parse(metainfo_path).getroot()
+metainfo_releases = metainfo_root.findall("./releases/release")
 
 update_policy_path = Path("data/net.ssmith.infiltrator.software.updates.policy")
 source_policy_path = Path("data/net.ssmith.infiltrator.software.policy")
 policy = update_policy_path.read_text()
+
+# Release metadata must describe the same source version everywhere. A release
+# bump is incomplete if VERSION, README, changelog and AppStream diverge.
+assert f"**Current source version:** {version}<br>" in readme
+assert changelog.startswith(f"infiltrator-software ({version}) ")
+assert metainfo_releases
+assert metainfo_releases[0].get("version") == version
 
 # Replacement inventory is an audit catalogue, not proof that a host completed
 # every real mutation path.
