@@ -18,6 +18,12 @@ struct InstalledController {
     bool loaded{false};
 };
 
+inline bool installed_controller_loaded(
+    const InstalledController &controller) noexcept
+{
+    return controller.loaded;
+}
+
 GtkWidget *create_installed_page(
     InstalledController *controller,
     GtkWindow *window);
