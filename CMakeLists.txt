@@ -270,6 +270,8 @@ endif()
 add_executable(infiltrator-software
     src/app/main.cpp
     src/app/app_coordinator.cpp
+    src/app/runtime_state.cpp
+    src/app/transaction_review.cpp
     src/app/history_controller.cpp
     src/app/history_view.cpp
     src/app/installed_controller.cpp
