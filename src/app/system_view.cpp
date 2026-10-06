@@ -1,17 +1,18 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "app/system_view.hpp"
 
-#include "app/installed_inventory.hpp"
+#include "app/app_coordinator.hpp"
+#include "app/app_shell_contract.hpp"
 #include "app/kernel_manager.hpp"
+#include "app/system_data.hpp"
+#include "app/text_utils.hpp"
 #include "app/ui_components.hpp"
 #include "app/window_state.hpp"
-#include "client/engine_client.hpp"
 #include "core/model.hpp"
 
 #include <gio/gio.h>
 #include <gtk/gtk.h>
 
-#include <algorithm>
 #include <cstdint>
 #include <exception>
 #include <sstream>
@@ -22,7 +23,6 @@
 
 namespace infiltrator::software::app {
 
-using infiltrator::software::EngineClient;
 using infiltrator::software::PackageRecord;
 using infiltrator::software::TransactionAction;
 using infiltrator::software::TransactionItem;
@@ -31,18 +31,6 @@ using infiltrator::software::make_icon;
 using infiltrator::software::make_label;
 using infiltrator::software::make_page_intro;
 using infiltrator::software::make_stat_card;
-using infiltrator::software::read_installed_packages;
-
-std::string one_line(std::string value);
-void refresh_updates(WindowState *state, bool refresh_metadata);
-void refresh_installed(WindowState *state);
-void refresh_history(WindowState *state);
-GtkWidget *make_transaction_confirmation_dialog(
-    GtkWindow *parent,
-    const char *title,
-    const std::string &heading,
-    const char *accept_label,
-    const TransactionPlan &plan);
 
 struct SystemResult {
     unsigned int generation{0U};
@@ -246,87 +234,17 @@ void system_worker(
     result->generation =
         data == nullptr ? 0U : data->generation;
 
-    std::vector<PackageRecord> installed =
-        read_installed_packages(
-            result->error,
-            &result->from_engine);
-    if (result->error.empty()) {
-        for (PackageRecord &package : installed) {
-            infiltrator::software::classify_package_role(
-                package);
-            if (infiltrator::software::is_system_component(
-                    package)) {
-                result->components.emplace_back(
-                    std::move(package));
-            }
-        }
+    if (data == nullptr) {
+        result->error = "System task state is unavailable.";
+    } else {
+        SystemDataResult loaded =
+            load_system_data(data->refresh_metadata);
+        result->components = std::move(loaded.components);
+        result->updates = std::move(loaded.updates);
+        result->error = std::move(loaded.error);
+        result->update_warning = std::move(loaded.update_warning);
+        result->from_engine = loaded.from_engine;
     }
-
-    if (data != nullptr) {
-        EngineClient engine;
-        if (data->refresh_metadata) {
-            if (!engine.refresh(result->update_warning)) {
-                result->update_warning =
-                    "Update refresh failed: " +
-                    result->update_warning;
-            }
-        }
-
-        std::vector<PackageRecord> updates;
-        std::string update_error;
-        if (result->update_warning.empty() &&
-            !engine.list_updates(updates, update_error) &&
-            !data->refresh_metadata) {
-            std::string refresh_error;
-            if (engine.refresh(refresh_error)) {
-                update_error.clear();
-                (void)engine.list_updates(
-                    updates, update_error);
-            } else {
-                update_error =
-                    "Native update state unavailable: " +
-                    refresh_error;
-            }
-        }
-        if (!update_error.empty()) {
-            result->update_warning = update_error;
-        }
-
-        for (PackageRecord &package : updates) {
-            infiltrator::software::classify_package_role(
-                package);
-            if (infiltrator::software::is_system_component(
-                    package)) {
-                result->updates.emplace_back(
-                    std::move(package));
-            }
-        }
-    }
-
-    auto rank = [](const PackageRecord &package) {
-        switch (package.kind) {
-        case infiltrator::software::PackageKind::kernel:
-            return 0;
-        case infiltrator::software::PackageKind::driver:
-            return 1;
-        case infiltrator::software::PackageKind::system:
-            return 2;
-        default:
-            return 3;
-        }
-    };
-    std::stable_sort(
-        result->components.begin(),
-        result->components.end(),
-        [&](const PackageRecord &left,
-            const PackageRecord &right) {
-            const int left_rank = rank(left);
-            const int right_rank = rank(right);
-            if (left_rank != right_rank) {
-                return left_rank < right_rank;
-            }
-            return left.name < right.name;
-        });
 
     g_task_return_pointer(
         task,
@@ -470,20 +388,8 @@ void system_refresh_clicked(
 
 void kernel_manager_changed(gpointer user_data)
 {
-    auto *state = static_cast<WindowState *>(user_data);
-    if (state == nullptr) return;
-    if (state->system_loaded) {
-        refresh_system(state, false);
-    }
-    if (state->updates_loaded) {
-        refresh_updates(state, false);
-    }
-    if (state->installed.loaded) {
-        refresh_installed(state);
-    }
-    if (state->history.loaded) {
-        refresh_history(state);
-    }
+    notify_kernel_state_changed(
+        static_cast<WindowState *>(user_data));
 }
 
 void system_manage_kernels_clicked(
@@ -504,21 +410,9 @@ void system_review_updates_clicked(
     GtkButton *,
     gpointer user_data)
 {
-    auto *state =
-        static_cast<WindowState *>(user_data);
-    if (state == nullptr ||
-        state->navigation_list == nullptr) {
-        return;
-    }
-
-    GtkListBoxRow *updates =
-        gtk_list_box_get_row_at_index(
-            state->navigation_list, 2);
-    if (updates != nullptr) {
-        gtk_list_box_select_row(
-            state->navigation_list,
-            updates);
-    }
+    select_app_page(
+        static_cast<WindowState *>(user_data),
+        AppPage::updates);
 }
 
 struct ReleaseUpgradePlanResult {
@@ -579,7 +473,7 @@ void release_upgrade_plan_worker(
         if (stderr_text != nullptr &&
             *stderr_text != '\0') {
             result->error =
-                one_line(stderr_text);
+                single_line(stderr_text);
         } else if (
             gerror != nullptr &&
             gerror->message != nullptr) {
@@ -739,20 +633,20 @@ void release_upgrade_apply_complete(
         if (success) {
             message =
                 out != nullptr && *out != '\0'
-                    ? one_line(out)
+                    ? single_line(out)
                     : "Operating-system release upgrade completed.";
         } else if (
             err != nullptr &&
             *err != '\0') {
             message =
                 "Release upgrade failed: " +
-                one_line(err);
+                single_line(err);
         } else if (
             error != nullptr &&
             error->message != nullptr) {
             message =
                 "Release upgrade failed: " +
-                one_line(error->message);
+                single_line(error->message);
         } else {
             message =
                 "Release upgrade failed.";
@@ -1145,6 +1039,5 @@ GtkWidget *make_system_page(WindowState *state)
 
     return page;
 }
-
 
 } // namespace infiltrator::software::app
