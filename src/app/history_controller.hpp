@@ -24,6 +24,12 @@ struct HistoryController {
     gpointer changed_data{};
 };
 
+inline bool history_controller_loaded(
+    const HistoryController &controller) noexcept
+{
+    return controller.loaded;
+}
+
 GtkWidget *create_history_controller_page(
     HistoryController *controller,
     GtkWindow *window,
