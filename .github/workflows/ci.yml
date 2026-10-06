@@ -3,7 +3,7 @@ name: Verify
 
 on:
   push:
-    branches: [main, refactor/updates-controller-0.3.69]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
