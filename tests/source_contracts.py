@@ -81,6 +81,13 @@ assert changelog.startswith(f"infiltrator-software ({version}) ")
 assert metainfo_releases
 assert metainfo_releases[0].get("version") == version
 
+# Release metadata must never contain copied console/tool truncation markers.
+# These strings indicate that generated output was mistaken for authoritative
+# repository content and must fail CI before a release can be produced.
+assert "Warning: truncated output" not in changelog
+assert "tokens truncated" not in changelog
+assert "Total output lines:" not in changelog
+
 # Replacement inventory is an audit catalogue, not proof that a host completed
 # every real mutation path.
 required_rows = [
