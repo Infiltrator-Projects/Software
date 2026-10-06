@@ -58,6 +58,12 @@ void notify_repository_snapshot_changed(WindowState *state)
             state->repositories));
 }
 
+void notify_history_state_changed(WindowState *state)
+{
+    if (state == nullptr) return;
+    rebuild_discover_activity_preview(state);
+}
+
 void notify_repair_state_changed(WindowState *state)
 {
     if (state == nullptr) return;
