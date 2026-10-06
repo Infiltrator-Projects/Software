@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "app/installed_inventory.hpp"
 
-#include "engine/debian_installed_state.hpp"
 #include "client/engine_client.hpp"
 #include "core/update_policy.hpp"
 
@@ -17,36 +16,18 @@ std::vector<PackageRecord> read_installed_packages(
 
     EngineClient engine;
     std::vector<PackageRecord> packages;
-    std::string engine_error;
-    if (engine.list_installed(packages, engine_error)) {
-        for (PackageRecord &package : packages) {
-            classify_package_role(package);
-        }
-        if (from_engine != nullptr) {
-            *from_engine = true;
-        }
-        error.clear();
-        return packages;
+    if (!engine.list_installed(packages, error)) {
+        return {};
     }
 
-    std::string fallback_error;
-    packages = DebianInstalledState::read(fallback_error);
-    if (fallback_error.empty()) {
-        for (PackageRecord &package : packages) {
-            classify_package_role(package);
-        }
-        error.clear();
-        return packages;
+    for (PackageRecord &package : packages) {
+        classify_package_role(package);
     }
-
-    error = fallback_error;
-    if (!engine_error.empty()) {
-        error =
-            "Shared engine unavailable: " + engine_error +
-            " Direct Debian-state fallback failed: " +
-            fallback_error;
+    if (from_engine != nullptr) {
+        *from_engine = true;
     }
-    return {};
+    error.clear();
+    return packages;
 }
 
 } // namespace infiltrator::software
