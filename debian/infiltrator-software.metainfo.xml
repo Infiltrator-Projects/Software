@@ -34,6 +34,11 @@
   <url type="homepage">https://github.com/Infiltrator-Projects/Software</url>
 
   <releases>
+    <release version="0.3.69" date="2026-10-06">
+      <description>
+        <p>Reduces app-shell coupling by moving shared domain records into the core model, making installed package state engine-owned, and extracting update reconciliation, external discovery and transaction planning into a dedicated Updates controller.</p>
+      </description>
+    </release>
     <release version="0.3.68" date="2026-10-03">
       <description>
         <p>Aligns the Details action with the update-row title badges while keeping version and repository metadata on the compact secondary line.</p>
