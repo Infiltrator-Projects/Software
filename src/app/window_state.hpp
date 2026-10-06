@@ -6,16 +6,13 @@
 #include "app/history_controller.hpp"
 #include "app/installed_controller.hpp"
 #include "app/repository_controller.hpp"
+#include "app/updates_controller.hpp"
 #include "core/model.hpp"
 #include "core/update_policy.hpp"
-#include "external/external_updates.hpp"
 
 #include <gtk/gtk.h>
 
-#include <cstdint>
-#include <optional>
 #include <string>
-#include <unordered_set>
 #include <vector>
 
 namespace infiltrator::software::app {
@@ -61,55 +58,6 @@ struct DiscoverPageState {
     bool discover_loaded{false};
 };
 
-struct UpdatesPageState {
-    GtkListBox *updates_list{};
-    GtkWidget *updates_status{};
-    GtkWidget *updates_count{};
-    GtkWidget *updates_critical{};
-    GtkWidget *updates_install{};
-    GtkWidget *updates_security{};
-    GtkWidget *updates_refresh{};
-    GtkWidget *updates_reboot_banner{};
-    GtkWidget *updates_reboot_detail{};
-    GtkWidget *updates_backend{};
-
-    GtkListBox *external_updates_list{};
-    GtkWidget *external_updates_status{};
-    GtkWidget *external_updates_spinner{};
-    GtkWidget *external_flatpak_apply{};
-    GtkWidget *external_cinnamon_apply{};
-    std::vector<ExternalUpdate> external_update_records;
-    std::unordered_set<std::string> selected_flatpak_refs;
-    std::unordered_set<std::string> selected_cinnamon_refs;
-
-    GtkWidget *updates_transaction_panel{};
-    GtkWidget *updates_transaction_phase{};
-    GtkWidget *updates_transaction_detail{};
-    GtkWidget *updates_transaction_meta{};
-    GtkWidget *updates_stage_labels[6]{};
-    GtkWidget *updates_progress{};
-    guint updates_progress_timer_id{0U};
-    gint64 updates_progress_started_us{0};
-    std::size_t updates_progress_items{0U};
-    std::uint64_t updates_progress_download_bytes{0U};
-    std::string updates_progress_token;
-    std::string updates_progress_phase;
-    bool updates_post_install_refresh{false};
-    bool updates_restart_after_verify{false};
-
-    std::vector<PackageRecord> update_records;
-    std::unordered_set<std::string> selected_update_ids;
-    std::string pending_update_selection;
-    std::optional<TransactionPlan> pending_update_plan;
-    unsigned int updates_generation{0U};
-    bool updates_busy{false};
-    bool external_updates_active{false};
-    bool updates_auto_refresh_pending{true};
-    gint64 updates_last_metadata_refresh_us{0};
-    guint updates_refresh_timer_id{0U};
-    bool updates_loaded{false};
-};
-
 struct SystemPageState {
     GtkListBox *system_list{};
     GtkWidget *system_status{};
@@ -144,10 +92,15 @@ struct RepairPageState {
     bool repair_loaded{false};
 };
 
+/*
+ * UpdatesController owns the Updates page state. Public inheritance is a
+ * temporary source-compatibility bridge only; new Updates code should accept
+ * UpdatesController directly rather than WindowState.
+ */
 struct WindowState final :
     ShellState,
     DiscoverPageState,
-    UpdatesPageState,
+    UpdatesController,
     SystemPageState,
     RepairPageState {
     InstalledController installed;
