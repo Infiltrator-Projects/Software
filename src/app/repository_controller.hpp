@@ -2,7 +2,7 @@
 #ifndef INFILTRATOR_SOFTWARE_REPOSITORY_CONTROLLER_HPP
 #define INFILTRATOR_SOFTWARE_REPOSITORY_CONTROLLER_HPP
 
-#include "sources/source_inventory.hpp"
+#include "core/model.hpp"
 
 #include <gtk/gtk.h>
 
