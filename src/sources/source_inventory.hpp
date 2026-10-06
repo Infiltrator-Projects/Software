@@ -2,32 +2,13 @@
 #ifndef INFILTRATOR_SOFTWARE_SOURCE_INVENTORY_HPP
 #define INFILTRATOR_SOFTWARE_SOURCE_INVENTORY_HPP
 
-#include <cstddef>
+#include "core/model.hpp"
+
 #include <string>
 #include <string_view>
 #include <vector>
 
 namespace infiltrator::software {
-
-enum class SourceKind {
-    infiltrator,
-    apt,
-    flatpak
-};
-
-struct SourceRecord {
-    SourceKind kind{SourceKind::apt};
-    std::string name;
-    std::string location;
-    std::string detail;
-    std::string scope;
-    std::string backing_file;
-    std::string apt_suites;
-    std::size_t entry_index{0U};
-    bool enabled{true};
-};
-
-std::string_view source_kind_name(SourceKind kind) noexcept;
 
 class SourceInventory {
 public:
