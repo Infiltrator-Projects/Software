@@ -269,6 +269,7 @@ endif()
 
 add_executable(infiltrator-software
     src/app/main.cpp
+    src/app/app_coordinator.cpp
     src/app/history_controller.cpp
     src/app/history_view.cpp
     src/app/installed_controller.cpp
@@ -276,7 +277,9 @@ add_executable(infiltrator-software
     src/app/updates_controller.cpp
     src/app/repository_controller.cpp
     src/app/repository_view.cpp
+    src/app/repair_diagnostics.cpp
     src/app/repair_view.cpp
+    src/app/system_data.cpp
     src/app/system_view.cpp
     src/app/preferences_dialog.cpp
     src/app/kernel_manager.cpp
