@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "app/repository_view.hpp"
 
+#include "app/app_coordinator.hpp"
 #include "app/repository_controller.hpp"
+#include "app/text_utils.hpp"
 #include "app/ui_components.hpp"
 #include "app/window_state.hpp"
-#include "sources/source_inventory.hpp"
 
 #include <gio/gio.h>
 #include <gtk/gtk.h>
@@ -24,11 +25,6 @@ using infiltrator::software::make_page_intro;
 using infiltrator::software::make_stat_card;
 using infiltrator::software::refresh_repository_controller;
 using infiltrator::software::source_kind_name;
-
-void refresh_discover(WindowState *state, bool force_refresh);
-void refresh_updates(WindowState *state, bool refresh_metadata);
-void rebuild_discover_repository_preview(WindowState *state);
-std::string one_line(std::string value);
 
 struct AddSourceDialog {
     GtkWindow *window{};
@@ -109,8 +105,8 @@ void add_source_process_complete(
                       G_OBJECT(run->dialog),
                       "add-source-context"));
 
-    bool success = communicated &&
-                   g_subprocess_get_successful(process);
+    const bool success = communicated &&
+                         g_subprocess_get_successful(process);
 
     if (dialog_context != nullptr &&
         dialog_context->status != nullptr) {
@@ -135,8 +131,7 @@ void add_source_process_complete(
     }
 
     if (success && state != nullptr) {
-        refresh_repositories(state);
-        refresh_discover(state, true);
+        notify_repository_state_changed(state);
         if (run != nullptr && run->dialog != nullptr) {
             gtk_window_destroy(run->dialog);
         }
@@ -497,13 +492,7 @@ void source_toggle_process_complete(
                     message.c_str());
             }
 
-            refresh_repositories(state);
-            if (state->discover_loaded) {
-                refresh_discover(state, true);
-            }
-            if (state->updates_loaded) {
-                refresh_updates(state, true);
-            }
+            notify_repository_state_changed(state);
         } else if (state->repositories.status != nullptr) {
             std::string message =
                 run != nullptr && run->enabled
@@ -512,11 +501,11 @@ void source_toggle_process_complete(
             if (stderr_text != nullptr &&
                 *stderr_text != '\0') {
                 message += " ";
-                message += one_line(stderr_text);
+                message += single_line(stderr_text);
             } else if (error != nullptr &&
                        error->message != nullptr) {
                 message += " ";
-                message += one_line(error->message);
+                message += single_line(error->message);
             }
             gtk_label_set_text(
                 GTK_LABEL(state->repositories.status),
@@ -623,7 +612,7 @@ void source_toggle_clicked(
             if (error != nullptr &&
                 error->message != nullptr) {
                 message += " ";
-                message += one_line(error->message);
+                message += single_line(error->message);
             }
             gtk_label_set_text(
                 GTK_LABEL(state->repositories.status),
@@ -769,17 +758,8 @@ GtkWidget *make_source_card(
 
 void repository_controller_changed(gpointer user_data)
 {
-    auto *state = static_cast<WindowState *>(user_data);
-    if (state == nullptr) return;
-
-    rebuild_discover_repository_preview(state);
-    if (state->discover_repositories_summary != nullptr) {
-        const std::string count =
-            std::to_string(state->repositories.records.size());
-        gtk_label_set_text(
-            GTK_LABEL(state->discover_repositories_summary),
-            count.c_str());
-    }
+    notify_repository_snapshot_changed(
+        static_cast<WindowState *>(user_data));
 }
 
 GtkWidget *repository_make_card(
@@ -940,7 +920,5 @@ GtkWidget *make_repositories_page(WindowState *state)
 
     return page;
 }
-
-
 
 } // namespace infiltrator::software::app
