@@ -145,7 +145,7 @@ struct WindowState final : ShellState {
 #define repair_health_title repair.repair_health_title
 #define repair_health_copy repair.repair_health_copy
 #define repair_recheck repair.repair_recheck
-#define repair_rebuild repair.rebuild
+#define repair_rebuild repair.repair_rebuild
 #define repair_configure repair.repair_configure
 #define repair_generation repair.repair_generation
 #define repair_busy repair.repair_busy
