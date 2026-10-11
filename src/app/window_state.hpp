@@ -33,11 +33,6 @@ struct ShellState {
  * exactly once by the named members below. It deliberately does not re-export
  * page widgets, vectors, timers, generations, or loaded flags: callers use the
  * page/controller owner instead; do not add new aliases here.
- *
- * The single system_critical compatibility reference remains because the
- * quarantined legacy provider's spelling collides with
- * PackageRecord::system_critical when represented by the old macro bridge.
- * It disappears when that final legacy call site is decomposed.
  */
 struct WindowState final : ShellState {
     DiscoverPageState discover;
@@ -48,8 +43,6 @@ struct WindowState final : ShellState {
     RepositoryController repositories;
     HistoryController history;
     SoftwarePreferences preferences{};
-
-    GtkWidget *&system_critical = system.system_critical;
 };
 
 } // namespace infiltrator::software::app
