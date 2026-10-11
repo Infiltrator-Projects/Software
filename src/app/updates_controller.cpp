@@ -2,11 +2,62 @@
 #include "app/updates_controller.hpp"
 
 #include "client/engine_client.hpp"
+#include "core/update_freshness.hpp"
 
 #include <iterator>
 #include <utility>
 
 namespace infiltrator::software::app {
+
+bool updates_controller_busy(
+    const UpdatesController &controller) noexcept
+{
+    return controller.updates_busy;
+}
+
+bool updates_controller_metadata_refresh_due(
+    const UpdatesController &controller,
+    const gint64 now_us) noexcept
+{
+    return update_metadata_refresh_due(
+        now_us,
+        controller.updates_last_metadata_refresh_us,
+        controller.updates_busy);
+}
+
+void updates_controller_set_selected(
+    UpdatesController &controller,
+    const bool selected,
+    GSourceFunc refresh_callback,
+    gpointer user_data)
+{
+    if (!selected) {
+        if (controller.updates_refresh_timer_id != 0U) {
+            g_source_remove(controller.updates_refresh_timer_id);
+            controller.updates_refresh_timer_id = 0U;
+        }
+        return;
+    }
+
+    if (controller.updates_refresh_timer_id == 0U &&
+        refresh_callback != nullptr) {
+        controller.updates_refresh_timer_id =
+            g_timeout_add_seconds(60U, refresh_callback, user_data);
+    }
+}
+
+void destroy_updates_controller(
+    UpdatesController &controller) noexcept
+{
+    if (controller.updates_refresh_timer_id != 0U) {
+        g_source_remove(controller.updates_refresh_timer_id);
+        controller.updates_refresh_timer_id = 0U;
+    }
+    if (controller.updates_progress_timer_id != 0U) {
+        g_source_remove(controller.updates_progress_timer_id);
+        controller.updates_progress_timer_id = 0U;
+    }
+}
 
 UpdatesRefreshResult refresh_updates_data(
     const UpdatesRefreshRequest &request)
