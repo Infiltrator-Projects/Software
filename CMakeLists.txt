@@ -291,13 +291,19 @@ add_executable(infiltrator-software
     src/app/theme.cpp
     src/app/ui_components.cpp)
 
-# The quarantined page implementation is the exact pre-split app source.  Its
-# obsolete entry point is renamed so only the small shell in main.cpp owns the
-# process/application lifecycle.  The page functions remain link-compatible
-# while Discover and Updates are migrated into their dedicated translation
-# units without changing package/update behaviour.
+# Compatibility macros are confined to the three translation units that still
+# contain pre-owner state spellings. The dedicated markers prevent ordinary
+# header include order from activating aliases, while main=... continues only
+# to suppress the obsolete entry point in the quarantined page provider.
 set_source_files_properties(src/app/legacy_page_impl.cpp PROPERTIES
-    COMPILE_DEFINITIONS "main=infiltrator_software_legacy_page_impl_main")
+    COMPILE_DEFINITIONS
+        "main=infiltrator_software_legacy_page_impl_main;INFILTRATOR_SOFTWARE_LEGACY_PAGE_IMPL=1")
+set_source_files_properties(src/app/system_view.cpp PROPERTIES
+    COMPILE_DEFINITIONS
+        "INFILTRATOR_SOFTWARE_SYSTEM_VIEW_LEGACY_ALIASES=1")
+set_source_files_properties(src/app/repair_view.cpp PROPERTIES
+    COMPILE_DEFINITIONS
+        "INFILTRATOR_SOFTWARE_REPAIR_VIEW_LEGACY_ALIASES=1")
 
 target_link_libraries(infiltrator-software PRIVATE
     software-core software-history software-client software-installed-state

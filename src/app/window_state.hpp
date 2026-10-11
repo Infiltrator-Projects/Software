@@ -48,12 +48,17 @@ struct WindowState final : ShellState {
 } // namespace infiltrator::software::app
 
 /*
- * legacy_page_impl.cpp is compiled with a source-local main=... definition to
- * suppress its obsolete entry point. Piggy-back on that existing translation-
- * unit marker so the compatibility names are visible nowhere else. New code
- * must never depend on legacy_page_aliases.hpp.
+ * Compatibility spellings are injected only after all owner declarations are
+ * complete, and only for the explicitly marked legacy translation units.
+ * Ordinary includes of WindowState and page headers never expose these macros.
  */
-#ifdef main
+#ifdef INFILTRATOR_SOFTWARE_SYSTEM_VIEW_LEGACY_ALIASES
+#include "app/system_view_legacy_aliases.hpp"
+#endif
+#ifdef INFILTRATOR_SOFTWARE_REPAIR_VIEW_LEGACY_ALIASES
+#include "app/repair_view_legacy_aliases.hpp"
+#endif
+#ifdef INFILTRATOR_SOFTWARE_LEGACY_PAGE_IMPL
 #include "app/legacy_page_aliases.hpp"
 #endif
 

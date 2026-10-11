@@ -6,12 +6,12 @@
  * Source-compatibility shims for src/app/legacy_page_impl.cpp only.
  *
  * The legacy page provider predates page-owned state and still spells fields
- * as state->discover_status, state->updates_list, and so on.  Keep those names
- * out of WindowState: they are not ownership, API, or architecture.  This
+ * as state->discover_status, state->updates_list, and so on. Keep those names
+ * out of WindowState: they are not ownership, API, or architecture. This
  * header exists solely to let the quarantined legacy implementation compile
  * while Discover and Updates continue moving to their page owners.
  *
- * Do not include this header from new code and do not add aliases.  Delete
+ * Do not include this header from new code and do not add aliases. Delete
  * aliases as their legacy call sites disappear, then delete this file.
  */
 #define discover_visible discover.discover_visible
@@ -79,33 +79,8 @@
 #define updates_refresh_timer_id updates.inventory.updates_refresh_timer_id
 #define updates_loaded updates.inventory.updates_loaded
 
-#define system_list system.system_list
-#define system_status system.system_status
-#define system_count system.system_count
-#define system_updates system.system_updates
-#define system_refresh system.system_refresh
-#define system_review_updates system.system_review_updates
-#define system_records system.system_records
-#define system_update_records system.system_update_records
-#define system_generation system.system_generation
-#define system_busy system.system_busy
-#define system_loaded system.system_loaded
-
-#define repair_list repair.repair_list
-#define repair_status repair.repair_status
-#define repair_engine repair.repair_engine
-#define repair_sources repair.repair_sources
-#define repair_issues repair.repair_issues
-#define repair_health_banner repair.repair_health_banner
-#define repair_health_icon repair.repair_health_icon
-#define repair_health_title repair.repair_health_title
-#define repair_health_copy repair.repair_health_copy
-#define repair_recheck repair.repair_recheck
-#define repair_rebuild repair.repair_rebuild
-#define repair_configure repair.repair_configure
-#define repair_generation repair.repair_generation
-#define repair_busy repair.repair_busy
-#define repair_interrupted repair.repair_interrupted
-#define repair_loaded repair.repair_loaded
+/* Reuse the same narrow compatibility definitions as the owning view bodies. */
+#include "app/system_view_legacy_aliases.hpp"
+#include "app/repair_view_legacy_aliases.hpp"
 
 #endif
