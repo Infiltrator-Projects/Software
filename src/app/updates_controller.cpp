@@ -12,7 +12,7 @@ namespace infiltrator::software::app {
 bool updates_controller_busy(
     const UpdatesController &controller) noexcept
 {
-    return controller.updates_busy;
+    return controller.inventory.updates_busy;
 }
 
 bool updates_controller_metadata_refresh_due(
@@ -21,8 +21,8 @@ bool updates_controller_metadata_refresh_due(
 {
     return update_metadata_refresh_due(
         now_us,
-        controller.updates_last_metadata_refresh_us,
-        controller.updates_busy);
+        controller.inventory.updates_last_metadata_refresh_us,
+        controller.inventory.updates_busy);
 }
 
 void updates_controller_set_selected(
@@ -31,31 +31,43 @@ void updates_controller_set_selected(
     GSourceFunc refresh_callback,
     gpointer user_data)
 {
+    auto &inventory = controller.inventory;
     if (!selected) {
-        if (controller.updates_refresh_timer_id != 0U) {
-            g_source_remove(controller.updates_refresh_timer_id);
-            controller.updates_refresh_timer_id = 0U;
+        if (inventory.updates_refresh_timer_id != 0U) {
+            g_source_remove(inventory.updates_refresh_timer_id);
+            inventory.updates_refresh_timer_id = 0U;
         }
         return;
     }
 
-    if (controller.updates_refresh_timer_id == 0U &&
+    if (inventory.updates_refresh_timer_id == 0U &&
         refresh_callback != nullptr) {
-        controller.updates_refresh_timer_id =
+        inventory.updates_refresh_timer_id =
             g_timeout_add_seconds(60U, refresh_callback, user_data);
     }
+}
+
+void updates_controller_set_pending_selection(
+    UpdatesController &controller,
+    const std::string_view selection)
+{
+    controller.inventory.pending_update_selection.assign(
+        selection.data(), selection.size());
 }
 
 void destroy_updates_controller(
     UpdatesController &controller) noexcept
 {
-    if (controller.updates_refresh_timer_id != 0U) {
-        g_source_remove(controller.updates_refresh_timer_id);
-        controller.updates_refresh_timer_id = 0U;
+    auto &inventory = controller.inventory;
+    auto &transaction = controller.transaction;
+
+    if (inventory.updates_refresh_timer_id != 0U) {
+        g_source_remove(inventory.updates_refresh_timer_id);
+        inventory.updates_refresh_timer_id = 0U;
     }
-    if (controller.updates_progress_timer_id != 0U) {
-        g_source_remove(controller.updates_progress_timer_id);
-        controller.updates_progress_timer_id = 0U;
+    if (transaction.updates_progress_timer_id != 0U) {
+        g_source_remove(transaction.updates_progress_timer_id);
+        transaction.updates_progress_timer_id = 0U;
     }
 }
 
