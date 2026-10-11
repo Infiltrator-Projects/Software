@@ -269,6 +269,8 @@ endif()
 
 add_executable(infiltrator-software
     src/app/main.cpp
+    src/app/legacy_page_impl.cpp
+    src/app/view_lifecycle_bridge.cpp
     src/app/app_coordinator.cpp
     src/app/navigation_controller.cpp
     src/app/runtime_state.cpp
@@ -288,6 +290,14 @@ add_executable(infiltrator-software
     src/app/kernel_manager.cpp
     src/app/theme.cpp
     src/app/ui_components.cpp)
+
+# The quarantined page implementation is the exact pre-split app source.  Its
+# obsolete entry point is renamed so only the small shell in main.cpp owns the
+# process/application lifecycle.  The page functions remain link-compatible
+# while Discover and Updates are migrated into their dedicated translation
+# units without changing package/update behaviour.
+set_source_files_properties(src/app/legacy_page_impl.cpp PROPERTIES
+    COMPILE_DEFINITIONS "main=infiltrator_software_legacy_page_impl_main")
 
 target_link_libraries(infiltrator-software PRIVATE
     software-core software-history software-client software-installed-state

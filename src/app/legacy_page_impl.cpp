@@ -1,0 +1,8255 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+#include "app/theme.hpp"
+#include "app/kernel_manager.hpp"
+#include "app/navigation_controller.hpp"
+#include "app/history_controller.hpp"
+#include "app/history_view.hpp"
+#include "app/installed_controller.hpp"
+#include "app/installed_inventory.hpp"
+#include "app/repository_controller.hpp"
+#include "app/repository_view.hpp"
+#include "app/repair_view.hpp"
+#include "app/system_view.hpp"
+#include "app/ui_components.hpp"
+#include "app/updates_controller.hpp"
+#include "app/window_state.hpp"
+#include "app/preferences_dialog.hpp"
+#include "catalogue/repository_catalogue.hpp"
+#include "catalogue/catalogue_snapshot_store.hpp"
+#include "catalogue/system_catalogue.hpp"
+#include "client/engine_client.hpp"
+#include "core/model.hpp"
+#include "core/exact_transaction_spec.hpp"
+#include "core/transaction_history.hpp"
+#include "core/update_freshness.hpp"
+#include "core/update_policy.hpp"
+#include "external/external_updates.hpp"
+#include "sources/source_inventory.hpp"
+
+#include <gtk/gtk.h>
+#include <curl/curl.h>
+#include <infiltratr/core.h>
+
+#include <algorithm>
+#include <cerrno>
+#include <cctype>
+#include <cstring>
+#include <exception>
+#include <filesystem>
+#include <fstream>
+#include <iterator>
+#include <optional>
+#include <set>
+#include <sstream>
+#include <string>
+#include <unordered_map>
+#include <unordered_set>
+#include <utility>
+#include <unistd.h>
+#include <vector>
+
+#ifndef INFILTRATOR_SOFTWARE_VERSION
+#define INFILTRATOR_SOFTWARE_VERSION "0.0.0"
+#endif
+
+namespace infiltrator::software::app {
+
+using infiltrator::software::CatalogueSnapshot;
+using infiltrator::software::CatalogueSnapshotStore;
+using infiltrator::software::EngineClient;
+using infiltrator::software::PackageRecord;
+using infiltrator::software::KernelRecord;
+using infiltrator::software::RepositoryCatalogue;
+using infiltrator::software::SourceInventory;
+using infiltrator::software::SourceKind;
+using infiltrator::software::SourceRecord;
+using infiltrator::software::SystemCatalogue;
+using infiltrator::software::ThemeController;
+using infiltrator::software::TransactionAction;
+using infiltrator::software::TransactionHistoryItem;
+using infiltrator::software::TransactionHistoryStore;
+using infiltrator::software::TransactionPlan;
+using infiltrator::software::TransactionItem;
+using infiltrator::software::SoftwarePreferences;
+using infiltrator::software::load_software_preferences;
+using infiltrator::software::save_software_preferences;
+using infiltrator::software::update_is_ignored;
+using infiltrator::software::reboot_required;
+using infiltrator::software::reboot_required_packages;
+using infiltrator::software::ExternalUpdate;
+using infiltrator::software::ExternalUpdateKind;
+using infiltrator::software::external_update_kind_name;
+using infiltrator::software::discover_flatpak_updates;
+using infiltrator::software::discover_cinnamon_updates;
+using infiltrator::software::apply_flatpak_updates;
+using infiltrator::software::set_flatpak_application_installed;
+using infiltrator::software::apply_cinnamon_updates;
+using infiltrator::software::apply_cinnamon_updates_selected;
+using infiltrator::software::source_kind_name;
+using infiltrator::software::update_metadata_refresh_due;
+using infiltrator::software::HistoryController;
+using infiltrator::software::create_history_controller_page;
+using infiltrator::software::history_timestamp;
+using infiltrator::software::refresh_history_controller;
+using infiltrator::software::read_installed_packages;
+using infiltrator::software::InstalledController;
+using infiltrator::software::create_installed_page;
+using infiltrator::software::refresh_installed_controller;
+using infiltrator::software::RepositoryController;
+using infiltrator::software::configure_repository_controller;
+using infiltrator::software::refresh_repository_controller;
+using infiltrator::software::make_icon;
+using infiltrator::software::make_label;
+using infiltrator::software::make_page_intro;
+using infiltrator::software::make_stat_card;
+
+void refresh_updates(WindowState *state, bool refresh_metadata = false);
+void refresh_updates_internal(
+    WindowState *state,
+    bool refresh_metadata,
+    bool refresh_external);
+void refresh_discover(WindowState *state, bool force_refresh);
+void refresh_installed(WindowState *state);
+void refresh_history(WindowState *state);
+void rebuild_updates(WindowState *state);
+std::string one_line(std::string value);
+const char *update_icon_name(const PackageRecord &package);
+void select_page(WindowState *state, int index);
+void discover_install_clicked(GtkButton *button, gpointer user_data);
+
+static constexpr const char kDiscoverHeroBase64[] =
+#include "discover_hero_part01.inc"
+#include "discover_hero_part02.inc"
+#include "discover_hero_part03.inc"
+#include "discover_hero_part04.inc"
+#include "discover_hero_part05.inc"
+#include "discover_hero_part06.inc"
+    ;
+
+static constexpr const char kTitlebarLogoBase64[] =
+#include "titlebar_logo.inc"
+    ;
+
+GtkWidget *make_embedded_picture(
+    const char *base64,
+    const char *css_class,
+    const GtkContentFit content_fit)
+{
+    if (base64 == nullptr || *base64 == '\0') {
+        return nullptr;
+    }
+
+    gsize image_size = 0;
+    guchar *image_data =
+        g_base64_decode(base64, &image_size);
+    if (image_data == nullptr || image_size == 0U) {
+        g_free(image_data);
+        return nullptr;
+    }
+
+    GBytes *image_bytes =
+        g_bytes_new_take(image_data, image_size);
+    GError *texture_error = nullptr;
+    GdkTexture *texture =
+        gdk_texture_new_from_bytes(
+            image_bytes, &texture_error);
+    g_bytes_unref(image_bytes);
+
+    if (texture == nullptr) {
+        g_warning(
+            "Embedded raster asset failed to decode: %s",
+            texture_error != nullptr
+                ? texture_error->message
+                : "unknown image decoder error");
+        g_clear_error(&texture_error);
+        return nullptr;
+    }
+
+    GtkWidget *picture =
+        gtk_picture_new_for_paintable(
+            GDK_PAINTABLE(texture));
+    g_object_unref(texture);
+    gtk_picture_set_content_fit(
+        GTK_PICTURE(picture), content_fit);
+    gtk_picture_set_can_shrink(
+        GTK_PICTURE(picture), true);
+    if (css_class != nullptr) {
+        gtk_widget_add_css_class(
+            picture, css_class);
+    }
+    return picture;
+}
+
+struct DiscoverResult {
+    CatalogueSnapshot snapshot;
+    std::vector<std::string> search_texts;
+    std::vector<std::string> categories;
+    std::string warning;
+    std::size_t added{0U};
+    std::size_t removed{0U};
+};
+
+struct DiscoverTaskData {
+    unsigned int generation{0U};
+    bool force_refresh{false};
+};
+
+struct DiscoverInstalledResult {
+    std::vector<PackageRecord> installed;
+    std::string warning;
+};
+
+struct DiscoverInstalledTaskData {
+    unsigned int generation{0U};
+};
+
+struct IconHydrationResult {
+    std::vector<PackageRecord> records;
+    std::string warning;
+};
+
+struct IconHydrationTaskData {
+    unsigned int generation{0U};
+    std::vector<PackageRecord> records;
+};
+
+std::string folded(const std::string_view value)
+{
+    gchar *text = g_utf8_casefold(
+        value.data(), static_cast<gssize>(value.size()));
+    if (text == nullptr) {
+        return {};
+    }
+    std::string result(text);
+    g_free(text);
+    return result;
+}
+
+std::string discover_search_text(const PackageRecord &record)
+{
+    /*
+     * Discover is a software search, not just a title search.  Index every
+     * user-facing identity/description field we already have so queries such
+     * as "theme" can match package summaries, publishers, source package
+     * names and catalogue identifiers as well as the visible application
+     * name.  Keep the folded representation cached by the caller.
+     */
+    return folded(
+        record.name + "\n" +
+        record.summary + "\n" +
+        record.description + "\n" +
+        record.publisher + "\n" +
+        record.category + "\n" +
+        record.id + "\n" +
+        record.package_name + "\n" +
+        record.source_package + "\n" +
+        record.source);
+}
+
+void prepare_discover_presentation(DiscoverResult *result)
+{
+    if (result == nullptr) {
+        return;
+    }
+
+    result->search_texts.clear();
+    result->search_texts.reserve(result->snapshot.records.size());
+    std::set<std::string> categories;
+    for (const PackageRecord &record : result->snapshot.records) {
+        result->search_texts.emplace_back(discover_search_text(record));
+        if (!record.category.empty()) {
+            categories.insert(record.category);
+        }
+    }
+    result->categories.assign(categories.begin(), categories.end());
+}
+
+std::string display_size(const std::uint64_t bytes)
+{
+    char text[32];
+    const char *formatted =
+        infiltratr_format_bytes(bytes, text, sizeof(text));
+    return formatted != nullptr ? std::string(formatted) : std::string();
+}
+
+const char *category_icon(const std::string_view category) noexcept
+{
+    if (category == "Productivity") return "accessories-calculator-symbolic";
+    if (category == "Automotive") return "applications-engineering-symbolic";
+    if (category == "Filesystems") return "drive-harddisk-symbolic";
+    if (category == "Development") return "applications-development-symbolic";
+    if (category == "Infrastructure") return "network-workgroup-symbolic";
+    if (category == "Accessories") return "applications-accessories-symbolic";
+    if (category == "Games") return "applications-games-symbolic";
+    if (category == "Graphics") return "applications-graphics-symbolic";
+    if (category == "Internet") return "applications-internet-symbolic";
+    if (category == "Office") return "applications-office-symbolic";
+    if (category == "Programming") return "applications-development-symbolic";
+    if (category == "Science & Education") return "applications-science-symbolic";
+    if (category == "Sound & Video") return "applications-multimedia-symbolic";
+    if (category == "System Tools") return "applications-system-symbolic";
+    return "application-x-executable-symbolic";
+}
+
+GtkWidget *catalogue_icon(const PackageRecord &record, const int size)
+{
+    GtkWidget *icon = nullptr;
+    if (!record.cached_icon_path.empty()) {
+        icon = gtk_image_new_from_file(record.cached_icon_path.c_str());
+    } else if (!record.icon_name.empty()) {
+        icon = gtk_image_new_from_icon_name(record.icon_name.c_str());
+    } else {
+        icon = gtk_image_new_from_icon_name(category_icon(record.category));
+    }
+    gtk_image_set_pixel_size(GTK_IMAGE(icon), size);
+    gtk_widget_add_css_class(icon, "discover-app-icon");
+    return icon;
+}
+
+void package_record_destroy(gpointer data)
+{
+    delete static_cast<PackageRecord *>(data);
+}
+
+GtkWidget *detail_row(const char *caption, const std::string &value)
+{
+    GtkWidget *row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
+    GtkWidget *left = make_label(caption, "detail-label");
+    gtk_widget_set_size_request(left, 130, -1);
+    GtkWidget *right = make_label(
+        value.empty() ? "—" : value.c_str(), "detail-value");
+    gtk_label_set_wrap(GTK_LABEL(right), true);
+    gtk_widget_set_hexpand(right, true);
+    gtk_box_append(GTK_BOX(row), left);
+    gtk_box_append(GTK_BOX(row), right);
+    return row;
+}
+
+const char *transaction_action_label(const TransactionAction action) noexcept
+{
+    switch (action) {
+    case TransactionAction::install: return "Install";
+    case TransactionAction::upgrade: return "Upgrade";
+    case TransactionAction::remove: return "Remove";
+    }
+    return "Change";
+}
+
+std::string display_disk_delta(const std::int64_t bytes)
+{
+    if (bytes == 0) return "0 B";
+    const bool negative = bytes < 0;
+    const std::uint64_t magnitude =
+        negative
+            ? static_cast<std::uint64_t>(-(bytes + 1)) + 1U
+            : static_cast<std::uint64_t>(bytes);
+    return std::string(negative ? "−" : "+") + display_size(magnitude);
+}
+
+std::string transaction_item_text(
+    const infiltrator::software::TransactionItem &item)
+{
+    std::ostringstream text;
+    text << transaction_action_label(item.action) << "  " << item.package_id;
+    if (item.action == TransactionAction::upgrade &&
+        !item.from_version.empty()) {
+        text << "  " << item.from_version << " → " << item.to_version;
+    } else if (item.action == TransactionAction::install &&
+               !item.to_version.empty()) {
+        text << "  → " << item.to_version;
+    } else if (item.action == TransactionAction::remove &&
+               !item.from_version.empty()) {
+        text << "  " << item.from_version << " → removed";
+    }
+    text << (item.requested ? "  [requested]" : "  [dependency]");
+    if (item.system_critical) text << "  [system-critical]";
+    if (!item.source.empty()) text << "\nSource: " << item.source;
+    return text.str();
+}
+
+/*
+ * GtkDialog remains part of the GTK 4.6 compatibility baseline. Newer GTK
+ * marks these constructors deprecated, so keep the warning local until the
+ * minimum GTK version can move to the replacement API.
+ */
+G_GNUC_BEGIN_IGNORE_DEPRECATIONS
+GtkWidget *make_transaction_confirmation_dialog(
+    GtkWindow *parent,
+    const char *title,
+    const std::string &heading,
+    const char *accept_label,
+    const TransactionPlan &plan)
+{
+    GtkWidget *dialog = gtk_dialog_new_with_buttons(
+        title,
+        parent,
+        static_cast<GtkDialogFlags>(
+            GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT),
+        "Cancel", GTK_RESPONSE_CANCEL,
+        accept_label, GTK_RESPONSE_ACCEPT,
+        nullptr);
+    gtk_window_set_default_size(GTK_WINDOW(dialog), 720, 560);
+
+    GtkWidget *content =
+        gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+    G_GNUC_END_IGNORE_DEPRECATIONS
+    gtk_box_set_spacing(GTK_BOX(content), 12);
+    gtk_widget_set_margin_start(content, 18);
+    gtk_widget_set_margin_end(content, 18);
+    gtk_widget_set_margin_top(content, 16);
+    gtk_widget_set_margin_bottom(content, 16);
+
+    GtkWidget *heading_label = make_label(heading.c_str(), "hero-title");
+    gtk_label_set_wrap(GTK_LABEL(heading_label), true);
+    gtk_box_append(GTK_BOX(content), heading_label);
+
+    std::ostringstream summary;
+    summary << plan.items.size()
+            << (plan.items.size() == 1U
+                    ? " package change."
+                    : " package changes.");
+    if (plan.download_bytes > 0U) {
+    summary << "  Download: " << display_size(plan.download_bytes) << ".";
+}
+if (plan.disk_delta_bytes != 0) {
+    summary << "  Disk change: "
+            << display_disk_delta(plan.disk_delta_bytes) << ".";
+}
+if (plan.touches_system) {
+    summary << "\nThis transaction includes system-critical components.";
+}
+summary << "\nResolved by the native package engine against state "
+        << "generation " << plan.state_generation << ".";
+
+    GtkWidget *summary_label =
+        make_label(summary.str().c_str(), "detail-note");
+    gtk_label_set_wrap(GTK_LABEL(summary_label), true);
+    gtk_label_set_selectable(GTK_LABEL(summary_label), true);
+    gtk_box_append(GTK_BOX(content), summary_label);
+
+    GtkWidget *changes =
+        make_label("Complete resolved change set", "card-title");
+    gtk_box_append(GTK_BOX(content), changes);
+
+    GtkWidget *scroller = gtk_scrolled_window_new();
+    gtk_scrolled_window_set_policy(
+        GTK_SCROLLED_WINDOW(scroller),
+        GTK_POLICY_AUTOMATIC,
+        GTK_POLICY_AUTOMATIC);
+    gtk_widget_set_vexpand(scroller, true);
+    gtk_widget_set_size_request(scroller, -1, 300);
+
+    GtkWidget *list = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
+    for (const auto &item : plan.items) {
+        GtkWidget *row = gtk_box_new(GTK_ORIENTATION_VERTICAL, 3);
+        gtk_widget_add_css_class(row, "card");
+        GtkWidget *label =
+            make_label(transaction_item_text(item).c_str(), "card-copy");
+        gtk_label_set_wrap(GTK_LABEL(label), true);
+        gtk_label_set_selectable(GTK_LABEL(label), true);
+        gtk_box_append(GTK_BOX(row), label);
+        gtk_box_append(GTK_BOX(list), row);
+    }
+    gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(scroller), list);
+    gtk_box_append(GTK_BOX(content), scroller);
+    return dialog;
+}
+G_GNUC_END_IGNORE_DEPRECATIONS
+
+void discover_details_clicked(GtkButton *button, gpointer user_data)
+{
+    auto *state = static_cast<WindowState *>(user_data);
+    auto *record = static_cast<PackageRecord *>(
+        g_object_get_data(G_OBJECT(button), "discover-record"));
+    if (state == nullptr || state->window == nullptr || record == nullptr) {
+        return;
+    }
+
+    GtkWidget *dialog = gtk_window_new();
+    gtk_window_set_title(GTK_WINDOW(dialog), record->name.c_str());
+    gtk_window_set_default_size(GTK_WINDOW(dialog), 680, 560);
+    gtk_window_set_transient_for(GTK_WINDOW(dialog), state->window);
+    gtk_window_set_destroy_with_parent(GTK_WINDOW(dialog), true);
+    gtk_window_set_modal(GTK_WINDOW(dialog), true);
+
+    GtkWidget *outer = gtk_box_new(GTK_ORIENTATION_VERTICAL, 16);
+    gtk_widget_add_css_class(outer, "detail-page");
+    gtk_widget_set_margin_start(outer, 24);
+    gtk_widget_set_margin_end(outer, 24);
+    gtk_widget_set_margin_top(outer, 24);
+    gtk_widget_set_margin_bottom(outer, 24);
+    gtk_window_set_child(GTK_WINDOW(dialog), outer);
+
+    GtkWidget *hero = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 16);
+    gtk_widget_add_css_class(hero, "detail-hero");
+    gtk_box_append(GTK_BOX(hero), catalogue_icon(*record, 64));
+
+    GtkWidget *identity = gtk_box_new(GTK_ORIENTATION_VERTICAL, 3);
+    GtkWidget *name = make_label(record->name.c_str(), "hero-title");
+    GtkWidget *summary = make_label(
+        record->description.c_str(), "hero-subtitle");
+    gtk_label_set_wrap(GTK_LABEL(summary), true);
+    gtk_box_append(GTK_BOX(identity), name);
+    gtk_box_append(GTK_BOX(identity), summary);
+    gtk_box_append(GTK_BOX(hero), identity);
+    gtk_box_append(GTK_BOX(outer), hero);
+
+    GtkWidget *card = gtk_box_new(GTK_ORIENTATION_VERTICAL, 9);
+    gtk_widget_add_css_class(card, "card");
+    gtk_widget_add_css_class(card, "card-info");
+    gtk_box_append(
+        GTK_BOX(card),
+        detail_row("Package", record->package_name));
+    gtk_box_append(
+        GTK_BOX(card),
+        detail_row("Version", record->available_version));
+    gtk_box_append(
+        GTK_BOX(card),
+        detail_row("Category", record->category));
+    gtk_box_append(
+        GTK_BOX(card),
+        detail_row("Architecture", record->architecture));
+    gtk_box_append(
+        GTK_BOX(card),
+        detail_row("Publisher", record->publisher));
+    gtk_box_append(
+        GTK_BOX(card),
+        detail_row("Source", record->source));
+    gtk_box_append(
+        GTK_BOX(card),
+        detail_row("Download", display_size(record->download_size_bytes)));
+    gtk_box_append(
+        GTK_BOX(card),
+        detail_row("SHA-256", record->package_sha256));
+    gtk_box_append(GTK_BOX(outer), card);
+
+    GtkWidget *status = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+    const bool package_installed =
+        record->state == infiltrator::software::InstallState::installed;
+    const bool package_upgradable =
+        record->state == infiltrator::software::InstallState::upgradable;
+    GtkWidget *badge = make_label(
+        package_installed
+            ? "Installed"
+            : (package_upgradable ? "Update available" : "Available"),
+        package_installed
+            ? "state-installed"
+            : "state-available");
+    gtk_box_append(GTK_BOX(status), badge);
+
+    if (!record->source_url.empty()) {
+        GtkWidget *source = gtk_link_button_new_with_label(
+            record->source_url.c_str(), "Source");
+        gtk_box_append(GTK_BOX(status), source);
+    }
+    if (!record->release_url.empty()) {
+        GtkWidget *release = gtk_link_button_new_with_label(
+            record->release_url.c_str(), "Release");
+        gtk_box_append(GTK_BOX(status), release);
+    }
+    gtk_box_append(GTK_BOX(outer), status);
+
+    GtkWidget *note = make_label(
+        package_installed
+            ? "Removal is checked against installed reverse dependencies and "
+              "the complete change set is shown before authorization."
+            : "The complete dependency and system change set will be resolved "
+              "and shown before administrator authorization is requested.",
+        "detail-note");
+    gtk_label_set_wrap(GTK_LABEL(note), true);
+    gtk_box_append(GTK_BOX(outer), note);
+
+    GtkWidget *actions =
+        gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+    GtkWidget *install = gtk_button_new_with_label(
+        package_installed
+            ? "Remove"
+            : (package_upgradable ? "Update" : "Install"));
+    gtk_widget_add_css_class(
+        install,
+        package_installed ? "destructive-action" : "suggested-action");
+    g_object_set_data_full(
+        G_OBJECT(install),
+        "discover-install-record",
+        new PackageRecord(*record),
+        package_record_destroy);
+    g_object_set_data_full(
+        G_OBJECT(install),
+        "discover-install-status",
+        g_object_ref(note),
+        g_object_unref);
+    g_signal_connect(
+        install, "clicked",
+        G_CALLBACK(discover_install_clicked), state);
+    gtk_box_append(GTK_BOX(actions), install);
+    gtk_box_append(GTK_BOX(outer), actions);
+
+    gtk_window_present(GTK_WINDOW(dialog));
+}
+
+GtkWidget *make_discover_card(
+    WindowState *state, const PackageRecord &record)
+{
+    GtkWidget *card = gtk_box_new(GTK_ORIENTATION_VERTICAL, 12);
+    gtk_widget_add_css_class(card, "discover-card");
+    gtk_widget_set_size_request(card, 310, 246);
+
+    GtkWidget *header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 13);
+
+    GtkWidget *icon_well =
+        gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    gtk_widget_add_css_class(icon_well, "discover-icon-well");
+    gtk_widget_set_size_request(icon_well, 74, 74);
+    GtkWidget *app_icon = catalogue_icon(record, 58);
+    gtk_widget_set_halign(app_icon, GTK_ALIGN_CENTER);
+    gtk_widget_set_valign(app_icon, GTK_ALIGN_CENTER);
+    gtk_box_append(GTK_BOX(icon_well), app_icon);
+    gtk_box_append(GTK_BOX(header), icon_well);
+
+    GtkWidget *identity = gtk_box_new(GTK_ORIENTATION_VERTICAL, 3);
+    gtk_widget_set_hexpand(identity, true);
+    GtkWidget *name = make_label(record.name.c_str(), "discover-name");
+    gtk_label_set_ellipsize(GTK_LABEL(name), PANGO_ELLIPSIZE_END);
+    std::string meta_text = record.category;
+    if (!record.available_version.empty()) {
+        meta_text += "  •  " + record.available_version;
+    }
+    GtkWidget *meta = make_label(
+        meta_text.c_str(), "discover-meta");
+    gtk_label_set_ellipsize(GTK_LABEL(meta), PANGO_ELLIPSIZE_END);
+    gtk_box_append(GTK_BOX(identity), name);
+    gtk_box_append(GTK_BOX(identity), meta);
+
+    if (!record.source.empty()) {
+        GtkWidget *source =
+            make_label(record.source.c_str(), "discover-source-chip");
+        gtk_label_set_ellipsize(
+            GTK_LABEL(source), PANGO_ELLIPSIZE_END);
+        gtk_box_append(GTK_BOX(identity), source);
+    }
+
+    gtk_box_append(GTK_BOX(header), identity);
+    gtk_box_append(GTK_BOX(card), header);
+
+    GtkWidget *description =
+        make_label(record.description.c_str(), "discover-description");
+    gtk_label_set_wrap(GTK_LABEL(description), true);
+    gtk_label_set_lines(GTK_LABEL(description), 3);
+    gtk_label_set_ellipsize(GTK_LABEL(description), PANGO_ELLIPSIZE_END);
+    gtk_widget_set_vexpand(description, true);
+    gtk_box_append(GTK_BOX(card), description);
+
+    GtkWidget *footer = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+    GtkWidget *state_label = nullptr;
+    if (record.state == infiltrator::software::InstallState::installed) {
+        const std::string installed =
+            record.installed_version.empty()
+                ? "Installed"
+                : "Installed " + record.installed_version;
+        state_label =
+            make_label(installed.c_str(), "state-installed");
+    } else if (
+        record.state ==
+        infiltrator::software::InstallState::upgradable) {
+        state_label =
+            make_label("Update available", "state-available");
+    } else {
+        state_label = make_label("Available", "state-available");
+    }
+    gtk_widget_set_hexpand(state_label, true);
+    gtk_box_append(GTK_BOX(footer), state_label);
+
+    GtkWidget *details = gtk_button_new_with_label("Details");
+    gtk_widget_add_css_class(details, "discover-details");
+    g_object_set_data_full(
+        G_OBJECT(details),
+        "discover-record",
+        new PackageRecord(record),
+        package_record_destroy);
+    g_signal_connect(
+        details, "clicked",
+        G_CALLBACK(discover_details_clicked), state);
+    gtk_box_append(GTK_BOX(footer), details);
+
+    if (!record.package_name.empty()) {
+        const bool installed =
+            record.state ==
+            infiltrator::software::InstallState::installed;
+        const bool upgradable =
+            record.state ==
+            infiltrator::software::InstallState::upgradable;
+        GtkWidget *action = gtk_button_new_with_label(
+            installed ? "Remove" : (upgradable ? "Update" : "Install"));
+        gtk_widget_add_css_class(
+            action,
+            installed ? "destructive-action" : "suggested-action");
+        g_object_set_data_full(
+            G_OBJECT(action),
+            "discover-install-record",
+            new PackageRecord(record),
+            package_record_destroy);
+        g_signal_connect(
+            action, "clicked",
+            G_CALLBACK(discover_install_clicked), state);
+        gtk_box_append(GTK_BOX(footer), action);
+    }
+
+    gtk_box_append(GTK_BOX(card), footer);
+    return card;
+}
+
+
+GtkWidget *make_featured_card(
+    WindowState *state,
+    const PackageRecord &record)
+{
+    GtkWidget *card =
+        gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
+    gtk_widget_add_css_class(
+        card, "featured-card");
+    /*
+     * This is a minimum only.  FlowBox expands four homogeneous cards across
+     * the two-thirds Featured column on wide windows, while the small minimum
+     * prevents display scaling from forcing the dashboard wider than the
+     * available content area.
+     */
+    gtk_widget_set_size_request(
+        card, 112, 218);
+
+    GtkWidget *art =
+        gtk_overlay_new();
+    gtk_widget_add_css_class(
+        art, "featured-card-art");
+    gtk_widget_set_size_request(
+        art, -1, 82);
+
+    GtkWidget *art_picture =
+        make_embedded_picture(
+            kDiscoverHeroBase64,
+            "featured-card-raster",
+            GTK_CONTENT_FIT_COVER);
+    if (art_picture != nullptr) {
+        gtk_widget_set_hexpand(
+            art_picture, true);
+        gtk_widget_set_vexpand(
+            art_picture, true);
+        gtk_overlay_set_child(
+            GTK_OVERLAY(art),
+            art_picture);
+    }
+
+    GtkWidget *shade =
+        gtk_box_new(
+            GTK_ORIENTATION_VERTICAL, 0);
+    gtk_widget_add_css_class(
+        shade, "featured-card-art-shade");
+    gtk_widget_set_hexpand(
+        shade, true);
+    gtk_widget_set_vexpand(
+        shade, true);
+    gtk_widget_set_can_target(
+        shade, false);
+    gtk_overlay_add_overlay(
+        GTK_OVERLAY(art), shade);
+
+    GtkWidget *icon =
+        catalogue_icon(record, 58);
+    gtk_widget_set_halign(
+        icon, GTK_ALIGN_CENTER);
+    gtk_widget_set_valign(
+        icon, GTK_ALIGN_CENTER);
+    gtk_widget_set_can_target(
+        icon, false);
+    gtk_overlay_add_overlay(
+        GTK_OVERLAY(art), icon);
+    gtk_box_append(GTK_BOX(card), art);
+
+    GtkWidget *name =
+        make_label(
+            record.name.c_str(),
+            "featured-card-name");
+    gtk_label_set_ellipsize(
+        GTK_LABEL(name),
+        PANGO_ELLIPSIZE_END);
+    gtk_box_append(GTK_BOX(card), name);
+
+    const std::string category =
+        record.category.empty()
+            ? "Application"
+            : record.category;
+    GtkWidget *meta =
+        make_label(
+            category.c_str(),
+            "featured-card-meta");
+    gtk_label_set_ellipsize(
+        GTK_LABEL(meta),
+        PANGO_ELLIPSIZE_END);
+    gtk_box_append(GTK_BOX(card), meta);
+
+    GtkWidget *description =
+        make_label(
+            record.description.c_str(),
+            "featured-card-copy");
+    gtk_label_set_wrap(
+        GTK_LABEL(description), true);
+    gtk_label_set_lines(
+        GTK_LABEL(description), 2);
+    gtk_label_set_ellipsize(
+        GTK_LABEL(description),
+        PANGO_ELLIPSIZE_END);
+    gtk_widget_set_vexpand(
+        description, true);
+    gtk_box_append(
+        GTK_BOX(card), description);
+
+    if (!record.package_name.empty()) {
+        const bool installed =
+            record.state ==
+            infiltrator::software::InstallState::installed;
+        const bool upgradable =
+            record.state ==
+            infiltrator::software::InstallState::upgradable;
+        GtkWidget *action =
+            gtk_button_new_with_label(
+                installed
+                    ? "Remove"
+                    : (upgradable
+                           ? "Update"
+                           : "Install"));
+        gtk_widget_add_css_class(
+            action,
+            installed
+                ? "destructive-action"
+                : "suggested-action");
+        gtk_widget_add_css_class(
+            action,
+            "featured-primary");
+        gtk_widget_set_hexpand(
+            action, true);
+        g_object_set_data_full(
+            G_OBJECT(action),
+            "discover-install-record",
+            new PackageRecord(record),
+            package_record_destroy);
+        g_signal_connect(
+            action, "clicked",
+            G_CALLBACK(discover_install_clicked),
+            state);
+        gtk_box_append(
+            GTK_BOX(card), action);
+    }
+
+    return card;
+}
+
+std::vector<PackageRecord> featured_fallback_records()
+{
+    std::vector<PackageRecord> records;
+    records.reserve(4U);
+
+    auto add = [&records](
+        const char *id,
+        const char *name,
+        const char *package_name,
+        const char *category,
+        const char *description,
+        const char *icon_name) {
+        PackageRecord record;
+        record.id = id;
+        record.name = name;
+        record.package_name = package_name;
+        record.publisher = "Distribution";
+        record.category = category;
+        record.description = description;
+        record.summary = description;
+        record.icon_name = icon_name;
+        record.source = "System repository";
+        record.kind =
+            infiltrator::software::PackageKind::application;
+        record.state =
+            infiltrator::software::InstallState::not_installed;
+        records.emplace_back(std::move(record));
+    };
+
+    add(
+        "featured:firefox",
+        "Firefox",
+        "firefox",
+        "Internet",
+        "Fast, private and open web browsing.",
+        "firefox");
+    add(
+        "featured:libreoffice",
+        "LibreOffice",
+        "libreoffice",
+        "Office",
+        "A complete office productivity suite.",
+        "libreoffice-startcenter");
+    add(
+        "featured:gimp",
+        "GIMP",
+        "gimp",
+        "Graphics",
+        "Create and edit images with powerful tools.",
+        "gimp");
+    add(
+        "featured:vlc",
+        "VLC",
+        "vlc",
+        "Sound & Video",
+        "Play video and audio in almost any format.",
+        "vlc");
+
+    return records;
+}
+
+const PackageRecord *find_featured_record(
+    const WindowState *state,
+    const PackageRecord &fallback,
+    const std::vector<std::size_t> &visible_indices)
+{
+    if (state == nullptr) {
+        return nullptr;
+    }
+
+    const std::string wanted_package =
+        folded(fallback.package_name);
+    const std::string wanted_name =
+        folded(fallback.name);
+
+    for (const std::size_t index : visible_indices) {
+        if (index >= state->discover_records.size()) {
+            continue;
+        }
+        const PackageRecord &record =
+            state->discover_records[index];
+        if (folded(record.package_name) == wanted_package ||
+            folded(record.name) == wanted_name) {
+            return &record;
+        }
+    }
+    return nullptr;
+}
+
+void append_curated_featured(
+    WindowState *state,
+    const std::vector<std::size_t> *visible_indices = nullptr)
+{
+    if (state == nullptr ||
+        state->discover_featured_flow == nullptr) {
+        return;
+    }
+
+    const std::vector<PackageRecord> fallback =
+        featured_fallback_records();
+    static const std::vector<std::size_t> empty_indices;
+
+    const std::vector<std::size_t> &indices =
+        visible_indices != nullptr
+            ? *visible_indices
+            : empty_indices;
+
+    for (const PackageRecord &placeholder : fallback) {
+        const PackageRecord *record =
+            find_featured_record(
+                state, placeholder, indices);
+        gtk_flow_box_append(
+            GTK_FLOW_BOX(
+                state->discover_featured_flow),
+            make_featured_card(
+                state,
+                record != nullptr
+                    ? *record
+                    : placeholder));
+    }
+}
+
+void clear_box_children(GtkWidget *box)
+{
+    if (box == nullptr) {
+        return;
+    }
+    GtkWidget *child =
+        gtk_widget_get_first_child(box);
+    while (child != nullptr) {
+        GtkWidget *next =
+            gtk_widget_get_next_sibling(child);
+        gtk_box_remove(
+            GTK_BOX(box), child);
+        child = next;
+    }
+}
+
+GtkWidget *make_preview_row(
+    const char *icon_name,
+    const char *title,
+    const char *subtitle,
+    const char *semantic_class)
+{
+    GtkWidget *row =
+        gtk_box_new(
+            GTK_ORIENTATION_HORIZONTAL, 9);
+    gtk_widget_add_css_class(
+        row, "preview-row");
+
+    GtkWidget *icon_well =
+        gtk_box_new(
+            GTK_ORIENTATION_VERTICAL, 0);
+    gtk_widget_add_css_class(
+        icon_well, "preview-icon-well");
+    if (semantic_class != nullptr) {
+        gtk_widget_add_css_class(
+            icon_well, semantic_class);
+    }
+    GtkWidget *icon =
+        make_icon(icon_name, 18);
+    gtk_widget_set_halign(
+        icon, GTK_ALIGN_CENTER);
+    gtk_widget_set_valign(
+        icon, GTK_ALIGN_CENTER);
+    gtk_box_append(
+        GTK_BOX(icon_well), icon);
+    gtk_box_append(
+        GTK_BOX(row), icon_well);
+
+    GtkWidget *copy =
+        gtk_box_new(
+            GTK_ORIENTATION_VERTICAL, 1);
+    gtk_widget_set_hexpand(copy, true);
+    GtkWidget *heading =
+        make_label(
+            title, "preview-row-title");
+    GtkWidget *note =
+        make_label(
+            subtitle, "preview-row-note");
+    gtk_label_set_ellipsize(
+        GTK_LABEL(note),
+        PANGO_ELLIPSIZE_END);
+    gtk_box_append(
+        GTK_BOX(copy), heading);
+    gtk_box_append(
+        GTK_BOX(copy), note);
+    gtk_box_append(GTK_BOX(row), copy);
+    return row;
+}
+
+void rebuild_discover_update_preview(
+    WindowState *state)
+{
+    if (state == nullptr ||
+        state->discover_update_preview == nullptr) {
+        return;
+    }
+    clear_box_children(
+        state->discover_update_preview);
+
+    const std::size_t limit =
+        std::min<std::size_t>(
+            state->update_records.size(), 2U);
+    if (limit == 0U) {
+        gtk_box_append(
+            GTK_BOX(
+                state->discover_update_preview),
+            make_preview_row(
+                "emblem-ok-symbolic",
+                "System is up to date",
+                "No preferred updates are waiting.",
+                "preview-good"));
+        return;
+    }
+
+    for (std::size_t index = 0U;
+         index < limit;
+         ++index) {
+        const PackageRecord &record =
+            state->update_records[index];
+        std::string version =
+            record.installed_version;
+        if (!version.empty() &&
+            !record.available_version.empty()) {
+            version += "  →  " +
+                record.available_version;
+        } else if (!record.available_version.empty()) {
+            version =
+                record.available_version;
+        }
+        gtk_box_append(
+            GTK_BOX(
+                state->discover_update_preview),
+            make_preview_row(
+                update_icon_name(record),
+                record.name.c_str(),
+                version.c_str(),
+                record.system_critical
+                    ? "preview-warning"
+                    : "preview-info"));
+    }
+}
+
+void rebuild_discover_repository_preview(
+    WindowState *state)
+{
+    if (state == nullptr ||
+        state->discover_repository_preview ==
+            nullptr) {
+        return;
+    }
+    clear_box_children(
+        state->discover_repository_preview);
+
+    if (state->repositories.records.empty()) {
+        gtk_box_append(
+            GTK_BOX(
+                state->discover_repository_preview),
+            make_preview_row(
+                "network-workgroup-symbolic",
+                "Repository status",
+                "Reading configured sources…",
+                "preview-info"));
+        return;
+    }
+
+    const std::size_t limit =
+        std::min<std::size_t>(
+            state->repositories.records.size(),
+            3U);
+    for (std::size_t index = 0U;
+         index < limit;
+         ++index) {
+        const SourceRecord &source =
+            state->repositories.records[index];
+        gtk_box_append(
+            GTK_BOX(
+                state->discover_repository_preview),
+            make_preview_row(
+                source.kind ==
+                        SourceKind::flatpak
+                    ? "package-x-generic-symbolic"
+                    : "drive-multidisk-symbolic",
+                source.name.empty()
+                    ? "Software source"
+                    : source.name.c_str(),
+                source.enabled
+                    ? "Online / enabled"
+                    : "Disabled",
+                source.enabled
+                    ? "preview-good"
+                    : "preview-warning"));
+    }
+}
+
+void rebuild_discover_activity_preview(
+    WindowState *state)
+{
+    if (state == nullptr ||
+        state->discover_activity_preview ==
+            nullptr) {
+        return;
+    }
+    clear_box_children(
+        state->discover_activity_preview);
+
+    if (state->history.records.empty()) {
+        gtk_box_append(
+            GTK_BOX(
+                state->discover_activity_preview),
+            make_preview_row(
+                "document-open-recent-symbolic",
+                "No recent activity",
+                "Completed software actions will appear here.",
+                "preview-info"));
+        return;
+    }
+
+    std::size_t index = 0U;
+    std::size_t shown = 0U;
+    while (index <
+               state->history.records.size() &&
+           shown < 4U) {
+        const TransactionHistoryItem &head =
+            state->history.records[index];
+        std::size_t end = index + 1U;
+        while (
+            end <
+                state->history.records.size() &&
+            state->history.records[end]
+                    .transaction_id ==
+                head.transaction_id) {
+            ++end;
+        }
+        const std::size_t count =
+            end - index;
+        const std::string title =
+            head.success
+                ? "Updated " +
+                      std::to_string(count) +
+                      (count == 1U
+                           ? " package"
+                           : " packages")
+                : "Software action failed";
+        const std::string note =
+            history_timestamp(
+                head.completed_at_unix);
+        gtk_box_append(
+            GTK_BOX(
+                state->discover_activity_preview),
+            make_preview_row(
+                head.success
+                    ? "emblem-ok-symbolic"
+                    : "dialog-warning-symbolic",
+                title.c_str(),
+                note.c_str(),
+                head.success
+                    ? "preview-good"
+                    : "preview-warning"));
+        index = end;
+        ++shown;
+    }
+}
+
+std::string selected_category(WindowState *state)
+{
+    if (state == nullptr || state->discover_category == nullptr) {
+        return "All";
+    }
+
+    gpointer item = gtk_drop_down_get_selected_item(
+        GTK_DROP_DOWN(state->discover_category));
+    if (item == nullptr || !GTK_IS_STRING_OBJECT(item)) {
+        return "All";
+    }
+
+    const char *value =
+        gtk_string_object_get_string(GTK_STRING_OBJECT(item));
+    return value == nullptr ? std::string("All") : std::string(value);
+}
+
+void discover_quick_category_clicked(
+    GtkButton *button,
+    gpointer user_data)
+{
+    auto *state = static_cast<WindowState *>(user_data);
+    const char *category = static_cast<const char *>(
+        g_object_get_data(
+            G_OBJECT(button),
+            "discover-quick-category"));
+    if (state == nullptr || state->discover_category == nullptr ||
+        state->discover_categories == nullptr ||
+        category == nullptr) {
+        return;
+    }
+
+    const guint count =
+        g_list_model_get_n_items(
+            G_LIST_MODEL(state->discover_categories));
+    for (guint index = 0U; index < count; ++index) {
+        gpointer object =
+            g_list_model_get_item(
+                G_LIST_MODEL(state->discover_categories),
+                index);
+        if (object == nullptr) {
+            continue;
+        }
+
+        bool matched = false;
+        if (GTK_IS_STRING_OBJECT(object)) {
+            const char *value =
+                gtk_string_object_get_string(
+                    GTK_STRING_OBJECT(object));
+            matched =
+                value != nullptr &&
+                std::strcmp(value, category) == 0;
+        }
+        g_object_unref(object);
+
+        if (matched) {
+            gtk_drop_down_set_selected(
+                GTK_DROP_DOWN(state->discover_category),
+                index);
+            return;
+        }
+    }
+}
+
+GtkWidget *make_discover_category_shortcut(
+    WindowState *state,
+    const char *category,
+    const char *label,
+    const char *icon_name)
+{
+    GtkWidget *button = gtk_button_new();
+    gtk_widget_add_css_class(
+        button, "category-shortcut");
+
+    GtkWidget *content =
+        gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 7);
+    GtkWidget *icon = make_icon(icon_name, 18);
+    GtkWidget *text = make_label(label, "category-shortcut-label");
+    gtk_box_append(GTK_BOX(content), icon);
+    gtk_box_append(GTK_BOX(content), text);
+    gtk_button_set_child(GTK_BUTTON(button), content);
+
+    g_object_set_data_full(
+        G_OBJECT(button),
+        "discover-quick-category",
+        g_strdup(category),
+        g_free);
+    g_signal_connect(
+        button,
+        "clicked",
+        G_CALLBACK(discover_quick_category_clicked),
+        state);
+    return button;
+}
+
+void rebuild_discover(WindowState *state)
+{
+    if (state == nullptr || state->discover_visible == nullptr) {
+        return;
+    }
+
+    const char *search_text =
+        state->discover_search == nullptr
+            ? ""
+            : gtk_editable_get_text(
+                  GTK_EDITABLE(state->discover_search));
+    const std::string query =
+        folded(search_text == nullptr ? "" : search_text);
+    const std::string category = selected_category(state);
+
+    std::vector<std::string> indices;
+    indices.reserve(state->discover_records.size());
+    std::vector<std::size_t> visible_indices;
+    visible_indices.reserve(state->discover_records.size());
+    const bool cached_search_text =
+        state->discover_search_texts.size() ==
+        state->discover_records.size();
+
+    for (std::size_t index = 0U;
+         index < state->discover_records.size();
+         ++index) {
+        const PackageRecord &record =
+            state->discover_records[index];
+
+        if (category != "All" && record.category != category) {
+            continue;
+        }
+
+        if (!query.empty()) {
+            const std::string haystack =
+                cached_search_text
+                    ? state->discover_search_texts[index]
+                    : discover_search_text(record);
+            if (haystack.find(query) == std::string::npos) {
+                continue;
+            }
+        }
+
+        visible_indices.push_back(index);
+        indices.emplace_back(std::to_string(index));
+    }
+
+    if (state->discover_featured_flow != nullptr) {
+        GtkWidget *child =
+            gtk_widget_get_first_child(
+                state->discover_featured_flow);
+        while (child != nullptr) {
+            GtkWidget *next =
+                gtk_widget_get_next_sibling(child);
+            gtk_flow_box_remove(
+                GTK_FLOW_BOX(
+                    state->discover_featured_flow),
+                child);
+            child = next;
+        }
+
+        if (query.empty() && category == "All") {
+            /*
+             * The landing page is deliberately curated instead of showing the
+             * first four alphabetic package records.  When the system
+             * catalogue contains these applications we use its exact state;
+             * otherwise the same cards remain useful install entry points
+             * while catalogue refresh completes.
+             */
+            append_curated_featured(
+                state, &visible_indices);
+        } else {
+            const std::size_t limit =
+                std::min<std::size_t>(
+                    visible_indices.size(), 4U);
+            for (std::size_t position = 0U;
+                 position < limit;
+                 ++position) {
+                gtk_flow_box_append(
+                    GTK_FLOW_BOX(
+                        state->discover_featured_flow),
+                    make_featured_card(
+                        state,
+                        state->discover_records[
+                            visible_indices[position]]));
+            }
+        }
+    }
+
+    std::vector<const char *> additions;
+    additions.reserve(indices.size() + 1U);
+    for (const std::string &index : indices) {
+        additions.push_back(index.c_str());
+    }
+    additions.push_back(nullptr);
+
+    gtk_string_list_splice(
+        state->discover_visible,
+        0U,
+        g_list_model_get_n_items(
+            G_LIST_MODEL(state->discover_visible)),
+        additions.data());
+
+    if (state->discover_status != nullptr) {
+        std::ostringstream status;
+        status << indices.size() << " of "
+               << state->discover_records.size()
+               << " applications shown.";
+        gtk_label_set_text(
+            GTK_LABEL(state->discover_status), status.str().c_str());
+    }
+}
+
+void discover_grid_setup(
+    GtkSignalListItemFactory *,
+    GtkListItem *item,
+    gpointer)
+{
+    GtkWidget *holder =
+        gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    gtk_widget_set_hexpand(holder, true);
+    gtk_widget_set_margin_top(holder, 6);
+    gtk_widget_set_margin_bottom(holder, 6);
+    gtk_widget_set_margin_start(holder, 6);
+    gtk_widget_set_margin_end(holder, 6);
+    gtk_list_item_set_child(item, holder);
+}
+
+void discover_grid_bind(
+    GtkSignalListItemFactory *,
+    GtkListItem *item,
+    gpointer user_data)
+{
+    auto *state = static_cast<WindowState *>(user_data);
+    GtkWidget *holder = gtk_list_item_get_child(item);
+    GObject *object = G_OBJECT(gtk_list_item_get_item(item));
+    if (state == nullptr || holder == nullptr ||
+        object == nullptr || !GTK_IS_STRING_OBJECT(object)) {
+        return;
+    }
+
+    GtkWidget *child = gtk_widget_get_first_child(holder);
+    while (child != nullptr) {
+        GtkWidget *next = gtk_widget_get_next_sibling(child);
+        gtk_box_remove(GTK_BOX(holder), child);
+        child = next;
+    }
+
+    const char *text =
+        gtk_string_object_get_string(GTK_STRING_OBJECT(object));
+    if (text == nullptr || *text == '\0') {
+        return;
+    }
+
+    gchar *end = nullptr;
+    const guint64 index =
+        g_ascii_strtoull(text, &end, 10);
+    if (end == text || end == nullptr || *end != '\0' ||
+        index >= state->discover_records.size()) {
+        return;
+    }
+
+    gtk_box_append(
+        GTK_BOX(holder),
+        make_discover_card(
+            state,
+            state->discover_records[
+                static_cast<std::size_t>(index)]));
+}
+
+void discover_grid_unbind(
+    GtkSignalListItemFactory *,
+    GtkListItem *item,
+    gpointer)
+{
+    GtkWidget *holder = gtk_list_item_get_child(item);
+    if (holder == nullptr) {
+        return;
+    }
+
+    GtkWidget *child = gtk_widget_get_first_child(holder);
+    while (child != nullptr) {
+        GtkWidget *next = gtk_widget_get_next_sibling(child);
+        gtk_box_remove(GTK_BOX(holder), child);
+        child = next;
+    }
+}
+
+void discover_filter_changed(GtkWidget *, gpointer user_data)
+{
+    auto *state = static_cast<WindowState *>(user_data);
+    if (state == nullptr) {
+        return;
+    }
+
+    if (!state->search_syncing &&
+        state->discover_search != nullptr &&
+        state->global_search != nullptr) {
+        const char *local_text =
+            gtk_editable_get_text(
+                GTK_EDITABLE(state->discover_search));
+        const char *global_text =
+            gtk_editable_get_text(
+                GTK_EDITABLE(state->global_search));
+        if (g_strcmp0(local_text, global_text) != 0) {
+            /*
+             * Mirroring the two search boxes used to recurse through the
+             * opposite "search-changed" handler.  That handler also changed
+             * navigation selection, which could steal focus between
+             * keystrokes and make each new character replace the previous
+             * one.  Mirror silently at the application level instead.
+             */
+            state->search_syncing = true;
+            gtk_editable_set_text(
+                GTK_EDITABLE(state->global_search),
+                local_text == nullptr ? "" : local_text);
+            state->search_syncing = false;
+        }
+    }
+    rebuild_discover(state);
+}
+
+void discover_category_changed(
+    GObject *, GParamSpec *, gpointer user_data)
+{
+    rebuild_discover(static_cast<WindowState *>(user_data));
+}
+
+std::string package_key(std::string value)
+{
+    const std::size_t colon = value.find(':');
+    if (colon != std::string::npos) {
+        value.erase(colon);
+    }
+    return value;
+}
+
+void discover_worker(
+    GTask *task,
+    gpointer,
+    gpointer task_data,
+    GCancellable *)
+{
+    auto *data =
+        static_cast<DiscoverTaskData *>(task_data);
+    const bool force_refresh =
+        data != nullptr &&
+        data->force_refresh;
+
+    auto *result =
+        new DiscoverResult{};
+    CatalogueSnapshotStore store;
+
+    if (!force_refresh) {
+        std::string cache_error;
+        if (store.load(
+                result->snapshot,
+                cache_error)) {
+            prepare_discover_presentation(result);
+            /*
+             * Startup must never wait for package-engine activation.  The
+             * saved catalogue is already sufficient to paint Discover, so
+             * publish it immediately and reconcile installed state in a
+             * separate background task after the page is visible.
+             */
+            g_task_return_pointer(
+                task,
+                result,
+                [](gpointer pointer) {
+                    delete static_cast<DiscoverResult *>(
+                        pointer);
+                });
+            return;
+        }
+    }
+
+    CatalogueSnapshot previous;
+    std::string previous_error;
+    const bool had_previous =
+        store.load(
+            previous,
+            previous_error);
+
+    RepositoryCatalogue catalogue;
+    std::string infiltrator_warning;
+    result->snapshot =
+        force_refresh
+            ? catalogue.refresh(
+                  infiltrator_warning)
+            : catalogue.load(
+                  infiltrator_warning);
+
+    SystemCatalogue system_catalogue;
+    std::string system_warning;
+    CatalogueSnapshot system_snapshot =
+        system_catalogue.refresh(
+            system_warning);
+
+    std::unordered_set<std::string>
+        native_packages;
+    native_packages.reserve(
+        result->snapshot.records.size());
+    for (const PackageRecord &record :
+         result->snapshot.records) {
+        if (!record.package_name.empty()) {
+            native_packages.insert(
+                package_key(
+                    record.package_name));
+        }
+    }
+
+    for (PackageRecord &record :
+         system_snapshot.records) {
+        const bool native_duplicate =
+            record.id.rfind("apt:", 0U) == 0U &&
+            native_packages.find(
+                package_key(
+                    record.package_name)) !=
+                native_packages.end();
+        if (!native_duplicate) {
+            result->snapshot.records.emplace_back(
+                std::move(record));
+        }
+    }
+
+    std::sort(
+        result->snapshot.records.begin(),
+        result->snapshot.records.end(),
+        [](const PackageRecord &left,
+           const PackageRecord &right) {
+            if (left.name != right.name) {
+                return left.name < right.name;
+            }
+            return left.source < right.source;
+        });
+
+    result->snapshot.source =
+        "Infiltrator + system";
+
+    std::unordered_map<std::string, PackageRecord>
+        previous_records;
+    previous_records.reserve(
+        previous.records.size());
+    for (const PackageRecord &record :
+         previous.records) {
+        previous_records.emplace(
+            record.id,
+            record);
+    }
+
+    std::unordered_set<std::string>
+        current_ids;
+    current_ids.reserve(
+        result->snapshot.records.size());
+
+    for (PackageRecord &record :
+         result->snapshot.records) {
+        current_ids.insert(record.id);
+
+        const auto old =
+            previous_records.find(record.id);
+        if (old ==
+            previous_records.end()) {
+            if (had_previous) {
+                ++result->added;
+            }
+        } else if (
+            record.icon_sha256 ==
+                old->second.icon_sha256 &&
+            !old->second.cached_icon_path.empty()) {
+            record.cached_icon_path =
+                old->second.cached_icon_path;
+        }
+
+    }
+
+    if (had_previous) {
+        for (const PackageRecord &record :
+             previous.records) {
+            if (current_ids.find(record.id) ==
+                current_ids.end()) {
+                ++result->removed;
+            }
+        }
+    }
+
+    std::string cache_error;
+    CatalogueSnapshot to_save =
+        result->snapshot;
+    to_save.from_cache = false;
+    if (!store.save(
+            to_save,
+            cache_error) &&
+        result->warning.empty()) {
+        result->warning =
+            "Catalogue loaded but could not save local state: " +
+            cache_error;
+    }
+
+    if (!infiltrator_warning.empty()) {
+        if (!result->warning.empty()) {
+            result->warning += " ";
+        }
+        result->warning +=
+            infiltrator_warning;
+    }
+    if (!system_warning.empty()) {
+        if (!result->warning.empty()) {
+            result->warning += " ";
+        }
+        result->warning +=
+            "System catalogue: " +
+            system_warning;
+    }
+    prepare_discover_presentation(result);
+    g_task_return_pointer(
+        task,
+        result,
+        [](gpointer pointer) {
+            delete static_cast<DiscoverResult *>(
+                pointer);
+        });
+}
+
+void discover_installed_worker(
+    GTask *task,
+    gpointer,
+    gpointer,
+    GCancellable *)
+{
+    auto *result = new DiscoverInstalledResult{};
+    result->installed =
+        read_installed_packages(result->warning);
+
+    g_task_return_pointer(
+        task,
+        result,
+        [](gpointer value) {
+            delete static_cast<DiscoverInstalledResult *>(value);
+        });
+}
+
+void discover_installed_complete(
+    GObject *source_object,
+    GAsyncResult *async_result,
+    gpointer)
+{
+    auto *window = GTK_WINDOW(source_object);
+    auto *state = static_cast<WindowState *>(
+        g_object_get_data(
+            G_OBJECT(window), "infiltrator-window-state"));
+    auto *task_data =
+        static_cast<DiscoverInstalledTaskData *>(
+            g_task_get_task_data(G_TASK(async_result)));
+
+    GError *error = nullptr;
+    auto *result = static_cast<DiscoverInstalledResult *>(
+        g_task_propagate_pointer(
+            G_TASK(async_result), &error));
+    if (error != nullptr) {
+        g_clear_error(&error);
+        delete result;
+        return;
+    }
+    if (state == nullptr || result == nullptr ||
+        task_data == nullptr ||
+        task_data->generation != state->discover_generation) {
+        delete result;
+        return;
+    }
+
+    std::unordered_map<std::string, std::string> versions;
+    versions.reserve(result->installed.size());
+    for (const PackageRecord &package : result->installed) {
+        versions.emplace(
+            package_key(package.package_name),
+            package.installed_version);
+    }
+
+    for (PackageRecord &record : state->discover_records) {
+        if (record.id.rfind("flatpak:", 0U) == 0U) {
+            continue;
+        }
+
+        record.state =
+            infiltrator::software::InstallState::not_installed;
+        record.installed_version.clear();
+
+        const auto found =
+            versions.find(package_key(record.package_name));
+        if (found != versions.end()) {
+            record.state =
+                infiltrator::software::InstallState::installed;
+            record.installed_version = found->second;
+        }
+    }
+
+    rebuild_discover(state);
+
+    if (!result->warning.empty() &&
+        state->discover_status != nullptr) {
+        const std::string message =
+            "Applications loaded; installed-state detection is unavailable: " +
+            result->warning;
+        gtk_label_set_text(
+            GTK_LABEL(state->discover_status),
+            message.c_str());
+    }
+
+    delete result;
+}
+
+void start_discover_installed_hydration(
+    WindowState *state,
+    const unsigned int generation)
+{
+    if (state == nullptr || state->window == nullptr ||
+        state->discover_records.empty()) {
+        return;
+    }
+
+    GTask *task = g_task_new(
+        G_OBJECT(state->window),
+        nullptr,
+        discover_installed_complete,
+        nullptr);
+    auto *task_data = new DiscoverInstalledTaskData{};
+    task_data->generation = generation;
+    g_task_set_task_data(
+        task,
+        task_data,
+        [](gpointer value) {
+            delete static_cast<DiscoverInstalledTaskData *>(value);
+        });
+    g_task_run_in_thread(task, discover_installed_worker);
+    g_object_unref(task);
+}
+
+void discover_icons_worker(
+    GTask *task,
+    gpointer,
+    gpointer task_data,
+    GCancellable *)
+{
+    auto *data = static_cast<IconHydrationTaskData *>(task_data);
+    auto *result = new IconHydrationResult{};
+    if (data != nullptr) {
+        result->records = data->records;
+    }
+
+    RepositoryCatalogue catalogue;
+    catalogue.hydrate_icons(result->records, result->warning);
+
+    g_task_return_pointer(
+        task,
+        result,
+        [](gpointer value) {
+            delete static_cast<IconHydrationResult *>(value);
+        });
+}
+
+void discover_icons_complete(
+    GObject *source_object,
+    GAsyncResult *async_result,
+    gpointer)
+{
+    auto *window = GTK_WINDOW(source_object);
+    auto *state = static_cast<WindowState *>(
+        g_object_get_data(
+            G_OBJECT(window), "infiltrator-window-state"));
+    if (state == nullptr) {
+        return;
+    }
+
+    auto *task_data = static_cast<IconHydrationTaskData *>(
+        g_task_get_task_data(G_TASK(async_result)));
+    GError *error = nullptr;
+    auto *result = static_cast<IconHydrationResult *>(
+        g_task_propagate_pointer(G_TASK(async_result), &error));
+
+    if (error != nullptr) {
+        g_clear_error(&error);
+        return;
+    }
+    if (result == nullptr || task_data == nullptr ||
+        task_data->generation != state->discover_generation) {
+        delete result;
+        return;
+    }
+
+    std::unordered_map<std::string, std::string> icons;
+    icons.reserve(result->records.size());
+    for (const PackageRecord &record : result->records) {
+        if (!record.cached_icon_path.empty()) {
+            icons.emplace(record.id, record.cached_icon_path);
+        }
+    }
+    for (PackageRecord &record : state->discover_records) {
+        const auto found = icons.find(record.id);
+        if (found != icons.end()) {
+            record.cached_icon_path = found->second;
+        }
+    }
+    rebuild_discover(state);
+
+    if (!result->warning.empty() &&
+        state->discover_status != nullptr) {
+        const std::string message =
+            "Applications are available; some icons could not be verified: " +
+            result->warning;
+        gtk_label_set_text(
+            GTK_LABEL(state->discover_status), message.c_str());
+    }
+
+    delete result;
+}
+
+void start_discover_icon_hydration(
+    WindowState *state,
+    const unsigned int generation)
+{
+    if (state == nullptr || state->window == nullptr ||
+        state->discover_records.empty()) {
+        return;
+    }
+
+    bool has_remote_icons = false;
+    for (const PackageRecord &record : state->discover_records) {
+        if (!record.icon_url.empty() &&
+            record.cached_icon_path.empty()) {
+            has_remote_icons = true;
+            break;
+        }
+    }
+    if (!has_remote_icons) {
+        return;
+    }
+
+    if (state->discover_status != nullptr) {
+        const std::string message =
+            std::to_string(state->discover_records.size()) +
+            " applications loaded; verifying icons in the background…";
+        gtk_label_set_text(
+            GTK_LABEL(state->discover_status), message.c_str());
+    }
+
+    GTask *task = g_task_new(
+        G_OBJECT(state->window),
+        nullptr,
+        discover_icons_complete,
+        nullptr);
+    auto *task_data = new IconHydrationTaskData{};
+    task_data->generation = generation;
+    task_data->records = state->discover_records;
+    g_task_set_task_data(
+        task,
+        task_data,
+        [](gpointer value) {
+            delete static_cast<IconHydrationTaskData *>(value);
+        });
+    g_task_run_in_thread(task, discover_icons_worker);
+    g_object_unref(task);
+}
+
+void discover_complete(
+    GObject *source_object,
+    GAsyncResult *async_result,
+    gpointer)
+{
+    auto *window = GTK_WINDOW(source_object);
+    auto *state = static_cast<WindowState *>(
+        g_object_get_data(
+            G_OBJECT(window), "infiltrator-window-state"));
+    if (state == nullptr) {
+        return;
+    }
+
+    GError *error = nullptr;
+    auto *result = static_cast<DiscoverResult *>(
+        g_task_propagate_pointer(G_TASK(async_result), &error));
+    if (error != nullptr) {
+        if (state->discover_state != nullptr) {
+            gtk_label_set_text(
+                GTK_LABEL(state->discover_state), "Unavailable");
+        }
+        if (state->discover_status != nullptr) {
+            gtk_label_set_text(
+                GTK_LABEL(state->discover_status),
+                error->message);
+        }
+        g_clear_error(&error);
+        return;
+    }
+    if (result == nullptr) {
+        return;
+    }
+
+    auto *task_data = static_cast<DiscoverTaskData *>(
+        g_task_get_task_data(G_TASK(async_result)));
+    if (task_data == nullptr ||
+        task_data->generation != state->discover_generation) {
+        delete result;
+        return;
+    }
+
+    state->discover_records = std::move(result->snapshot.records);
+    state->discover_search_texts = std::move(result->search_texts);
+
+    if (state->discover_categories != nullptr) {
+        while (g_list_model_get_n_items(
+                   G_LIST_MODEL(state->discover_categories)) > 0U) {
+            gtk_string_list_remove(state->discover_categories, 0U);
+        }
+        gtk_string_list_append(state->discover_categories, "All");
+        for (const std::string &category : result->categories) {
+            gtk_string_list_append(
+                state->discover_categories, category.c_str());
+        }
+        gtk_drop_down_set_selected(
+            GTK_DROP_DOWN(state->discover_category), 0U);
+    }
+
+    if (state->discover_count != nullptr) {
+        const std::string count =
+            std::to_string(state->discover_records.size());
+        gtk_label_set_text(
+            GTK_LABEL(state->discover_count), count.c_str());
+    }
+    if (state->discover_source != nullptr) {
+        gtk_label_set_text(
+            GTK_LABEL(state->discover_source),
+            "Infiltrator + system");
+    }
+    if (state->discover_state != nullptr) {
+        gtk_label_set_text(
+            GTK_LABEL(state->discover_state),
+            result->snapshot.from_cache ? "Cached" : "Ready");
+    }
+    if (state->discover_status != nullptr) {
+        if (!result->warning.empty()) {
+            gtk_label_set_text(
+                GTK_LABEL(state->discover_status),
+                result->warning.c_str());
+        } else if (task_data->force_refresh) {
+            const std::string message =
+                "Catalogue synchronized: " +
+                std::to_string(result->added) +
+                " added, " +
+                std::to_string(result->removed) +
+                " removed.";
+            gtk_label_set_text(
+                GTK_LABEL(state->discover_status),
+                message.c_str());
+        } else {
+            gtk_label_set_text(
+                GTK_LABEL(state->discover_status),
+                result->snapshot.from_cache
+                    ? "Loaded saved software catalogue."
+                    : "Software catalogue initialized.");
+        }
+    }
+
+    rebuild_discover(state);
+
+    /*
+     * Installed-state and icon enrichment are deliberately second-phase.
+     * Neither is allowed to delay the first usable Discover paint.
+     */
+    start_discover_installed_hydration(
+        state, task_data->generation);
+    start_discover_icon_hydration(
+        state, task_data->generation);
+    delete result;
+}
+
+void refresh_discover(
+    WindowState *state,
+    const bool force_refresh = false)
+{
+    if (state == nullptr || state->window == nullptr ||
+        state->discover_state == nullptr) {
+        return;
+    }
+
+    state->discover_loaded = true;
+    ++state->discover_generation;
+    gtk_label_set_text(
+        GTK_LABEL(state->discover_state), "Loading");
+    if (state->discover_status != nullptr) {
+        gtk_label_set_text(
+            GTK_LABEL(state->discover_status),
+            force_refresh
+                ? "Synchronizing software catalogue…"
+                : "Loading saved software catalogue…");
+    }
+
+    GTask *task = g_task_new(
+        G_OBJECT(state->window),
+        nullptr,
+        discover_complete,
+        nullptr);
+    auto *task_data = new DiscoverTaskData{};
+    task_data->generation = state->discover_generation;
+    task_data->force_refresh = force_refresh;
+    g_task_set_task_data(
+        task,
+        task_data,
+        [](gpointer data) {
+            delete static_cast<DiscoverTaskData *>(data);
+        });
+    g_task_run_in_thread(task, discover_worker);
+    g_object_unref(task);
+}
+
+
+void dashboard_nav_clicked(
+    GtkButton *button,
+    gpointer user_data)
+{
+    auto *state = static_cast<WindowState *>(user_data);
+    if (state == nullptr) {
+        return;
+    }
+
+    const int index =
+        GPOINTER_TO_INT(
+            g_object_get_data(
+                G_OBJECT(button),
+                "dashboard-page-index"));
+    select_page(state, index);
+}
+
+GtkWidget *make_dashboard_card(
+    WindowState *state,
+    const int page_index,
+    const char *icon_name,
+    const char *title,
+    const char *value,
+    const char *subtitle,
+    const char *semantic_class,
+    GtkWidget **value_out)
+{
+    GtkWidget *button = gtk_button_new();
+    gtk_widget_add_css_class(
+        button, "dashboard-card");
+    if (semantic_class != nullptr) {
+        gtk_widget_add_css_class(
+            button, semantic_class);
+    }
+
+    GtkWidget *row =
+        gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
+
+    GtkWidget *icon_well =
+        gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    gtk_widget_add_css_class(
+        icon_well, "dashboard-icon-well");
+    GtkWidget *icon = make_icon(icon_name, 24);
+    gtk_widget_set_halign(
+        icon, GTK_ALIGN_CENTER);
+    gtk_widget_set_valign(
+        icon, GTK_ALIGN_CENTER);
+    gtk_box_append(GTK_BOX(icon_well), icon);
+    gtk_box_append(GTK_BOX(row), icon_well);
+
+    GtkWidget *copy =
+        gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
+    gtk_widget_set_hexpand(copy, true);
+
+    GtkWidget *caption =
+        make_label(title, "dashboard-card-title");
+    GtkWidget *value_label =
+        make_label(value, "dashboard-card-value");
+    GtkWidget *note =
+        make_label(subtitle, "dashboard-card-note");
+    gtk_label_set_ellipsize(
+        GTK_LABEL(note), PANGO_ELLIPSIZE_END);
+
+    gtk_box_append(GTK_BOX(copy), caption);
+    gtk_box_append(GTK_BOX(copy), value_label);
+    gtk_box_append(GTK_BOX(copy), note);
+    gtk_box_append(GTK_BOX(row), copy);
+
+    GtkWidget *chevron =
+        make_label("›", "dashboard-chevron", 0.5F);
+    gtk_widget_set_valign(
+        chevron, GTK_ALIGN_CENTER);
+    gtk_box_append(GTK_BOX(row), chevron);
+
+    gtk_button_set_child(
+        GTK_BUTTON(button), row);
+    g_object_set_data(
+        G_OBJECT(button),
+        "dashboard-page-index",
+        GINT_TO_POINTER(page_index));
+    g_signal_connect(
+        button,
+        "clicked",
+        G_CALLBACK(dashboard_nav_clicked),
+        state);
+
+    if (value_out != nullptr) {
+        *value_out = value_label;
+    }
+    return button;
+}
+
+GtkWidget *make_discover_welcome_hero()
+{
+    GtkWidget *hero =
+        gtk_overlay_new();
+    gtk_widget_add_css_class(
+        hero, "discover-welcome");
+    gtk_widget_set_overflow(
+        hero, GTK_OVERFLOW_HIDDEN);
+    gtk_widget_set_size_request(
+        hero, -1, 166);
+
+    /*
+     * The Discover background is a dedicated clean raster asset: artwork only,
+     * with no embedded product wording, checker sphere, retro computer or
+     * other mock-up props.  Every visible word is a live GTK label layered
+     * above the image so it remains scalable and accessible.
+     */
+    GtkWidget *picture =
+        make_embedded_picture(
+            kDiscoverHeroBase64,
+            "welcome-artwork",
+            GTK_CONTENT_FIT_COVER);
+    if (picture != nullptr) {
+        gtk_widget_set_hexpand(
+            picture, true);
+        gtk_widget_set_vexpand(
+            picture, true);
+        gtk_overlay_set_child(
+            GTK_OVERLAY(hero),
+            picture);
+    } else {
+        GtkWidget *fallback =
+            gtk_box_new(
+                GTK_ORIENTATION_VERTICAL, 0);
+        gtk_widget_add_css_class(
+            fallback, "welcome-artwork-error");
+        gtk_overlay_set_child(
+            GTK_OVERLAY(hero),
+            fallback);
+    }
+
+    GtkWidget *veil =
+        gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    gtk_widget_add_css_class(
+        veil, "welcome-artwork-veil");
+    gtk_widget_set_hexpand(
+        veil, true);
+    gtk_widget_set_vexpand(
+        veil, true);
+    gtk_widget_set_can_target(
+        veil, false);
+    gtk_overlay_add_overlay(
+        GTK_OVERLAY(hero), veil);
+
+    GtkWidget *copy =
+        gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
+    gtk_widget_add_css_class(
+        copy, "welcome-copy");
+    gtk_widget_set_halign(
+        copy, GTK_ALIGN_START);
+    gtk_widget_set_valign(
+        copy, GTK_ALIGN_CENTER);
+    gtk_widget_set_margin_start(
+        copy, 24);
+    gtk_widget_set_margin_end(
+        copy, 24);
+    gtk_widget_set_can_target(
+        copy, false);
+
+    GtkWidget *kicker =
+        make_label(
+            "INFLITRATOR SOFTWARE",
+            "welcome-kicker");
+
+    GtkWidget *heading =
+        gtk_label_new(nullptr);
+    gtk_label_set_xalign(
+        GTK_LABEL(heading), 0.0F);
+    gtk_label_set_markup(
+        GTK_LABEL(heading),
+        "Welcome to <span foreground=\"#d93cff\">Infiltrator</span>"
+        " <span foreground=\"#57a8ff\">Software</span>");
+    gtk_widget_add_css_class(
+        heading, "welcome-title");
+
+    GtkWidget *subtitle =
+        make_label(
+            "Discover, install and keep your system up to date with the latest software.",
+            "welcome-subtitle");
+    gtk_label_set_wrap(
+        GTK_LABEL(subtitle), true);
+    gtk_label_set_max_width_chars(
+        GTK_LABEL(subtitle), 72);
+
+    gtk_box_append(GTK_BOX(copy), kicker);
+    gtk_box_append(GTK_BOX(copy), heading);
+    gtk_box_append(GTK_BOX(copy), subtitle);
+    gtk_overlay_add_overlay(
+        GTK_OVERLAY(hero), copy);
+
+    return hero;
+}
+
+GtkWidget *make_discover_page(WindowState *state)
+{
+    GtkWidget *page = gtk_box_new(GTK_ORIENTATION_VERTICAL, 16);
+    gtk_widget_add_css_class(page, "content");
+    gtk_widget_add_css_class(page, "page-discover");
+
+    gtk_box_append(
+        GTK_BOX(page),
+        make_discover_welcome_hero());
+
+    GtkWidget *dashboard =
+        gtk_grid_new();
+    gtk_widget_add_css_class(
+        dashboard, "discover-dashboard");
+    gtk_grid_set_column_spacing(
+        GTK_GRID(dashboard), 10);
+    gtk_grid_set_column_homogeneous(
+        GTK_GRID(dashboard), true);
+
+    gtk_grid_attach(
+        GTK_GRID(dashboard),
+        make_dashboard_card(
+            state,
+            2,
+            "software-update-available-symbolic",
+            "Available Updates",
+            "View",
+            "New versions and system updates",
+            "dashboard-updates",
+            &state->discover_updates_summary),
+        0, 0, 1, 1);
+    gtk_grid_attach(
+        GTK_GRID(dashboard),
+        make_dashboard_card(
+            state,
+            6,
+            "emblem-ok-symbolic",
+            "System Health",
+            "Check",
+            "Package and repository integrity",
+            "dashboard-health",
+            &state->discover_health_summary),
+        1, 0, 1, 1);
+    gtk_grid_attach(
+        GTK_GRID(dashboard),
+        make_dashboard_card(
+            state,
+            4,
+            "network-workgroup-symbolic",
+            "Repositories",
+            "Manage",
+            "Configured software sources",
+            "dashboard-repositories",
+            &state->discover_repositories_summary),
+        2, 0, 1, 1);
+
+    gtk_box_append(GTK_BOX(page), dashboard);
+
+    GtkWidget *main_dashboard =
+        gtk_grid_new();
+    gtk_widget_add_css_class(
+        main_dashboard, "discover-main-dashboard");
+    gtk_grid_set_column_spacing(
+        GTK_GRID(main_dashboard), 12);
+    gtk_grid_set_column_homogeneous(
+        GTK_GRID(main_dashboard), true);
+
+    GtkWidget *left_column =
+        gtk_box_new(
+            GTK_ORIENTATION_VERTICAL, 12);
+    gtk_widget_set_hexpand(
+        left_column, true);
+
+    GtkWidget *featured_panel =
+        gtk_box_new(
+            GTK_ORIENTATION_VERTICAL, 10);
+    gtk_widget_add_css_class(
+        featured_panel, "discover-panel");
+    gtk_widget_add_css_class(
+        featured_panel, "featured-panel");
+
+    GtkWidget *featured_header =
+        gtk_box_new(
+            GTK_ORIENTATION_HORIZONTAL, 10);
+    GtkWidget *featured_icon =
+        make_icon(
+            "starred-symbolic", 23);
+    gtk_widget_add_css_class(
+        featured_icon, "featured-header-icon");
+    GtkWidget *featured_copy =
+        gtk_box_new(
+            GTK_ORIENTATION_VERTICAL, 1);
+    gtk_widget_set_hexpand(
+        featured_copy, true);
+    gtk_box_append(
+        GTK_BOX(featured_copy),
+        make_label(
+            "Featured Applications",
+            "panel-title"));
+    gtk_box_append(
+        GTK_BOX(featured_copy),
+        make_label(
+            "Recommended software from the current catalogue.",
+            "panel-subtitle"));
+    gtk_box_append(
+        GTK_BOX(featured_header),
+        featured_icon);
+    gtk_box_append(
+        GTK_BOX(featured_header),
+        featured_copy);
+    gtk_box_append(
+        GTK_BOX(featured_panel),
+        featured_header);
+
+    state->discover_featured_flow =
+        gtk_flow_box_new();
+    gtk_flow_box_set_selection_mode(
+        GTK_FLOW_BOX(
+            state->discover_featured_flow),
+        GTK_SELECTION_NONE);
+    gtk_flow_box_set_min_children_per_line(
+        GTK_FLOW_BOX(
+            state->discover_featured_flow),
+        4U);
+    gtk_flow_box_set_max_children_per_line(
+        GTK_FLOW_BOX(
+            state->discover_featured_flow),
+        4U);
+    gtk_flow_box_set_column_spacing(
+        GTK_FLOW_BOX(
+            state->discover_featured_flow),
+        10U);
+    gtk_flow_box_set_homogeneous(
+        GTK_FLOW_BOX(
+            state->discover_featured_flow),
+        true);
+    gtk_widget_set_valign(
+        state->discover_featured_flow,
+        GTK_ALIGN_START);
+    gtk_box_append(
+        GTK_BOX(featured_panel),
+        state->discover_featured_flow);
+    append_curated_featured(state);
+    gtk_box_append(
+        GTK_BOX(left_column),
+        featured_panel);
+
+    GtkWidget *updates_panel =
+        gtk_box_new(
+            GTK_ORIENTATION_VERTICAL, 8);
+    gtk_widget_add_css_class(
+        updates_panel, "discover-panel");
+    gtk_widget_add_css_class(
+        updates_panel, "updates-preview-panel");
+    gtk_box_append(
+        GTK_BOX(updates_panel),
+        make_label(
+            "Updates Available",
+            "panel-title"));
+    state->discover_update_preview =
+        gtk_box_new(
+            GTK_ORIENTATION_VERTICAL, 5);
+    gtk_box_append(
+        GTK_BOX(updates_panel),
+        state->discover_update_preview);
+    rebuild_discover_update_preview(state);
+
+    GtkWidget *update_all =
+        gtk_button_new_with_label(
+            "Open Updates");
+    gtk_widget_add_css_class(
+        update_all, "suggested-action");
+    g_object_set_data(
+        G_OBJECT(update_all),
+        "dashboard-page-index",
+        GINT_TO_POINTER(2));
+    g_signal_connect(
+        update_all,
+        "clicked",
+        G_CALLBACK(dashboard_nav_clicked),
+        state);
+    gtk_widget_set_halign(
+        update_all, GTK_ALIGN_END);
+    gtk_box_append(
+        GTK_BOX(updates_panel),
+        update_all);
+    gtk_box_append(
+        GTK_BOX(left_column),
+        updates_panel);
+
+    GtkWidget *health =
+        gtk_button_new();
+    gtk_widget_add_css_class(
+        health, "health-banner");
+    GtkWidget *health_row =
+        gtk_box_new(
+            GTK_ORIENTATION_HORIZONTAL, 12);
+    GtkWidget *health_icon_well =
+        gtk_box_new(
+            GTK_ORIENTATION_VERTICAL, 0);
+    gtk_widget_add_css_class(
+        health_icon_well,
+        "health-banner-icon");
+    GtkWidget *health_icon =
+        make_icon(
+            "emblem-ok-symbolic", 24);
+    gtk_widget_set_halign(
+        health_icon, GTK_ALIGN_CENTER);
+    gtk_widget_set_valign(
+        health_icon, GTK_ALIGN_CENTER);
+    gtk_box_append(
+        GTK_BOX(health_icon_well),
+        health_icon);
+    gtk_box_append(
+        GTK_BOX(health_row),
+        health_icon_well);
+
+    GtkWidget *health_copy =
+        gtk_box_new(
+            GTK_ORIENTATION_VERTICAL, 2);
+    gtk_widget_set_hexpand(
+        health_copy, true);
+    gtk_box_append(
+        GTK_BOX(health_copy),
+        make_label(
+            "Keep your system healthy",
+            "health-banner-title"));
+    state->discover_health_banner_state =
+        make_label(
+            "Checking package and repository health…",
+            "health-banner-copy");
+    gtk_box_append(
+        GTK_BOX(health_copy),
+        state->discover_health_banner_state);
+    gtk_box_append(
+        GTK_BOX(health_row),
+        health_copy);
+    gtk_box_append(
+        GTK_BOX(health_row),
+        make_label(
+            "Open Repair Center  ›",
+            "health-banner-action",
+            1.0F));
+    gtk_button_set_child(
+        GTK_BUTTON(health),
+        health_row);
+    g_object_set_data(
+        G_OBJECT(health),
+        "dashboard-page-index",
+        GINT_TO_POINTER(6));
+    g_signal_connect(
+        health,
+        "clicked",
+        G_CALLBACK(dashboard_nav_clicked),
+        state);
+    gtk_box_append(
+        GTK_BOX(left_column), health);
+
+    GtkWidget *right_column =
+        gtk_box_new(
+            GTK_ORIENTATION_VERTICAL, 12);
+    gtk_widget_set_hexpand(
+        right_column, true);
+
+    GtkWidget *repository_panel =
+        gtk_box_new(
+            GTK_ORIENTATION_VERTICAL, 8);
+    gtk_widget_add_css_class(
+        repository_panel, "discover-panel");
+    gtk_box_append(
+        GTK_BOX(repository_panel),
+        make_label(
+            "Repository Status",
+            "panel-title"));
+    state->discover_repository_preview =
+        gtk_box_new(
+            GTK_ORIENTATION_VERTICAL, 5);
+    gtk_box_append(
+        GTK_BOX(repository_panel),
+        state->discover_repository_preview);
+    rebuild_discover_repository_preview(state);
+    gtk_box_append(
+        GTK_BOX(right_column),
+        repository_panel);
+
+    GtkWidget *activity_panel =
+        gtk_box_new(
+            GTK_ORIENTATION_VERTICAL, 8);
+    gtk_widget_add_css_class(
+        activity_panel, "discover-panel");
+    gtk_box_append(
+        GTK_BOX(activity_panel),
+        make_label(
+            "Recent Activity",
+            "panel-title"));
+    state->discover_activity_preview =
+        gtk_box_new(
+            GTK_ORIENTATION_VERTICAL, 5);
+    gtk_box_append(
+        GTK_BOX(activity_panel),
+        state->discover_activity_preview);
+    rebuild_discover_activity_preview(state);
+    gtk_box_append(
+        GTK_BOX(right_column),
+        activity_panel);
+
+    /*
+     * The reference composition is structural: Featured/Updates/Health own
+     * two thirds of this row and Repository/Activity own one third.  A
+     * homogeneous three-column grid preserves that ratio at every window and
+     * desktop scale instead of letting a fixed right-rail width consume half
+     * the page on scaled displays.
+     */
+    gtk_grid_attach(
+        GTK_GRID(main_dashboard),
+        left_column,
+        0, 0, 2, 1);
+    gtk_grid_attach(
+        GTK_GRID(main_dashboard),
+        right_column,
+        2, 0, 1, 1);
+    gtk_box_append(
+        GTK_BOX(page),
+        main_dashboard);
+
+    GtkWidget *controls = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    gtk_widget_add_css_class(controls, "discover-controls");
+
+    state->discover_search = gtk_search_entry_new();
+    gtk_search_entry_set_placeholder_text(
+        GTK_SEARCH_ENTRY(state->discover_search),
+        "Search applications…");
+    gtk_widget_set_hexpand(state->discover_search, true);
+    g_signal_connect(
+        state->discover_search,
+        "search-changed",
+        G_CALLBACK(discover_filter_changed),
+        state);
+    gtk_box_append(GTK_BOX(controls), state->discover_search);
+
+    state->discover_categories = gtk_string_list_new(nullptr);
+    gtk_string_list_append(state->discover_categories, "All");
+    state->discover_category =
+        gtk_drop_down_new(
+            G_LIST_MODEL(state->discover_categories), nullptr);
+    gtk_widget_set_size_request(state->discover_category, 190, -1);
+    g_signal_connect(
+        state->discover_category,
+        "notify::selected",
+        G_CALLBACK(discover_category_changed),
+        state);
+    gtk_box_append(GTK_BOX(controls), state->discover_category);
+    gtk_box_append(GTK_BOX(page), controls);
+
+    GtkWidget *shortcuts =
+        gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+    gtk_widget_add_css_class(
+        shortcuts, "category-shortcuts");
+    gtk_box_append(
+        GTK_BOX(shortcuts),
+        make_discover_category_shortcut(
+            state, "All", "All software",
+            "view-grid-symbolic"));
+    gtk_box_append(
+        GTK_BOX(shortcuts),
+        make_discover_category_shortcut(
+            state, "Productivity", "Productivity",
+            "accessories-calculator-symbolic"));
+    gtk_box_append(
+        GTK_BOX(shortcuts),
+        make_discover_category_shortcut(
+            state, "Graphics", "Graphics",
+            "applications-graphics-symbolic"));
+    gtk_box_append(
+        GTK_BOX(shortcuts),
+        make_discover_category_shortcut(
+            state, "Internet", "Internet",
+            "applications-internet-symbolic"));
+    gtk_box_append(
+        GTK_BOX(shortcuts),
+        make_discover_category_shortcut(
+            state, "System Tools", "System",
+            "applications-system-symbolic"));
+    gtk_box_append(GTK_BOX(page), shortcuts);
+
+    GtkWidget *catalogue_heading =
+        gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    gtk_widget_add_css_class(
+        catalogue_heading,
+        "catalogue-section-heading");
+    GtkWidget *catalogue_icon_widget =
+        make_icon("view-grid-symbolic", 20);
+    gtk_widget_add_css_class(
+        catalogue_icon_widget,
+        "catalogue-section-icon");
+    GtkWidget *catalogue_copy =
+        gtk_box_new(GTK_ORIENTATION_VERTICAL, 1);
+    gtk_widget_set_hexpand(
+        catalogue_copy, true);
+    GtkWidget *catalogue_title =
+        make_label(
+            "Explore software",
+            "catalogue-section-title");
+    GtkWidget *catalogue_note =
+        make_label(
+            "Applications from Infiltrator, system repositories and Flatpak.",
+            "catalogue-section-note");
+    gtk_box_append(
+        GTK_BOX(catalogue_copy), catalogue_title);
+    gtk_box_append(
+        GTK_BOX(catalogue_copy), catalogue_note);
+    gtk_box_append(
+        GTK_BOX(catalogue_heading),
+        catalogue_icon_widget);
+    gtk_box_append(
+        GTK_BOX(catalogue_heading),
+        catalogue_copy);
+    gtk_box_append(
+        GTK_BOX(page), catalogue_heading);
+
+    state->discover_status = make_label(
+        "Refreshing Infiltrator, system and Flatpak metadata…",
+        "discover-status");
+    gtk_box_append(GTK_BOX(page), state->discover_status);
+
+    state->discover_visible = gtk_string_list_new(nullptr);
+
+    GtkListItemFactory *factory =
+        gtk_signal_list_item_factory_new();
+    g_signal_connect(
+        factory, "setup",
+        G_CALLBACK(discover_grid_setup), state);
+    g_signal_connect(
+        factory, "bind",
+        G_CALLBACK(discover_grid_bind), state);
+    g_signal_connect(
+        factory, "unbind",
+        G_CALLBACK(discover_grid_unbind), state);
+
+    GtkSelectionModel *selection =
+        GTK_SELECTION_MODEL(
+            gtk_no_selection_new(
+                G_LIST_MODEL(state->discover_visible)));
+    GtkWidget *grid =
+        gtk_grid_view_new(selection, factory);
+    gtk_grid_view_set_min_columns(
+        GTK_GRID_VIEW(grid), 1U);
+    gtk_grid_view_set_max_columns(
+        GTK_GRID_VIEW(grid), 3U);
+    gtk_widget_set_vexpand(grid, true);
+    gtk_widget_set_valign(grid, GTK_ALIGN_START);
+    gtk_widget_add_css_class(grid, "discover-grid");
+
+    GtkWidget *scroll = gtk_scrolled_window_new();
+    gtk_widget_set_size_request(
+        scroll, -1, 520);
+    gtk_scrolled_window_set_policy(
+        GTK_SCROLLED_WINDOW(scroll),
+        GTK_POLICY_NEVER,
+        GTK_POLICY_AUTOMATIC);
+    gtk_scrolled_window_set_overlay_scrolling(
+        GTK_SCROLLED_WINDOW(scroll),
+        false);
+    gtk_scrolled_window_set_child(
+        GTK_SCROLLED_WINDOW(scroll),
+        grid);
+    gtk_box_append(GTK_BOX(page), scroll);
+
+    GtkWidget *page_scroll =
+        gtk_scrolled_window_new();
+    gtk_widget_add_css_class(
+        page_scroll, "page-scroller");
+    gtk_widget_set_hexpand(
+        page_scroll, true);
+    gtk_widget_set_vexpand(
+        page_scroll, true);
+    gtk_scrolled_window_set_policy(
+        GTK_SCROLLED_WINDOW(page_scroll),
+        GTK_POLICY_NEVER,
+        GTK_POLICY_ALWAYS);
+    gtk_scrolled_window_set_overlay_scrolling(
+        GTK_SCROLLED_WINDOW(page_scroll),
+        false);
+    gtk_scrolled_window_set_child(
+        GTK_SCROLLED_WINDOW(page_scroll),
+        page);
+
+    return page_scroll;
+}
+
+void refresh_installed(WindowState *state)
+{
+    if (state == nullptr) return;
+    refresh_installed_controller(&state->installed);
+}
+
+struct UpdateProcessRun {
+    GtkWindow *window{};
+    std::string operation;
+    TransactionPlan plan;
+};
+
+std::filesystem::path update_runtime_state_path()
+{
+    const char *runtime = g_get_user_runtime_dir();
+    if (runtime == nullptr || *runtime == '\0') {
+        return {};
+    }
+    return std::filesystem::path(runtime) /
+           "infiltrator-software" / "update-state";
+}
+
+std::filesystem::path privileged_update_progress_path()
+{
+    return std::filesystem::path("/run/infiltrator-software") /
+           ("update-" +
+            std::to_string(
+                static_cast<unsigned long long>(getuid())) +
+            ".state");
+}
+
+struct PrivilegedUpdateProgress {
+    std::string token;
+    std::string phase;
+    std::string detail;
+};
+
+std::optional<PrivilegedUpdateProgress>
+read_privileged_update_progress()
+{
+    std::ifstream input(privileged_update_progress_path());
+    if (!input) {
+        return std::nullopt;
+    }
+
+    std::string line;
+    if (!std::getline(input, line) || line.empty()) {
+        return std::nullopt;
+    }
+
+    const std::size_t first = line.find('\t');
+    if (first == std::string::npos) {
+        return std::nullopt;
+    }
+    const std::size_t second = line.find('\t', first + 1U);
+    if (second == std::string::npos) {
+        return std::nullopt;
+    }
+
+    PrivilegedUpdateProgress progress;
+    progress.token = line.substr(0U, first);
+    progress.phase =
+        line.substr(first + 1U, second - first - 1U);
+    progress.detail = line.substr(second + 1U);
+    if (progress.token.empty() || progress.phase.empty()) {
+        return std::nullopt;
+    }
+    return progress;
+}
+
+std::filesystem::path transaction_history_path()
+{
+    const std::string path =
+        infiltrator::software::user_transaction_history_path();
+    return path.empty()
+        ? std::filesystem::path{}
+        : std::filesystem::path(path);
+}
+
+void record_transaction_history(
+    const TransactionPlan &plan,
+    const bool success,
+    const std::string_view message)
+{
+    const std::filesystem::path path =
+        transaction_history_path();
+    if (path.empty() || plan.items.empty()) {
+        return;
+    }
+
+    TransactionHistoryStore store(path.string());
+    std::string error;
+    if (!store.append(plan, success, message, error)) {
+        g_warning(
+            "Unable to record Software transaction history: %s",
+            error.c_str());
+    }
+}
+
+std::string one_line(std::string value)
+{
+    for (char &ch : value) {
+        if (ch == '\n' || ch == '\r' || ch == '\t') {
+            ch = ' ';
+        }
+    }
+    while (!value.empty() &&
+           std::isspace(static_cast<unsigned char>(value.back())) != 0) {
+        value.pop_back();
+    }
+    if (value.size() > 220U) {
+        value.resize(217U);
+        value += "...";
+    }
+    return value;
+}
+
+
+int update_phase_index(const std::string_view phase) noexcept
+{
+    if (phase == "authorize" || phase == "wait-lock") return 0;
+    if (phase == "refresh") return 1;
+    if (phase == "validate") return 2;
+    if (phase == "download") return 3;
+    if (phase == "install" ||
+        phase == "configure" ||
+        phase == "finalize") return 4;
+    if (phase == "verify" || phase == "complete") return 5;
+    return -1;
+}
+
+const char *update_phase_title(const std::string_view phase) noexcept
+{
+    if (phase == "authorize") return "Waiting for authorization";
+    if (phase == "wait-lock") return "Waiting for package manager";
+    if (phase == "refresh") return "Refreshing package metadata";
+    if (phase == "validate") return "Re-validating approved changes";
+    if (phase == "download") return "Downloading updates";
+    if (phase == "install") return "Installing packages";
+    if (phase == "configure") return "Configuring packages";
+    if (phase == "finalize") return "Finishing installation";
+    if (phase == "verify") return "Verifying final package state";
+    if (phase == "complete") return "Update transaction complete";
+    if (phase == "error") return "Update transaction failed";
+    return "Processing updates";
+}
+
+void update_nav_updates_badge(WindowState *state)
+{
+    if (state == nullptr || state->nav_updates_badge == nullptr) {
+        return;
+    }
+
+    if (state->updates_busy &&
+        (state->external_updates_active ||
+         !state->updates_progress_token.empty())) {
+        gtk_label_set_text(
+            GTK_LABEL(state->nav_updates_badge), "↻");
+        gtk_widget_add_css_class(
+            state->nav_updates_badge, "nav-badge-active");
+        gtk_widget_set_visible(
+            state->nav_updates_badge, true);
+        return;
+    }
+
+    gtk_widget_remove_css_class(
+        state->nav_updates_badge, "nav-badge-active");
+    const std::size_t count = state->update_records.size();
+    if (count == 0U) {
+        gtk_widget_set_visible(
+            state->nav_updates_badge, false);
+        return;
+    }
+
+    const std::string badge =
+        count > 99U ? "99+" : std::to_string(count);
+    gtk_label_set_text(
+        GTK_LABEL(state->nav_updates_badge),
+        badge.c_str());
+    gtk_widget_set_visible(
+        state->nav_updates_badge, true);
+}
+
+void set_update_transaction_phase(
+    WindowState *state,
+    const std::string_view phase,
+    const std::string_view detail)
+{
+    if (state == nullptr) {
+        return;
+    }
+
+    state->updates_progress_phase = std::string(phase);
+    if (state->updates_transaction_panel != nullptr) {
+        gtk_widget_set_visible(
+            state->updates_transaction_panel, true);
+    }
+    if (state->updates_transaction_phase != nullptr) {
+        gtk_label_set_text(
+            GTK_LABEL(state->updates_transaction_phase),
+            update_phase_title(phase));
+    }
+    if (state->updates_transaction_detail != nullptr) {
+        std::string copy(detail);
+        if (copy.empty()) {
+            if (phase == "authorize") {
+                copy =
+                    "Approve the exact package transaction when the administrator prompt appears.";
+            } else if (phase == "refresh") {
+                copy =
+                    "Refreshing trusted repository metadata before any package changes are applied.";
+            } else if (phase == "validate") {
+                copy =
+                    "Checking that the reviewed package versions still match the transaction to be executed.";
+            } else if (phase == "download") {
+                copy =
+                    "Downloading the approved package payloads.";
+            } else if (phase == "install") {
+                copy =
+                    "Applying the downloaded package payloads.";
+            } else if (phase == "configure") {
+                copy =
+                    "Configuring installed packages and services.";
+            } else if (phase == "finalize") {
+                copy =
+                    "Processing package triggers and finishing the transaction.";
+            } else if (phase == "verify") {
+                copy =
+                    "Reading authoritative installed state and checking which updates remain.";
+            } else if (phase == "complete") {
+                copy =
+                    "The approved transaction and final package-state verification completed successfully.";
+            }
+        }
+        gtk_label_set_text(
+            GTK_LABEL(state->updates_transaction_detail),
+            copy.c_str());
+    }
+
+    const int active = update_phase_index(phase);
+    for (int index = 0; index < 6; ++index) {
+        GtkWidget *label = state->updates_stage_labels[index];
+        if (label == nullptr) continue;
+        gtk_widget_remove_css_class(label, "update-stage-active");
+        gtk_widget_remove_css_class(label, "update-stage-done");
+        gtk_widget_remove_css_class(label, "update-stage-error");
+        if (active >= 0 && index < active) {
+            gtk_widget_add_css_class(label, "update-stage-done");
+        } else if (active >= 0 && index == active) {
+            gtk_widget_add_css_class(label, "update-stage-active");
+        }
+    }
+
+    if (state->updates_progress != nullptr) {
+        if (phase == "complete") {
+            gtk_progress_bar_set_fraction(
+                GTK_PROGRESS_BAR(state->updates_progress), 1.0);
+        } else {
+            gtk_progress_bar_pulse(
+                GTK_PROGRESS_BAR(state->updates_progress));
+        }
+    }
+}
+
+void update_transaction_meta(WindowState *state)
+{
+    if (state == nullptr ||
+        state->updates_transaction_meta == nullptr ||
+        state->updates_progress_started_us <= 0) {
+        return;
+    }
+
+    const gint64 elapsed_us =
+        g_get_monotonic_time() -
+        state->updates_progress_started_us;
+    const long long elapsed_seconds =
+        static_cast<long long>(
+            elapsed_us / G_USEC_PER_SEC);
+
+    std::ostringstream meta;
+    meta << state->updates_progress_items
+         << (state->updates_progress_items == 1U
+                 ? " package"
+                 : " packages");
+    if (state->updates_progress_download_bytes > 0U) {
+        meta << "  •  "
+             << display_size(
+                    state->updates_progress_download_bytes)
+             << " planned download";
+    }
+    meta << "  •  "
+         << elapsed_seconds
+         << " s elapsed";
+    gtk_label_set_text(
+        GTK_LABEL(state->updates_transaction_meta),
+        meta.str().c_str());
+}
+
+gboolean update_progress_tick(gpointer user_data)
+{
+    auto *state = static_cast<WindowState *>(user_data);
+    if (state == nullptr ||
+        !state->updates_busy ||
+        state->updates_progress == nullptr) {
+        if (state != nullptr) {
+            state->updates_progress_timer_id = 0U;
+        }
+        return G_SOURCE_REMOVE;
+    }
+
+    if (state->updates_post_install_refresh) {
+        set_update_transaction_phase(
+            state,
+            "verify",
+            "Installation finished; checking installed versions and remaining update candidates.");
+    } else {
+        const auto progress =
+            read_privileged_update_progress();
+        if (progress.has_value() &&
+            progress->token == state->updates_progress_token) {
+            set_update_transaction_phase(
+                state,
+                progress->phase,
+                progress->detail);
+        } else {
+            gtk_progress_bar_pulse(
+                GTK_PROGRESS_BAR(state->updates_progress));
+        }
+    }
+
+    update_transaction_meta(state);
+    update_nav_updates_badge(state);
+    return G_SOURCE_CONTINUE;
+}
+
+void start_update_progress(
+    WindowState *state,
+    const TransactionPlan &plan)
+{
+    if (state == nullptr ||
+        state->updates_progress == nullptr) {
+        return;
+    }
+
+    state->updates_progress_started_us =
+        g_get_monotonic_time();
+    state->updates_progress_items =
+        plan.items.size();
+    state->updates_progress_download_bytes =
+        plan.download_bytes;
+    state->updates_progress_token =
+        std::to_string(
+            static_cast<unsigned long long>(getpid())) +
+        "-" +
+        std::to_string(
+            static_cast<unsigned long long>(
+                state->updates_progress_started_us));
+    if (state->updates_transaction_panel != nullptr) {
+        gtk_widget_set_visible(
+            state->updates_transaction_panel, true);
+    }
+    gtk_widget_set_visible(
+        state->updates_progress, true);
+    gtk_progress_bar_set_fraction(
+        GTK_PROGRESS_BAR(state->updates_progress), 0.0);
+    gtk_progress_bar_set_pulse_step(
+        GTK_PROGRESS_BAR(state->updates_progress), 0.06);
+    set_update_transaction_phase(
+        state,
+        "authorize",
+        "Waiting for administrator authorization before the reviewed transaction begins.");
+    update_transaction_meta(state);
+    update_nav_updates_badge(state);
+
+    if (state->updates_progress_timer_id == 0U) {
+        state->updates_progress_timer_id =
+            g_timeout_add_seconds(
+                1U, update_progress_tick, state);
+    }
+}
+
+void stop_update_progress(WindowState *state)
+{
+    if (state == nullptr) {
+        return;
+    }
+
+    if (state->updates_progress_timer_id != 0U) {
+        g_source_remove(state->updates_progress_timer_id);
+        state->updates_progress_timer_id = 0U;
+    }
+    state->updates_progress_started_us = 0;
+    state->updates_progress_items = 0U;
+    state->updates_progress_download_bytes = 0U;
+    state->updates_progress_token.clear();
+    state->updates_progress_phase.clear();
+    if (state->updates_transaction_panel != nullptr) {
+        gtk_widget_set_visible(
+            state->updates_transaction_panel, false);
+    }
+    update_nav_updates_badge(state);
+}
+
+void finish_update_progress(
+    WindowState *state,
+    const bool success,
+    const std::string_view detail)
+{
+    if (state == nullptr) {
+        return;
+    }
+
+    if (state->updates_progress_timer_id != 0U) {
+        g_source_remove(state->updates_progress_timer_id);
+        state->updates_progress_timer_id = 0U;
+    }
+    if (state->updates_transaction_panel != nullptr) {
+        gtk_widget_set_visible(
+            state->updates_transaction_panel, true);
+    }
+    if (success) {
+        set_update_transaction_phase(
+            state, "complete", detail);
+    } else {
+        const int active =
+            update_phase_index(
+                state->updates_progress_phase);
+        state->updates_progress_phase = "error";
+        if (state->updates_transaction_phase != nullptr) {
+            gtk_label_set_text(
+                GTK_LABEL(state->updates_transaction_phase),
+                "Update transaction failed");
+        }
+        if (state->updates_transaction_detail != nullptr) {
+            const std::string copy(detail);
+            gtk_label_set_text(
+                GTK_LABEL(state->updates_transaction_detail),
+                copy.c_str());
+        }
+        if (state->updates_progress != nullptr) {
+            gtk_progress_bar_set_fraction(
+                GTK_PROGRESS_BAR(state->updates_progress), 0.0);
+        }
+        if (active >= 0 && active < 6 &&
+            state->updates_stage_labels[active] != nullptr) {
+            gtk_widget_remove_css_class(
+                state->updates_stage_labels[active],
+                "update-stage-active");
+            gtk_widget_add_css_class(
+                state->updates_stage_labels[active],
+                "update-stage-error");
+        }
+    }
+    update_transaction_meta(state);
+    state->updates_progress_token.clear();
+    update_nav_updates_badge(state);
+}
+
+struct DiscoverFlatpakOperation {
+    GtkWindow *main_window{};
+    GtkWidget *button{};
+    GtkWidget *status{};
+    std::string application_id;
+    std::string remote;
+    bool user_installation{false};
+    bool install{true};
+};
+
+void destroy_discover_flatpak_operation(gpointer pointer)
+{
+    auto *operation =
+        static_cast<DiscoverFlatpakOperation *>(pointer);
+    if (operation == nullptr) return;
+    if (operation->main_window != nullptr) {
+        g_object_unref(operation->main_window);
+    }
+    if (operation->button != nullptr) {
+        g_object_unref(operation->button);
+    }
+    if (operation->status != nullptr) {
+        g_object_unref(operation->status);
+    }
+    delete operation;
+}
+
+TransactionPlan discover_flatpak_history_plan(
+    const DiscoverFlatpakOperation &operation)
+{
+    TransactionPlan plan;
+    TransactionItem item;
+    item.package_id = operation.application_id;
+    item.action =
+        operation.install
+            ? TransactionAction::install
+            : TransactionAction::remove;
+    item.source =
+        operation.user_installation
+            ? "Flatpak User"
+            : "Flatpak System";
+    item.requested = true;
+    plan.items.emplace_back(std::move(item));
+    plan.touches_system = !operation.user_installation;
+    return plan;
+}
+
+void discover_flatpak_worker(
+    GTask *task,
+    gpointer,
+    gpointer task_data,
+    GCancellable *)
+{
+    auto *operation =
+        static_cast<DiscoverFlatpakOperation *>(task_data);
+    if (operation == nullptr) {
+        g_task_return_new_error(
+            task,
+            G_IO_ERROR,
+            G_IO_ERROR_FAILED,
+            "Flatpak operation state is unavailable.");
+        return;
+    }
+
+    std::string error;
+    if (!set_flatpak_application_installed(
+            operation->application_id,
+            operation->remote,
+            operation->user_installation,
+            operation->install,
+            error)) {
+        g_task_return_new_error(
+            task,
+            G_IO_ERROR,
+            G_IO_ERROR_FAILED,
+            "%s",
+            error.empty()
+                ? "Flatpak operation failed."
+                : error.c_str());
+        return;
+    }
+    g_task_return_boolean(task, TRUE);
+}
+
+void discover_flatpak_complete(
+    GObject *,
+    GAsyncResult *async_result,
+    gpointer)
+{
+    auto *task = G_TASK(async_result);
+    auto *operation =
+        static_cast<DiscoverFlatpakOperation *>(
+            g_task_get_task_data(task));
+    if (operation == nullptr) {
+        return;
+    }
+
+    GError *error = nullptr;
+    const bool success =
+        g_task_propagate_boolean(task, &error) != FALSE;
+
+    std::string message;
+    if (success) {
+        message =
+            operation->install
+                ? "Flatpak application installed."
+                : "Flatpak application removed.";
+    } else {
+        message =
+            error != nullptr && error->message != nullptr
+                ? one_line(error->message)
+                : "Flatpak operation failed.";
+    }
+
+    if (operation->status != nullptr) {
+        gtk_label_set_text(
+            GTK_LABEL(operation->status),
+            message.c_str());
+    }
+    if (operation->button != nullptr) {
+        gtk_widget_set_sensitive(
+            operation->button,
+            success ? false : true);
+    }
+
+    const TransactionPlan history_plan =
+        discover_flatpak_history_plan(*operation);
+    record_transaction_history(
+        history_plan,
+        success,
+        message);
+
+    if (operation->main_window != nullptr) {
+        auto *state = static_cast<WindowState *>(
+            g_object_get_data(
+                G_OBJECT(operation->main_window),
+                "infiltrator-window-state"));
+        if (state != nullptr) {
+            if (success) {
+                refresh_discover(state, true);
+                if (state->installed.loaded) {
+                    refresh_installed(state);
+                }
+                if (state->updates_loaded) {
+                    refresh_updates(state, false);
+                }
+            }
+            if (state->history.loaded) {
+                refresh_history(state);
+            }
+        }
+    }
+
+    g_clear_error(&error);
+}
+
+void start_discover_flatpak_operation(
+    DiscoverFlatpakOperation *operation)
+{
+    if (operation == nullptr || operation->button == nullptr) {
+        destroy_discover_flatpak_operation(operation);
+        return;
+    }
+
+    if (operation->status != nullptr) {
+        gtk_label_set_text(
+            GTK_LABEL(operation->status),
+            operation->install
+                ? "Installing the selected Flatpak application…"
+                : "Removing the selected Flatpak application…");
+    }
+
+    GTask *task =
+        g_task_new(
+            G_OBJECT(operation->button),
+            nullptr,
+            discover_flatpak_complete,
+            nullptr);
+    g_task_set_task_data(
+        task,
+        operation,
+        destroy_discover_flatpak_operation);
+    g_task_run_in_thread(
+        task,
+        discover_flatpak_worker);
+    g_object_unref(task);
+}
+
+void discover_flatpak_confirm_response(
+    GtkDialog *dialog,
+    const gint response_id,
+    gpointer user_data)
+{
+    auto *operation =
+        static_cast<DiscoverFlatpakOperation *>(user_data);
+    gtk_window_destroy(GTK_WINDOW(dialog));
+
+    if (operation == nullptr) {
+        return;
+    }
+    if (response_id == GTK_RESPONSE_ACCEPT) {
+        start_discover_flatpak_operation(operation);
+        return;
+    }
+
+    if (operation->status != nullptr) {
+        gtk_label_set_text(
+            GTK_LABEL(operation->status),
+            operation->install
+                ? "Flatpak installation cancelled."
+                : "Flatpak removal cancelled.");
+    }
+    if (operation->button != nullptr) {
+        gtk_widget_set_sensitive(
+            operation->button, true);
+    }
+    destroy_discover_flatpak_operation(operation);
+}
+
+void confirm_discover_flatpak_operation(
+    WindowState *state,
+    GtkWidget *button,
+    GtkWidget *status,
+    const PackageRecord &record)
+{
+    const bool user_installation =
+        record.id.rfind("flatpak:user:", 0U) == 0U;
+    const bool system_installation =
+        record.id.rfind("flatpak:system:", 0U) == 0U;
+    if (!user_installation && !system_installation) {
+        if (status != nullptr) {
+            gtk_label_set_text(
+                GTK_LABEL(status),
+                "Flatpak application has no installation-scope identity.");
+        }
+        gtk_widget_set_sensitive(button, true);
+        return;
+    }
+
+    auto *operation =
+        new DiscoverFlatpakOperation{};
+    operation->main_window =
+        GTK_WINDOW(g_object_ref(state->window));
+    operation->button =
+        GTK_WIDGET(g_object_ref(button));
+    operation->status =
+        status != nullptr
+            ? GTK_WIDGET(g_object_ref(status))
+            : nullptr;
+    operation->application_id =
+        record.package_name;
+    operation->remote =
+        record.repository_origin;
+    operation->user_installation =
+        user_installation;
+    operation->install =
+        record.state !=
+            infiltrator::software::InstallState::installed;
+
+    G_GNUC_BEGIN_IGNORE_DEPRECATIONS
+    GtkWidget *dialog =
+        gtk_dialog_new_with_buttons(
+            operation->install
+                ? "Review Flatpak installation"
+                : "Review Flatpak removal",
+            state->window,
+            static_cast<GtkDialogFlags>(
+                GTK_DIALOG_MODAL |
+                GTK_DIALOG_DESTROY_WITH_PARENT),
+            "Cancel",
+            GTK_RESPONSE_CANCEL,
+            operation->install ? "Install" : "Remove",
+            GTK_RESPONSE_ACCEPT,
+            nullptr);
+    GtkWidget *content =
+        gtk_dialog_get_content_area(
+            GTK_DIALOG(dialog));
+    G_GNUC_END_IGNORE_DEPRECATIONS
+    gtk_box_set_spacing(GTK_BOX(content), 12);
+    gtk_widget_set_margin_start(content, 18);
+    gtk_widget_set_margin_end(content, 18);
+    gtk_widget_set_margin_top(content, 16);
+    gtk_widget_set_margin_bottom(content, 16);
+
+    const std::string heading =
+        std::string(
+            operation->install ? "Install " : "Remove ") +
+        record.name;
+    GtkWidget *heading_label =
+        make_label(
+            heading.c_str(),
+            "hero-title");
+    gtk_label_set_wrap(
+        GTK_LABEL(heading_label), true);
+    gtk_box_append(
+        GTK_BOX(content),
+        heading_label);
+
+    std::string detail =
+        "Flatpak " +
+        std::string(
+            user_installation
+                ? "User"
+                : "System") +
+        " installation · " +
+        record.package_name;
+    if (!record.repository_origin.empty()) {
+        detail +=
+            " · remote " +
+            record.repository_origin;
+    }
+    GtkWidget *detail_label =
+        make_label(
+            detail.c_str(),
+            "detail-note");
+    gtk_label_set_wrap(
+        GTK_LABEL(detail_label), true);
+    gtk_box_append(
+        GTK_BOX(content),
+        detail_label);
+
+    g_signal_connect(
+        dialog,
+        "response",
+        G_CALLBACK(
+            discover_flatpak_confirm_response),
+        operation);
+    gtk_window_present(GTK_WINDOW(dialog));
+}
+
+struct DiscoverPlanTaskData {
+    std::string package_id;
+    TransactionAction action{TransactionAction::install};
+    bool install_recommends{false};
+    GtkWindow *main_window{};
+};
+
+struct DiscoverPlanResult {
+    std::optional<TransactionPlan> plan;
+    std::string error;
+};
+
+struct DiscoverInstallOperation {
+    GtkWindow *main_window{};
+    GtkWidget *button{};
+    GtkWidget *status{};
+    TransactionAction action{TransactionAction::install};
+    TransactionPlan plan;
+};
+
+void destroy_discover_plan_task_data(gpointer pointer)
+{
+    auto *data = static_cast<DiscoverPlanTaskData *>(pointer);
+    if (data == nullptr) return;
+    if (data->main_window != nullptr) g_object_unref(data->main_window);
+    delete data;
+}
+
+void destroy_discover_install_operation(
+    DiscoverInstallOperation *operation)
+{
+    if (operation == nullptr) return;
+    if (operation->main_window != nullptr) g_object_unref(operation->main_window);
+    if (operation->button != nullptr) g_object_unref(operation->button);
+    if (operation->status != nullptr) g_object_unref(operation->status);
+    delete operation;
+}
+
+void discover_plan_worker(
+    GTask *task,
+    gpointer,
+    gpointer task_data,
+    GCancellable *)
+{
+    auto *data = static_cast<DiscoverPlanTaskData *>(task_data);
+    auto *result = new DiscoverPlanResult{};
+
+    if (data == nullptr || data->package_id.empty()) {
+        result->error = "No package was selected for the transaction.";
+    } else {
+        infiltrator::software::TransactionRequest request;
+        request.action = data->action;
+        request.package_ids = {data->package_id};
+        request.install_recommends =
+            data->install_recommends;
+
+        std::string engine_error;
+        EngineClient engine;
+        result->plan = engine.plan(request, engine_error);
+        if (!result->plan.has_value()) {
+            /*
+             * A missing/stale shared generation is recoverable without
+             * reviving the retired APT planner. Reconcile once, then retry the
+             * exact native request. Mutation still cannot begin unless the
+             * native planner returns a complete reviewed transaction.
+             */
+            std::string refresh_error;
+            if (engine.refresh(refresh_error)) {
+                engine_error.clear();
+                result->plan =
+                    engine.plan(request, engine_error);
+            }
+            if (!result->plan.has_value()) {
+                result->error =
+                    "Native planner: " + one_line(engine_error);
+                if (!refresh_error.empty()) {
+                    result->error +=
+                        "  State refresh: " +
+                        one_line(refresh_error);
+                }
+            }
+        }
+    }
+
+    g_task_return_pointer(
+        task,
+        result,
+        [](gpointer pointer) {
+            delete static_cast<DiscoverPlanResult *>(pointer);
+        });
+}
+
+void discover_install_process_complete(
+    GObject *source_object,
+    GAsyncResult *async_result,
+    gpointer user_data)
+{
+    auto *operation =
+        static_cast<DiscoverInstallOperation *>(user_data);
+    auto *process = G_SUBPROCESS(source_object);
+
+    GError *error = nullptr;
+    gchar *stdout_text = nullptr;
+    gchar *stderr_text = nullptr;
+    const gboolean communicated =
+        g_subprocess_communicate_utf8_finish(
+            process, async_result,
+            &stdout_text, &stderr_text, &error);
+    const bool success =
+        communicated != FALSE &&
+        g_subprocess_get_successful(process);
+    const bool no_changes_required =
+        success &&
+        stdout_text != nullptr &&
+        std::string_view(stdout_text).find(
+            "INFILTRATOR_NO_CHANGES_REQUIRED") !=
+            std::string_view::npos;
+
+    if (operation != nullptr && !operation->plan.items.empty()) {
+        std::string history_message;
+        if (no_changes_required) {
+            history_message =
+                "Approved package state was already satisfied; no package changes were required.";
+        } else if (success) {
+            history_message = "Transaction completed successfully.";
+        } else if (g_subprocess_get_if_exited(process) &&
+                   g_subprocess_get_exit_status(process) == 126) {
+            history_message = "Administrator authentication was cancelled.";
+        } else if (stderr_text != nullptr && *stderr_text != '\0') {
+            history_message = one_line(stderr_text);
+        } else if (error != nullptr && error->message != nullptr) {
+            history_message = one_line(error->message);
+        } else {
+            history_message = "Transaction failed.";
+        }
+        record_transaction_history(
+            operation->plan, success, history_message);
+
+        if (operation->main_window != nullptr) {
+            auto *history_state = static_cast<WindowState *>(
+                g_object_get_data(
+                    G_OBJECT(operation->main_window),
+                    "infiltrator-window-state"));
+            if (history_state != nullptr &&
+                history_state->history.loaded) {
+                refresh_history(history_state);
+            }
+        }
+    }
+
+    if (operation != nullptr && operation->status != nullptr) {
+        if (success) {
+            gtk_label_set_text(
+                GTK_LABEL(operation->status),
+                no_changes_required
+                    ? "Package state was already current. Refreshing software state…"
+                    : operation->action == TransactionAction::remove
+                        ? "Removal complete. Refreshing software state…"
+                        : operation->action == TransactionAction::upgrade
+                            ? "Update complete. Refreshing software state…"
+                            : "Installation complete. Refreshing software state…");
+        } else {
+            std::string message =
+                operation->action == TransactionAction::remove
+                    ? "Unable to remove package."
+                    : operation->action == TransactionAction::upgrade
+                        ? "Unable to update package."
+                        : "Unable to install package.";
+            if (error != nullptr && error->message != nullptr) {
+                message += " ";
+                message += error->message;
+            } else if (stderr_text != nullptr &&
+                       *stderr_text != '\0') {
+                message += " ";
+                message += one_line(stderr_text);
+            }
+            gtk_label_set_text(
+                GTK_LABEL(operation->status),
+                message.c_str());
+        }
+    }
+
+    if (operation != nullptr && operation->button != nullptr) {
+        if (success) {
+            gtk_button_set_label(
+                GTK_BUTTON(operation->button),
+                operation->action == TransactionAction::remove
+                    ? "Removed"
+                    : operation->action == TransactionAction::upgrade
+                        ? "Updated"
+                        : "Installed");
+            gtk_widget_set_sensitive(operation->button, false);
+        } else {
+            gtk_widget_set_sensitive(operation->button, true);
+        }
+    }
+
+    if (success && operation != nullptr &&
+        operation->main_window != nullptr) {
+        auto *state = static_cast<WindowState *>(
+            g_object_get_data(
+                G_OBJECT(operation->main_window),
+                "infiltrator-window-state"));
+        if (state != nullptr) {
+            refresh_discover(state, true);
+            if (state->installed.loaded) refresh_installed(state);
+            if (state->updates_loaded) refresh_updates(state);
+        }
+    }
+
+    g_free(stdout_text);
+    g_free(stderr_text);
+    g_clear_error(&error);
+    destroy_discover_install_operation(operation);
+}
+
+void start_discover_install_operation(
+    DiscoverInstallOperation *operation)
+{
+    if (operation == nullptr) return;
+
+    std::vector<std::string> specs;
+    std::string plan_error;
+    if (!exact_transaction_specs(operation->plan, specs, plan_error)) {
+        if (operation->status != nullptr) {
+            gtk_label_set_text(
+                GTK_LABEL(operation->status),
+                plan_error.c_str());
+        }
+        if (operation->button != nullptr) {
+            gtk_widget_set_sensitive(operation->button, true);
+        }
+        record_transaction_history(
+            operation->plan, false, plan_error);
+        if (operation->main_window != nullptr) {
+            auto *history_state = static_cast<WindowState *>(
+                g_object_get_data(
+                    G_OBJECT(operation->main_window),
+                    "infiltrator-window-state"));
+            if (history_state != nullptr &&
+                history_state->history.loaded) {
+                refresh_history(history_state);
+            }
+        }
+        destroy_discover_install_operation(operation);
+        return;
+    }
+
+    std::vector<std::string> arguments{
+        "pkexec",
+        "/usr/libexec/infiltrator-software-update-helper",
+        "apply-plan"};
+    arguments.reserve(specs.size() + 3U);
+    arguments.insert(arguments.end(), specs.begin(), specs.end());
+
+    std::vector<const gchar *> argv;
+    argv.reserve(arguments.size() + 1U);
+    for (const std::string &argument : arguments) {
+        argv.push_back(argument.c_str());
+    }
+    argv.push_back(nullptr);
+
+    GError *error = nullptr;
+    GSubprocess *process = g_subprocess_newv(
+        argv.data(),
+        static_cast<GSubprocessFlags>(
+            G_SUBPROCESS_FLAGS_STDOUT_PIPE |
+            G_SUBPROCESS_FLAGS_STDERR_PIPE),
+        &error);
+
+    if (process == nullptr) {
+        std::string message =
+            operation->action == TransactionAction::remove
+                ? "Unable to start package removal."
+                : operation->action == TransactionAction::upgrade
+                    ? "Unable to start package update."
+                    : "Unable to start package installation.";
+        if (error != nullptr && error->message != nullptr) {
+            message += " ";
+            message += error->message;
+        }
+        if (operation->status != nullptr) {
+            gtk_label_set_text(
+                GTK_LABEL(operation->status),
+                message.c_str());
+        }
+        if (operation->button != nullptr) {
+            gtk_widget_set_sensitive(operation->button, true);
+        }
+        record_transaction_history(
+            operation->plan, false, message);
+        if (operation->main_window != nullptr) {
+            auto *history_state = static_cast<WindowState *>(
+                g_object_get_data(
+                    G_OBJECT(operation->main_window),
+                    "infiltrator-window-state"));
+            if (history_state != nullptr &&
+                history_state->history.loaded) {
+                refresh_history(history_state);
+            }
+        }
+        g_clear_error(&error);
+        destroy_discover_install_operation(operation);
+        return;
+    }
+
+    if (operation->status != nullptr) {
+        gtk_label_set_text(
+            GTK_LABEL(operation->status),
+            "Waiting for administrator authorization…");
+    }
+
+    g_subprocess_communicate_utf8_async(
+        process, nullptr, nullptr,
+        discover_install_process_complete, operation);
+    g_object_unref(process);
+}
+
+void discover_install_confirm_response(
+    GtkDialog *dialog,
+    const gint response_id,
+    gpointer user_data)
+{
+    auto *operation =
+        static_cast<DiscoverInstallOperation *>(user_data);
+    gtk_window_destroy(GTK_WINDOW(dialog));
+
+    if (operation == nullptr) return;
+    if (response_id == GTK_RESPONSE_ACCEPT) {
+        start_discover_install_operation(operation);
+        return;
+    }
+
+    if (operation->status != nullptr) {
+        gtk_label_set_text(
+            GTK_LABEL(operation->status),
+            operation->action == TransactionAction::remove
+                ? "Removal cancelled."
+                : operation->action == TransactionAction::upgrade
+                    ? "Update cancelled."
+                    : "Installation cancelled.");
+    }
+    if (operation->button != nullptr) {
+        gtk_widget_set_sensitive(operation->button, true);
+    }
+    destroy_discover_install_operation(operation);
+}
+
+void discover_plan_complete(
+    GObject *source_object,
+    GAsyncResult *async_result,
+    gpointer)
+{
+    auto *button = GTK_WIDGET(source_object);
+    auto *task = G_TASK(async_result);
+    auto *task_data = static_cast<DiscoverPlanTaskData *>(
+        g_task_get_task_data(task));
+    auto *result = static_cast<DiscoverPlanResult *>(
+        g_task_propagate_pointer(task, nullptr));
+    auto *status = static_cast<GtkWidget *>(
+        g_object_get_data(
+            G_OBJECT(button), "discover-install-status"));
+    auto *record = static_cast<PackageRecord *>(
+        g_object_get_data(
+            G_OBJECT(button), "discover-install-record"));
+
+    WindowState *state = nullptr;
+    if (task_data != nullptr && task_data->main_window != nullptr) {
+        state = static_cast<WindowState *>(
+            g_object_get_data(
+                G_OBJECT(task_data->main_window),
+                "infiltrator-window-state"));
+    }
+
+    if (result == nullptr || !result->plan.has_value() ||
+        state == nullptr || record == nullptr || task_data == nullptr) {
+        std::string message = "Unable to resolve software transaction.";
+        if (result != nullptr && !result->error.empty()) {
+            message += " ";
+            message += one_line(result->error);
+        }
+        if (status != nullptr) {
+            gtk_label_set_text(GTK_LABEL(status), message.c_str());
+        }
+        gtk_widget_set_sensitive(button, true);
+        delete result;
+        return;
+    }
+
+    if (status != nullptr) {
+        gtk_label_set_text(
+            GTK_LABEL(status),
+            "Transaction resolved. Review every package change before authorizing.");
+    }
+
+    GtkWindow *parent = state->window;
+    if (GtkRoot *root = gtk_widget_get_root(button);
+        root != nullptr && GTK_IS_WINDOW(root)) {
+        parent = GTK_WINDOW(root);
+    }
+
+    const TransactionPlan plan = *result->plan;
+    delete result;
+
+    const std::string heading =
+        task_data->action == TransactionAction::remove
+            ? "Review the complete removal transaction for " + record->name
+            : task_data->action == TransactionAction::upgrade
+                ? "Review the complete update transaction for " + record->name
+                : "Review the complete installation transaction for " + record->name;
+
+    auto *operation = new DiscoverInstallOperation{};
+    operation->main_window =
+        GTK_WINDOW(g_object_ref(task_data->main_window));
+    operation->button = GTK_WIDGET(g_object_ref(button));
+    operation->status =
+        status != nullptr ? GTK_WIDGET(g_object_ref(status)) : nullptr;
+    operation->action = task_data->action;
+    operation->plan = plan;
+
+    GtkWidget *dialog =
+        make_transaction_confirmation_dialog(
+            parent,
+            task_data->action == TransactionAction::remove
+                ? "Review removal"
+                : task_data->action == TransactionAction::upgrade
+                    ? "Review update" : "Review installation",
+            heading,
+            task_data->action == TransactionAction::remove
+                ? "Remove"
+                : task_data->action == TransactionAction::upgrade
+                    ? "Update" : "Install",
+            plan);
+    g_signal_connect(
+        dialog, "response",
+        G_CALLBACK(discover_install_confirm_response),
+        operation);
+    gtk_window_present(GTK_WINDOW(dialog));
+}
+
+void discover_install_clicked(
+    GtkButton *button,
+    gpointer user_data)
+{
+    auto *state = static_cast<WindowState *>(user_data);
+    auto *record = static_cast<PackageRecord *>(
+        g_object_get_data(
+            G_OBJECT(button), "discover-install-record"));
+    auto *status = static_cast<GtkWidget *>(
+        g_object_get_data(
+            G_OBJECT(button), "discover-install-status"));
+
+    if (state == nullptr || state->window == nullptr ||
+        record == nullptr || record->package_name.empty()) {
+        return;
+    }
+
+    const TransactionAction action =
+        record->state == infiltrator::software::InstallState::installed
+            ? TransactionAction::remove
+            : record->state == infiltrator::software::InstallState::upgradable
+                ? TransactionAction::upgrade
+                : TransactionAction::install;
+
+    gtk_widget_set_sensitive(GTK_WIDGET(button), false);
+
+    if (record->id.rfind("flatpak:", 0U) == 0U) {
+        if (status != nullptr) {
+            gtk_label_set_text(
+                GTK_LABEL(status),
+                action == TransactionAction::remove
+                    ? "Preparing scoped Flatpak removal…"
+                    : "Preparing scoped Flatpak installation…");
+        }
+        confirm_discover_flatpak_operation(
+            state,
+            GTK_WIDGET(button),
+            status,
+            *record);
+        return;
+    }
+    if (status != nullptr) {
+        gtk_label_set_text(
+            GTK_LABEL(status),
+            action == TransactionAction::remove
+                ? "Checking reverse dependencies and resolving removal…"
+                : action == TransactionAction::upgrade
+                    ? "Resolving the complete update transaction…"
+                    : "Resolving the complete installation transaction…");
+    }
+
+    auto *data = new DiscoverPlanTaskData{};
+    data->package_id = record->package_name;
+    data->action = action;
+    data->install_recommends =
+        state->preferences.install_recommends;
+    data->main_window = GTK_WINDOW(g_object_ref(state->window));
+
+    GTask *task = g_task_new(
+        G_OBJECT(button), nullptr,
+        discover_plan_complete, nullptr);
+    g_task_set_task_data(
+        task, data, destroy_discover_plan_task_data);
+    g_task_run_in_thread(task, discover_plan_worker);
+    g_object_unref(task);
+}
+
+void set_update_runtime_state(const std::string_view value)
+{
+    const std::filesystem::path path = update_runtime_state_path();
+    if (path.empty()) {
+        return;
+    }
+
+    std::error_code ec;
+    if (value.empty()) {
+        std::filesystem::remove(path, ec);
+        return;
+    }
+
+    std::filesystem::create_directories(path.parent_path(), ec);
+    if (ec) {
+        return;
+    }
+
+    const std::filesystem::path temporary =
+        path.string() + ".tmp." +
+        std::to_string(
+            static_cast<unsigned long long>(getpid()));
+    std::ofstream output(
+        temporary,
+        std::ios::out | std::ios::trunc);
+    if (!output) {
+        return;
+    }
+    output << value << '\n';
+    output.close();
+    if (!output) {
+        std::filesystem::remove(temporary, ec);
+        return;
+    }
+
+    std::filesystem::rename(
+        temporary,
+        path,
+        ec);
+    if (ec) {
+        std::filesystem::remove(temporary, ec);
+    }
+}
+
+const char *update_icon_name(const PackageRecord &package)
+{
+    switch (package.kind) {
+    case infiltrator::software::PackageKind::kernel:
+        return "computer-symbolic";
+    case infiltrator::software::PackageKind::driver:
+        return "preferences-system-symbolic";
+    case infiltrator::software::PackageKind::library:
+    case infiltrator::software::PackageKind::runtime:
+        return "applications-system-symbolic";
+    case infiltrator::software::PackageKind::system:
+        return "emblem-system-symbolic";
+    case infiltrator::software::PackageKind::application:
+    case infiltrator::software::PackageKind::unknown:
+        /*
+         * Mint icon themes may provide software-update-available-symbolic as
+         * a pre-coloured raster asset.  Such assets ignore GtkImage's CSS
+         * foreground and become nearly black on the Software dark palette.
+         * view-refresh-symbolic is a true symbolic icon across the supported
+         * GTK/Mint themes, so it reliably follows .package-icon colour.
+         */
+        return "view-refresh-symbolic";
+    }
+    return "view-refresh-symbolic";
+}
+
+std::string update_identity(const PackageRecord &package)
+{
+    return package.package_name.empty()
+        ? package.id
+        : package.package_name;
+}
+
+void update_selection_controls(WindowState *state)
+{
+    if (state == nullptr || state->updates_install == nullptr) {
+        return;
+    }
+
+    const std::size_t selected = state->selected_update_ids.size();
+    if (selected == 0U) {
+        gtk_button_set_label(
+            GTK_BUTTON(state->updates_install),
+            "Install selected updates");
+    } else if (selected == state->update_records.size()) {
+        gtk_button_set_label(
+            GTK_BUTTON(state->updates_install),
+            state->update_records.size() == 1U
+                ? "Install update"
+                : "Install all updates");
+    } else {
+        const std::string label =
+            "Install " + std::to_string(selected) + " selected";
+        gtk_button_set_label(
+            GTK_BUTTON(state->updates_install), label.c_str());
+    }
+
+    gtk_widget_set_sensitive(
+        state->updates_install,
+        !state->updates_busy && selected != 0U);
+}
+
+void update_selection_toggled(GtkCheckButton *button, gpointer user_data)
+{
+    auto *state = static_cast<WindowState *>(user_data);
+    const char *identity = static_cast<const char *>(
+        g_object_get_data(G_OBJECT(button), "update-identity"));
+    if (state == nullptr || identity == nullptr || *identity == '\0') {
+        return;
+    }
+
+    if (gtk_check_button_get_active(button)) {
+        state->selected_update_ids.insert(identity);
+    } else {
+        state->selected_update_ids.erase(identity);
+    }
+    update_selection_controls(state);
+}
+
+void select_security_updates(GtkButton *, gpointer user_data)
+{
+    auto *state = static_cast<WindowState *>(user_data);
+    if (state == nullptr || state->updates_busy) {
+        return;
+    }
+
+    state->selected_update_ids.clear();
+    for (const PackageRecord &package : state->update_records) {
+        if (!package.security_update) {
+            continue;
+        }
+        const std::string identity = update_identity(package);
+        if (!identity.empty()) {
+            state->selected_update_ids.insert(identity);
+        }
+    }
+
+    rebuild_updates(state);
+    update_selection_controls(state);
+}
+
+void select_kernel_updates(GtkButton *, gpointer user_data)
+{
+    auto *state = static_cast<WindowState *>(user_data);
+    if (state == nullptr || state->updates_busy) {
+        return;
+    }
+
+    state->selected_update_ids.clear();
+    for (const PackageRecord &package : state->update_records) {
+        if (package.kind !=
+            infiltrator::software::PackageKind::kernel) {
+            continue;
+        }
+        const std::string identity = update_identity(package);
+        if (!identity.empty()) {
+            state->selected_update_ids.insert(identity);
+        }
+    }
+
+    rebuild_updates(state);
+    update_selection_controls(state);
+}
+
+struct ChangelogTaskData {
+    PackageRecord package;
+};
+
+struct ChangelogResult {
+    std::string text;
+    std::string source;
+    std::string error;
+};
+
+std::size_t changelog_write(
+    char *data,
+    const std::size_t size,
+    const std::size_t count,
+    void *user_data)
+{
+    auto *text =
+        static_cast<std::string *>(user_data);
+    const std::size_t bytes = size * count;
+    if (text == nullptr ||
+        bytes > 2U * 1024U * 1024U ||
+        text->size() >
+            2U * 1024U * 1024U - bytes) {
+        return 0U;
+    }
+    text->append(data, bytes);
+    return bytes;
+}
+
+bool fetch_changelog_url(
+    const std::string &url,
+    std::string &text)
+{
+    CURL *curl = curl_easy_init();
+    if (curl == nullptr) {
+        return false;
+    }
+
+    text.clear();
+    curl_easy_setopt(
+        curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(
+        curl, CURLOPT_FOLLOWLOCATION, 1L);
+    curl_easy_setopt(
+        curl, CURLOPT_CONNECTTIMEOUT, 8L);
+    curl_easy_setopt(
+        curl, CURLOPT_TIMEOUT, 15L);
+    curl_easy_setopt(
+        curl, CURLOPT_USERAGENT,
+        "Infiltrator-Software/" INFILTRATOR_SOFTWARE_VERSION);
+    curl_easy_setopt(
+        curl, CURLOPT_WRITEFUNCTION,
+        changelog_write);
+    curl_easy_setopt(
+        curl, CURLOPT_WRITEDATA, &text);
+
+    const CURLcode result =
+        curl_easy_perform(curl);
+    long response = 0;
+    (void)curl_easy_getinfo(
+        curl,
+        CURLINFO_RESPONSE_CODE,
+        &response);
+    curl_easy_cleanup(curl);
+
+    return result == CURLE_OK &&
+           response >= 200L &&
+           response < 300L &&
+           !text.empty();
+}
+
+std::optional<std::string> ppa_pool_base(
+    const std::string &origin)
+{
+    if (origin.rfind("LP-PPA-", 0U) != 0U) {
+        return std::nullopt;
+    }
+
+    std::vector<std::filesystem::path> files{
+        "/etc/apt/sources.list"};
+    std::error_code ec;
+    const std::filesystem::path directory{
+        "/etc/apt/sources.list.d"};
+    if (std::filesystem::is_directory(
+            directory, ec) &&
+        !ec) {
+        for (const auto &entry :
+             std::filesystem::directory_iterator(
+                 directory, ec)) {
+            if (ec) {
+                break;
+            }
+            if (entry.is_regular_file(ec) &&
+                !ec) {
+                files.push_back(
+                    entry.path());
+            }
+            ec.clear();
+        }
+    }
+
+    for (const auto &path : files) {
+        std::ifstream input(path);
+        std::string line;
+        while (std::getline(input, line)) {
+            const std::size_t host =
+                line.find(
+                    "ppa.launchpadcontent.net/");
+            const std::size_t legacy =
+                line.find(
+                    "ppa.launchpad.net/");
+            const std::size_t start =
+                host != std::string::npos
+                    ? host +
+                          std::strlen(
+                              "ppa.launchpadcontent.net/")
+                    : legacy != std::string::npos
+                        ? legacy +
+                              std::strlen(
+                                  "ppa.launchpad.net/")
+                        : std::string::npos;
+            if (start ==
+                std::string::npos) {
+                continue;
+            }
+
+            const std::size_t owner_end =
+                line.find('/', start);
+            if (owner_end ==
+                std::string::npos) {
+                continue;
+            }
+            const std::size_t name_end =
+                line.find(
+                    '/',
+                    owner_end + 1U);
+            if (name_end ==
+                std::string::npos) {
+                continue;
+            }
+            const std::string owner =
+                line.substr(
+                    start,
+                    owner_end - start);
+            const std::string name =
+                line.substr(
+                    owner_end + 1U,
+                    name_end -
+                        owner_end - 1U);
+            if ("LP-PPA-" + owner +
+                    "-" + name !=
+                origin) {
+                continue;
+            }
+
+            return
+                "https://ppa.launchpadcontent.net/" +
+                owner + "/" + name +
+                "/ubuntu/pool/main";
+        }
+    }
+    return std::nullopt;
+}
+
+std::vector<std::string> changelog_urls(
+    const PackageRecord &package)
+{
+    std::string source =
+        package.source_package.empty()
+            ? package.package_name
+            : package.source_package;
+    if (source.empty() ||
+        package.available_version.empty()) {
+        return {};
+    }
+
+    std::string version =
+        package.available_version;
+    const std::size_t epoch = version.find(':');
+    if (epoch != std::string::npos) {
+        version.erase(0U, epoch + 1U);
+    }
+
+    const std::string prefix =
+        source.rfind("lib", 0U) == 0U &&
+        source.size() >= 4U
+            ? source.substr(0U, 4U)
+            : source.substr(0U, 1U);
+
+    std::string origin =
+        package.repository_origin;
+    std::transform(
+        origin.begin(),
+        origin.end(),
+        origin.begin(),
+        [](const unsigned char ch) {
+            return static_cast<char>(
+                std::tolower(ch));
+        });
+
+    std::vector<std::string> urls;
+    if (origin.find("ubuntu") !=
+        std::string::npos) {
+        if (source == "linux" ||
+            source.rfind("linux-", 0U) == 0U) {
+            const std::string kernel =
+                version.substr(
+                    0U,
+                    version.find('~'));
+            urls.push_back(
+                "https://changelogs.ubuntu.com/changelogs/pool/main/l/linux/linux_" +
+                kernel + "/changelog");
+        } else {
+            for (const char *component :
+                 {"main", "universe",
+                  "multiverse", "restricted"}) {
+                urls.push_back(
+                    "https://changelogs.ubuntu.com/changelogs/pool/" +
+                    std::string(component) + "/" +
+                    prefix + "/" + source + "/" +
+                    source + "_" + version +
+                    "/changelog");
+            }
+        }
+    } else if (
+        origin.find("debian") !=
+        std::string::npos) {
+        for (const char *component :
+             {"main", "contrib",
+              "non-free", "non-free-firmware"}) {
+            urls.push_back(
+                "https://metadata.ftp-master.debian.org/changelogs/" +
+                std::string(component) + "/" +
+                prefix + "/" + source + "/" +
+                source + "_" + version +
+                "_changelog");
+        }
+    } else if (
+        origin.find("linuxmint") !=
+        std::string::npos) {
+        urls.push_back(
+            "https://packages.linuxmint.com/dev/" +
+            source + "_" + version +
+            "_amd64.changes");
+        urls.push_back(
+            "https://packages.linuxmint.com/dev/" +
+            source + "_" + version +
+            "_i386.changes");
+    } else if (
+        package.repository_origin.rfind(
+            "LP-PPA-", 0U) == 0U) {
+        const auto pool =
+            ppa_pool_base(
+                package.repository_origin);
+        if (pool.has_value()) {
+            urls.push_back(
+                *pool + "/" +
+                prefix + "/" + source +
+                "/" + source + "_" +
+                version +
+                "_source.changes");
+            urls.push_back(
+                *pool + "/" +
+                prefix + "/" + source +
+                "/" + source + "_" +
+                version +
+                "_amd64.changes");
+        }
+    }
+    return urls;
+}
+
+void changelog_worker(
+    GTask *task,
+    gpointer,
+    gpointer task_data,
+    GCancellable *)
+{
+    auto *data =
+        static_cast<ChangelogTaskData *>(
+            task_data);
+    auto *result = new ChangelogResult{};
+    if (data == nullptr) {
+        result->error =
+            "Update metadata is unavailable.";
+    } else {
+        for (const std::string &url :
+             changelog_urls(data->package)) {
+            if (fetch_changelog_url(
+                    url, result->text)) {
+                result->source = url;
+                break;
+            }
+        }
+        if (result->text.empty()) {
+            result->error =
+                "No published changelog could be retrieved for this update.";
+        }
+    }
+
+    g_task_return_pointer(
+        task,
+        result,
+        [](gpointer pointer) {
+            delete static_cast<ChangelogResult *>(
+                pointer);
+        });
+}
+
+void changelog_complete(
+    GObject *source_object,
+    GAsyncResult *async_result,
+    gpointer)
+{
+    GtkWidget *view =
+        GTK_WIDGET(source_object);
+    auto *result =
+        static_cast<ChangelogResult *>(
+            g_task_propagate_pointer(
+                G_TASK(async_result),
+                nullptr));
+    if (view == nullptr ||
+        result == nullptr) {
+        delete result;
+        return;
+    }
+
+    GtkTextBuffer *buffer =
+        gtk_text_view_get_buffer(
+            GTK_TEXT_VIEW(view));
+    const std::string text =
+        result->error.empty()
+            ? result->text
+            : result->error;
+    gtk_text_buffer_set_text(
+        buffer,
+        text.c_str(),
+        -1);
+    if (!result->source.empty()) {
+        gtk_widget_set_tooltip_text(
+            view,
+            result->source.c_str());
+    }
+    delete result;
+}
+
+void update_changelog_clicked(
+    GtkButton *button,
+    gpointer user_data)
+{
+    auto *state =
+        static_cast<WindowState *>(user_data);
+    auto *package =
+        static_cast<PackageRecord *>(
+            g_object_get_data(
+                G_OBJECT(button),
+                "update-package"));
+    if (state == nullptr ||
+        state->window == nullptr ||
+        package == nullptr) {
+        return;
+    }
+
+    GtkWidget *window =
+        gtk_window_new();
+    gtk_window_set_title(
+        GTK_WINDOW(window),
+        "Update changelog");
+    gtk_window_set_transient_for(
+        GTK_WINDOW(window),
+        state->window);
+    gtk_window_set_destroy_with_parent(
+        GTK_WINDOW(window),
+        true);
+    gtk_window_set_default_size(
+        GTK_WINDOW(window),
+        760, 620);
+
+    GtkWidget *scroll =
+        gtk_scrolled_window_new();
+    gtk_scrolled_window_set_policy(
+        GTK_SCROLLED_WINDOW(scroll),
+        GTK_POLICY_AUTOMATIC,
+        GTK_POLICY_AUTOMATIC);
+    GtkWidget *view =
+        gtk_text_view_new();
+    gtk_text_view_set_editable(
+        GTK_TEXT_VIEW(view),
+        false);
+    gtk_text_view_set_cursor_visible(
+        GTK_TEXT_VIEW(view),
+        false);
+    gtk_text_view_set_wrap_mode(
+        GTK_TEXT_VIEW(view),
+        GTK_WRAP_WORD_CHAR);
+    gtk_text_buffer_set_text(
+        gtk_text_view_get_buffer(
+            GTK_TEXT_VIEW(view)),
+        "Downloading changelog…",
+        -1);
+    gtk_scrolled_window_set_child(
+        GTK_SCROLLED_WINDOW(scroll),
+        view);
+    gtk_window_set_child(
+        GTK_WINDOW(window),
+        scroll);
+    gtk_window_present(
+        GTK_WINDOW(window));
+
+    auto *data =
+        new ChangelogTaskData{*package};
+    GTask *task =
+        g_task_new(
+            G_OBJECT(view),
+            nullptr,
+            changelog_complete,
+            nullptr);
+    g_task_set_task_data(
+        task,
+        data,
+        [](gpointer pointer) {
+            delete static_cast<ChangelogTaskData *>(
+                pointer);
+        });
+    g_task_run_in_thread(
+        task,
+        changelog_worker);
+    g_object_unref(task);
+}
+
+struct UpdateDetailsContext {
+    WindowState *state{};
+    PackageRecord package;
+    GtkWidget *status{};
+};
+
+void destroy_update_details_context(gpointer data)
+{
+    delete static_cast<UpdateDetailsContext *>(data);
+}
+
+void ignore_update_clicked(GtkButton *button, gpointer user_data)
+{
+    auto *context = static_cast<UpdateDetailsContext *>(user_data);
+    if (context == nullptr || context->state == nullptr) {
+        return;
+    }
+
+    std::string identity =
+        context->package.source_package.empty()
+            ? context->package.package_name
+            : context->package.source_package;
+    if (identity.empty()) {
+        identity = context->package.id;
+    }
+    if (identity.empty()) {
+        return;
+    }
+
+    const bool version_only =
+        button != nullptr &&
+        GPOINTER_TO_INT(
+            g_object_get_data(
+                G_OBJECT(button),
+                "ignore-version-only")) != 0;
+    std::string rule = identity;
+    if (version_only &&
+        !context->package.available_version.empty()) {
+        rule += "=" +
+            context->package.available_version;
+    }
+
+    auto &rules = context->state->preferences.ignored_packages;
+    if (std::find(rules.begin(), rules.end(), rule) ==
+        rules.end()) {
+        rules.push_back(rule);
+    }
+
+    std::string error;
+    if (!save_software_preferences(
+            context->state->preferences,
+            error)) {
+        if (context->status != nullptr) {
+            gtk_label_set_text(
+                GTK_LABEL(context->status),
+                error.c_str());
+        }
+        return;
+    }
+
+    auto &updates = context->state->update_records;
+    updates.erase(
+        std::remove_if(
+            updates.begin(), updates.end(),
+            [&](const PackageRecord &item) {
+                return update_is_ignored(
+                    item, context->state->preferences);
+            }),
+        updates.end());
+
+    context->state->selected_update_ids.clear();
+    for (const PackageRecord &item : updates) {
+        const std::string key = update_identity(item);
+        if (!key.empty()) {
+            context->state->selected_update_ids.insert(key);
+        }
+    }
+
+    rebuild_updates(context->state);
+    update_selection_controls(context->state);
+
+    if (context->status != nullptr) {
+        gtk_label_set_text(
+            GTK_LABEL(context->status),
+            version_only
+                ? "This update version is ignored. A later version will appear normally."
+                : "All future updates for this source package are ignored. Remove the rule in Software Preferences to restore them.");
+    }
+}
+
+void update_details_clicked(GtkButton *button, gpointer user_data)
+{
+    auto *state = static_cast<WindowState *>(user_data);
+    auto *package = static_cast<PackageRecord *>(
+        g_object_get_data(
+            G_OBJECT(button),
+            "update-package"));
+    if (state == nullptr || state->window == nullptr ||
+        package == nullptr) {
+        return;
+    }
+
+    GtkWidget *window = gtk_window_new();
+    gtk_window_set_title(
+        GTK_WINDOW(window),
+        "Update details");
+    gtk_window_set_transient_for(
+        GTK_WINDOW(window),
+        state->window);
+    gtk_window_set_modal(
+        GTK_WINDOW(window), true);
+    gtk_window_set_default_size(
+        GTK_WINDOW(window), 620, 520);
+
+    GtkWidget *box =
+        gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
+    gtk_widget_add_css_class(
+        box, "preferences-page");
+    gtk_widget_set_margin_top(box, 18);
+    gtk_widget_set_margin_bottom(box, 18);
+    gtk_widget_set_margin_start(box, 18);
+    gtk_widget_set_margin_end(box, 18);
+
+    std::string title = package->name;
+    if (package->security_update) {
+        title += "  •  Security update";
+    }
+    gtk_box_append(
+        GTK_BOX(box),
+        make_label(
+            title.c_str(),
+            "preferences-title"));
+
+    if (!package->description.empty()) {
+        GtkWidget *description =
+            make_label(
+                package->description.c_str(),
+                "preferences-copy");
+        gtk_label_set_wrap(
+            GTK_LABEL(description), true);
+        gtk_box_append(
+            GTK_BOX(box), description);
+    }
+
+    gtk_box_append(
+        GTK_BOX(box),
+        detail_row(
+            "Installed",
+            package->installed_version));
+    gtk_box_append(
+        GTK_BOX(box),
+        detail_row(
+            "Available",
+            package->available_version));
+
+    const std::string source_identity =
+        package->source_package.empty()
+            ? package->package_name
+            : package->source_package;
+    gtk_box_append(
+        GTK_BOX(box),
+        detail_row(
+            "Source package",
+            source_identity));
+    gtk_box_append(
+        GTK_BOX(box),
+        detail_row(
+            "Repository",
+            package->repository_origin));
+    gtk_box_append(
+        GTK_BOX(box),
+        detail_row(
+            "Site",
+            package->repository_site));
+    gtk_box_append(
+        GTK_BOX(box),
+        detail_row(
+            "Download",
+            display_size(
+                package->download_size_bytes)));
+
+    std::string binaries;
+    for (const PackageRecord &candidate :
+         state->update_records) {
+        const std::string candidate_source =
+            candidate.source_package.empty()
+                ? candidate.package_name
+                : candidate.source_package;
+        if (candidate_source != source_identity) {
+            continue;
+        }
+
+        if (!binaries.empty()) {
+            binaries += ", ";
+        }
+        binaries += candidate.package_name;
+    }
+    gtk_box_append(
+        GTK_BOX(box),
+        detail_row(
+            "Binary packages",
+            binaries));
+
+    auto *context = new UpdateDetailsContext{
+        state, *package, nullptr};
+
+    GtkWidget *changelog =
+        gtk_button_new_with_label(
+            "Changelog");
+    gtk_widget_set_halign(
+        changelog, GTK_ALIGN_START);
+    g_object_set_data_full(
+        G_OBJECT(changelog),
+        "update-package",
+        new PackageRecord(*package),
+        package_record_destroy);
+    g_signal_connect(
+        changelog,
+        "clicked",
+        G_CALLBACK(update_changelog_clicked),
+        state);
+    gtk_box_append(
+        GTK_BOX(box), changelog);
+
+    GtkWidget *ignore_version =
+        gtk_button_new_with_label(
+            "Ignore this update version");
+    gtk_widget_set_halign(
+        ignore_version, GTK_ALIGN_START);
+    g_object_set_data(
+        G_OBJECT(ignore_version),
+        "ignore-version-only",
+        GINT_TO_POINTER(1));
+    g_signal_connect(
+        ignore_version,
+        "clicked",
+        G_CALLBACK(ignore_update_clicked),
+        context);
+    gtk_box_append(
+        GTK_BOX(box), ignore_version);
+
+    GtkWidget *ignore =
+        gtk_button_new_with_label(
+            "Ignore all future updates for this package");
+    gtk_widget_set_halign(
+        ignore, GTK_ALIGN_START);
+    g_object_set_data(
+        G_OBJECT(ignore),
+        "ignore-version-only",
+        GINT_TO_POINTER(0));
+    g_signal_connect(
+        ignore,
+        "clicked",
+        G_CALLBACK(ignore_update_clicked),
+        context);
+    gtk_box_append(
+        GTK_BOX(box), ignore);
+
+    context->status =
+        make_label(
+            "",
+            "preferences-copy");
+    gtk_box_append(
+        GTK_BOX(box), context->status);
+
+    g_object_set_data_full(
+        G_OBJECT(window),
+        "update-details-context",
+        context,
+        destroy_update_details_context);
+
+    gtk_window_set_child(
+        GTK_WINDOW(window), box);
+    gtk_window_present(
+        GTK_WINDOW(window));
+}
+
+
+GtkWidget *make_update_row(
+    WindowState *state,
+    const PackageRecord &package)
+{
+    GtkWidget *row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    gtk_widget_add_css_class(row, "package-row");
+    gtk_widget_add_css_class(row, "update-item");
+    gtk_widget_set_margin_top(row, 2);
+    gtk_widget_set_margin_bottom(row, 2);
+    gtk_widget_set_margin_start(row, 4);
+    gtk_widget_set_margin_end(row, 4);
+
+    const std::string identity_key = update_identity(package);
+    GtkWidget *selected = gtk_check_button_new();
+    gtk_widget_add_css_class(selected, "update-selector");
+    gtk_widget_set_tooltip_text(
+        selected, "Include this package in the update");
+    gtk_widget_set_valign(selected, GTK_ALIGN_CENTER);
+    gtk_check_button_set_active(
+        GTK_CHECK_BUTTON(selected),
+        state != nullptr &&
+            state->selected_update_ids.find(identity_key) !=
+                state->selected_update_ids.end());
+    g_object_set_data_full(
+        G_OBJECT(selected),
+        "update-identity",
+        g_strdup(identity_key.c_str()),
+        g_free);
+    g_signal_connect(
+        selected, "toggled",
+        G_CALLBACK(update_selection_toggled), state);
+    gtk_box_append(GTK_BOX(row), selected);
+
+    GtkWidget *icon_well =
+        gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    gtk_widget_add_css_class(
+        icon_well, "update-icon-well");
+    gtk_widget_set_size_request(icon_well, 40, 40);
+    GtkWidget *icon =
+        make_icon(update_icon_name(package), 22);
+    gtk_widget_add_css_class(icon, "package-icon");
+    gtk_widget_set_halign(icon, GTK_ALIGN_CENTER);
+    gtk_widget_set_valign(icon, GTK_ALIGN_CENTER);
+    gtk_box_append(GTK_BOX(icon_well), icon);
+    gtk_box_append(GTK_BOX(row), icon_well);
+
+    GtkWidget *identity =
+        gtk_box_new(GTK_ORIENTATION_VERTICAL, 3);
+    gtk_widget_set_hexpand(identity, true);
+
+    GtkWidget *title_line =
+        gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 7);
+    GtkWidget *name =
+        make_label(package.name.c_str(), "update-name");
+    gtk_label_set_ellipsize(
+        GTK_LABEL(name), PANGO_ELLIPSIZE_END);
+    gtk_widget_set_hexpand(name, true);
+    gtk_box_append(GTK_BOX(title_line), name);
+
+    const std::string kind_text(
+        infiltrator::software::package_kind_name(
+            package.kind));
+    GtkWidget *kind =
+        make_label(
+            kind_text.c_str(),
+            "update-kind-chip");
+    gtk_box_append(GTK_BOX(title_line), kind);
+
+    GtkWidget *recommended =
+        make_label(
+            package.system_critical
+                ? "System-critical"
+                : "Recommended",
+            package.system_critical
+                ? "state-warning"
+                : "state-available");
+    gtk_widget_add_css_class(
+        recommended, "update-recommendation-chip");
+    gtk_widget_set_valign(
+        recommended, GTK_ALIGN_CENTER);
+    gtk_box_append(
+        GTK_BOX(title_line), recommended);
+
+    if (package.security_update) {
+        GtkWidget *security =
+            make_label(
+                "SECURITY",
+                "update-security-chip");
+        gtk_box_append(
+            GTK_BOX(title_line),
+            security);
+    }
+
+    GtkWidget *details =
+        gtk_button_new_with_label("Details");
+    gtk_widget_add_css_class(
+        details, "update-details-button");
+    gtk_widget_set_valign(
+        details, GTK_ALIGN_CENTER);
+    auto *package_copy =
+        new PackageRecord(package);
+    g_object_set_data_full(
+        G_OBJECT(details),
+        "update-package",
+        package_copy,
+        package_record_destroy);
+    g_signal_connect(
+        details,
+        "clicked",
+        G_CALLBACK(update_details_clicked),
+        state);
+    gtk_box_append(GTK_BOX(title_line), details);
+
+    gtk_box_append(GTK_BOX(identity), title_line);
+
+    std::string source_name = package.repository_origin;
+    if (source_name.empty()) {
+        source_name = package.repository_site;
+    }
+    if (source_name.empty()) {
+        source_name = package.source;
+    }
+    if (source_name.empty()) {
+        source_name = "Repository";
+    }
+
+    GtkWidget *meta_line =
+        gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 7);
+    GtkWidget *from =
+        make_label(
+            package.installed_version.empty()
+                ? "Not installed"
+                : package.installed_version.c_str(),
+            "version-chip");
+    GtkWidget *arrow =
+        make_label("→", "version-arrow", 0.5F);
+    GtkWidget *to =
+        make_label(
+            package.available_version.c_str(),
+            "version-chip-new");
+    gtk_box_append(GTK_BOX(meta_line), from);
+    gtk_box_append(GTK_BOX(meta_line), arrow);
+    gtk_box_append(GTK_BOX(meta_line), to);
+    gtk_box_append(
+        GTK_BOX(meta_line),
+        make_label("•", "update-meta-separator", 0.5F));
+
+    GtkWidget *source_icon =
+        make_icon("network-workgroup-symbolic", 13);
+    gtk_widget_add_css_class(
+        source_icon, "update-source-icon");
+    GtkWidget *source =
+        make_label(
+            source_name.c_str(), "update-source");
+    gtk_label_set_ellipsize(
+        GTK_LABEL(source), PANGO_ELLIPSIZE_END);
+    gtk_widget_set_hexpand(source, true);
+    gtk_box_append(GTK_BOX(meta_line), source_icon);
+    gtk_box_append(GTK_BOX(meta_line), source);
+
+    std::string policy_name = "Repository default";
+    if (package.policy_provider == "host-apt-preferences") {
+        policy_name = "Host preferred";
+    } else if (
+        package.policy_provider == "infiltrator-distribution") {
+        policy_name = "Infiltrator preferred";
+    } else if (!package.policy_provider.empty() &&
+               package.policy_provider != "repository-default") {
+        policy_name = package.policy_provider;
+    }
+
+    std::string explanation =
+        "Selection policy: " + policy_name;
+    if (package.candidate_priority != 0) {
+        explanation +=
+            " • priority " +
+            std::to_string(package.candidate_priority);
+    }
+    if (!package.policy_reason.empty()) {
+        explanation += " • " + package.policy_reason;
+    }
+    if (!package.selection_reason.empty()) {
+        explanation += " " + package.selection_reason;
+    }
+    gtk_widget_set_tooltip_text(
+        meta_line, explanation.c_str());
+
+    gtk_box_append(GTK_BOX(identity), meta_line);
+    gtk_box_append(GTK_BOX(row), identity);
+
+    return row;
+}
+
+int update_group_index(const PackageRecord &package) noexcept
+{
+    if (package.system_critical ||
+        package.kind == infiltrator::software::PackageKind::kernel ||
+        package.kind == infiltrator::software::PackageKind::driver ||
+        package.kind == infiltrator::software::PackageKind::system) {
+        return 0;
+    }
+    if (package.kind ==
+        infiltrator::software::PackageKind::application) {
+        return 1;
+    }
+    if (package.kind ==
+            infiltrator::software::PackageKind::library ||
+        package.kind ==
+            infiltrator::software::PackageKind::runtime) {
+        return 2;
+    }
+    return 3;
+}
+
+const char *update_group_title(const int group) noexcept
+{
+    switch (group) {
+    case 0: return "System";
+    case 1: return "Applications";
+    case 2: return "Libraries & runtimes";
+    default: return "Other software";
+    }
+}
+
+const char *update_group_subtitle(const int group) noexcept
+{
+    switch (group) {
+    case 0:
+        return "Kernels, drivers and operating-system components";
+    case 1:
+        return "Desktop applications and user-facing tools";
+    case 2:
+        return "Shared components used by installed software";
+    default:
+        return "Additional package updates";
+    }
+}
+
+const char *update_group_icon(const int group) noexcept
+{
+    switch (group) {
+    case 0: return "computer-symbolic";
+    case 1: return "view-grid-symbolic";
+    case 2: return "applications-system-symbolic";
+    default: return "package-x-generic-symbolic";
+    }
+}
+
+GtkWidget *make_update_group_header(
+    const int group,
+    const std::size_t count)
+{
+    GtkWidget *row =
+        gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    gtk_widget_add_css_class(
+        row, "update-group-header");
+
+    GtkWidget *icon_well =
+        gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    gtk_widget_add_css_class(
+        icon_well, "update-group-icon-well");
+    GtkWidget *icon =
+        make_icon(update_group_icon(group), 20);
+    gtk_widget_set_halign(icon, GTK_ALIGN_CENTER);
+    gtk_widget_set_valign(icon, GTK_ALIGN_CENTER);
+    gtk_box_append(GTK_BOX(icon_well), icon);
+    gtk_box_append(GTK_BOX(row), icon_well);
+
+    GtkWidget *copy =
+        gtk_box_new(GTK_ORIENTATION_VERTICAL, 1);
+    gtk_widget_set_hexpand(copy, true);
+    GtkWidget *title =
+        make_label(
+            update_group_title(group),
+            "update-group-title");
+    GtkWidget *subtitle =
+        make_label(
+            update_group_subtitle(group),
+            "update-group-subtitle");
+    gtk_box_append(GTK_BOX(copy), title);
+    gtk_box_append(GTK_BOX(copy), subtitle);
+    gtk_box_append(GTK_BOX(row), copy);
+
+    const std::string count_text =
+        std::to_string(count);
+    GtkWidget *count_label =
+        make_label(
+            count_text.c_str(),
+            "update-group-count");
+    gtk_widget_set_valign(
+        count_label, GTK_ALIGN_CENTER);
+    gtk_box_append(GTK_BOX(row), count_label);
+    return row;
+}
+
+void rebuild_updates(WindowState *state)
+{
+    if (state == nullptr || state->updates_list == nullptr) {
+        return;
+    }
+
+    GtkWidget *child =
+        gtk_widget_get_first_child(
+            GTK_WIDGET(state->updates_list));
+    while (child != nullptr) {
+        GtkWidget *next =
+            gtk_widget_get_next_sibling(child);
+        gtk_list_box_remove(
+            state->updates_list, child);
+        child = next;
+    }
+
+    std::size_t critical_count = 0U;
+    std::size_t group_counts[4] = {0U, 0U, 0U, 0U};
+    for (const PackageRecord &package :
+         state->update_records) {
+        if (package.system_critical) {
+            ++critical_count;
+        }
+        ++group_counts[
+            update_group_index(package)];
+    }
+
+    for (int group = 0; group < 4; ++group) {
+        if (group_counts[group] == 0U) {
+            continue;
+        }
+
+        GtkWidget *header_row =
+            gtk_list_box_row_new();
+        gtk_widget_add_css_class(
+            header_row, "update-group-row");
+        gtk_list_box_row_set_activatable(
+            GTK_LIST_BOX_ROW(header_row), false);
+        gtk_list_box_row_set_selectable(
+            GTK_LIST_BOX_ROW(header_row), false);
+        gtk_list_box_row_set_child(
+            GTK_LIST_BOX_ROW(header_row),
+            make_update_group_header(
+                group, group_counts[group]));
+        gtk_list_box_append(
+            state->updates_list, header_row);
+
+        for (const PackageRecord &package :
+             state->update_records) {
+            if (update_group_index(package) != group) {
+                continue;
+            }
+            GtkWidget *row =
+                gtk_list_box_row_new();
+            gtk_list_box_row_set_child(
+                GTK_LIST_BOX_ROW(row),
+                make_update_row(state, package));
+            gtk_list_box_append(
+                state->updates_list, row);
+        }
+    }
+
+    if (state->updates_count != nullptr) {
+        const std::string count =
+            std::to_string(
+                state->update_records.size());
+        gtk_label_set_text(
+            GTK_LABEL(state->updates_count),
+            count.c_str());
+    }
+    if (state->updates_critical != nullptr) {
+        const std::string critical =
+            std::to_string(critical_count);
+        gtk_label_set_text(
+            GTK_LABEL(state->updates_critical),
+            critical.c_str());
+    }
+}
+
+std::string flatpak_selection_key(const ExternalUpdate &update)
+{
+    return std::string(update.user_installation ? "user:" : "system:") +
+        update.ref;
+}
+
+std::string cinnamon_selection_key(const ExternalUpdate &update)
+{
+    return std::string(
+               external_update_kind_name(update.kind)) +
+        ":" + update.id;
+}
+
+GtkWidget *make_external_update_row(
+    WindowState *state,
+    const ExternalUpdate &update)
+{
+    GtkWidget *row =
+        gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
+    gtk_widget_add_css_class(row, "package-row");
+    gtk_widget_add_css_class(row, "external-update-row");
+
+    const bool flatpak = update.backend == "Flatpak";
+    const std::string key =
+        flatpak
+            ? flatpak_selection_key(update)
+            : cinnamon_selection_key(update);
+    GtkWidget *check = gtk_check_button_new();
+    gtk_check_button_set_active(
+        GTK_CHECK_BUTTON(check),
+        flatpak
+            ? state->selected_flatpak_refs.count(key) != 0U
+            : state->selected_cinnamon_refs.count(key) != 0U);
+    g_object_set_data_full(
+        G_OBJECT(check),
+        "external-selection-key",
+        new std::string(key),
+        +[](gpointer pointer) {
+            delete static_cast<std::string *>(pointer);
+        });
+    g_object_set_data(
+        G_OBJECT(check),
+        "external-selection-flatpak",
+        GINT_TO_POINTER(flatpak));
+    g_signal_connect(
+        check,
+        "toggled",
+        G_CALLBACK(+[](GtkCheckButton *button, gpointer user_data) {
+            auto *window_state =
+                static_cast<WindowState *>(user_data);
+            const auto *selection_key =
+                static_cast<const std::string *>(
+                    g_object_get_data(
+                        G_OBJECT(button),
+                        "external-selection-key"));
+            if (window_state == nullptr ||
+                selection_key == nullptr) {
+                return;
+            }
+
+            const bool is_flatpak =
+                GPOINTER_TO_INT(
+                    g_object_get_data(
+                        G_OBJECT(button),
+                        "external-selection-flatpak")) != 0;
+            auto &selection =
+                is_flatpak
+                    ? window_state->selected_flatpak_refs
+                    : window_state->selected_cinnamon_refs;
+            if (gtk_check_button_get_active(button)) {
+                selection.insert(*selection_key);
+            } else {
+                selection.erase(*selection_key);
+            }
+
+            GtkWidget *apply =
+                is_flatpak
+                    ? window_state->external_flatpak_apply
+                    : window_state->external_cinnamon_apply;
+            if (apply != nullptr) {
+                gtk_widget_set_sensitive(
+                    apply,
+                    !selection.empty() &&
+                        !window_state->updates_busy);
+            }
+        }),
+        state);
+    gtk_widget_set_sensitive(check, !state->updates_busy);
+    gtk_box_append(GTK_BOX(row), check);
+
+    const char *icon_name =
+        flatpak
+            ? "application-x-executable-symbolic"
+            : update.kind == ExternalUpdateKind::nemo_action
+                ? "system-file-manager-symbolic"
+                : "preferences-desktop-symbolic";
+    GtkWidget *icon_well =
+        gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    gtk_widget_add_css_class(icon_well, "update-icon-well");
+    gtk_widget_set_size_request(icon_well, 46, 46);
+    GtkWidget *icon = make_icon(icon_name, 24);
+    gtk_widget_set_halign(icon, GTK_ALIGN_CENTER);
+    gtk_widget_set_valign(icon, GTK_ALIGN_CENTER);
+    gtk_box_append(GTK_BOX(icon_well), icon);
+    gtk_box_append(GTK_BOX(row), icon_well);
+
+    GtkWidget *copy =
+        gtk_box_new(GTK_ORIENTATION_VERTICAL, 3);
+    gtk_widget_set_hexpand(copy, true);
+
+    GtkWidget *title =
+        make_label(
+            update.name.empty()
+                ? update.id.c_str()
+                : update.name.c_str(),
+            "update-name");
+    gtk_label_set_ellipsize(
+        GTK_LABEL(title),
+        PANGO_ELLIPSIZE_END);
+    gtk_box_append(GTK_BOX(copy), title);
+
+    std::string detail =
+        std::string(external_update_kind_name(update.kind));
+    if (!update.version.empty()) {
+        detail += " • " + update.version;
+    }
+    if (update.download_bytes > 0U) {
+        detail += " • " +
+            display_size(update.download_bytes);
+    }
+    if (!update.detail.empty()) {
+        detail += " • " + update.detail;
+    }
+    GtkWidget *detail_label =
+        make_label(detail.c_str(), "update-source");
+    gtk_label_set_ellipsize(
+        GTK_LABEL(detail_label),
+        PANGO_ELLIPSIZE_END);
+    gtk_box_append(GTK_BOX(copy), detail_label);
+    gtk_box_append(GTK_BOX(row), copy);
+
+    GtkWidget *backend =
+        make_label(
+            update.backend.c_str(),
+            "update-kind-chip");
+    gtk_widget_set_valign(backend, GTK_ALIGN_CENTER);
+    gtk_box_append(GTK_BOX(row), backend);
+    return row;
+}
+
+void rebuild_external_updates(
+    WindowState *state)
+{
+    if (state == nullptr ||
+        state->external_updates_list == nullptr) {
+        return;
+    }
+
+    GtkWidget *child =
+        gtk_widget_get_first_child(
+            GTK_WIDGET(
+                state->external_updates_list));
+    while (child != nullptr) {
+        GtkWidget *next =
+            gtk_widget_get_next_sibling(child);
+        gtk_list_box_remove(
+            state->external_updates_list,
+            child);
+        child = next;
+    }
+
+    std::size_t flatpak_count = 0U;
+    std::size_t cinnamon_count = 0U;
+    for (const ExternalUpdate &update :
+         state->external_update_records) {
+        if (update.backend == "Flatpak") {
+            ++flatpak_count;
+        } else if (update.backend == "Cinnamon") {
+            ++cinnamon_count;
+        }
+
+        GtkWidget *row =
+            gtk_list_box_row_new();
+        gtk_list_box_row_set_activatable(
+            GTK_LIST_BOX_ROW(row), false);
+        gtk_list_box_row_set_selectable(
+            GTK_LIST_BOX_ROW(row), false);
+        gtk_list_box_row_set_child(
+            GTK_LIST_BOX_ROW(row),
+            make_external_update_row(state, update));
+        gtk_list_box_append(
+            state->external_updates_list,
+            row);
+    }
+
+    if (state->external_updates_status != nullptr) {
+        std::string status;
+        if (state->external_update_records.empty()) {
+            status =
+                "Flatpak and Cinnamon sources are up to date.";
+        } else {
+            status =
+                std::to_string(flatpak_count) +
+                " Flatpak • " +
+                std::to_string(cinnamon_count) +
+                " Cinnamon";
+        }
+        gtk_label_set_text(
+            GTK_LABEL(
+                state->external_updates_status),
+            status.c_str());
+    }
+
+    if (state->external_flatpak_apply != nullptr) {
+        gtk_widget_set_sensitive(
+            state->external_flatpak_apply,
+            flatpak_count > 0U &&
+                !state->selected_flatpak_refs.empty() &&
+                !state->updates_busy);
+    }
+    if (state->external_cinnamon_apply != nullptr) {
+        gtk_widget_set_sensitive(
+            state->external_cinnamon_apply,
+            cinnamon_count > 0U &&
+                !state->selected_cinnamon_refs.empty() &&
+                !state->updates_busy);
+    }
+}
+
+struct ExternalApplyTaskData {
+    bool flatpak{false};
+    std::vector<ExternalUpdate> selected;
+};
+
+struct ExternalApplyResult {
+    bool flatpak{false};
+    bool success{false};
+    std::vector<ExternalUpdate> selected;
+    std::vector<ExternalUpdate> completed;
+    std::string error;
+};
+
+struct ExternalProgressNotice {
+    GtkWindow *window{};
+    std::string message;
+};
+
+void publish_external_progress(GTask *task, std::string_view message)
+{
+    auto *queued_notice = new ExternalProgressNotice{
+        GTK_WINDOW(g_object_ref(g_task_get_source_object(task))),
+        std::string(message)};
+    g_idle_add_full(G_PRIORITY_DEFAULT, +[](gpointer data) -> gboolean {
+        auto *progress_notice =
+            static_cast<ExternalProgressNotice *>(data);
+        auto *state = static_cast<WindowState *>(g_object_get_data(
+            G_OBJECT(progress_notice->window),
+            "infiltrator-window-state"));
+        if (state != nullptr && state->external_updates_active) {
+            if (state->external_updates_status != nullptr)
+                gtk_label_set_text(GTK_LABEL(state->external_updates_status),
+                    progress_notice->message.c_str());
+            if (state->updates_status != nullptr)
+                gtk_label_set_text(GTK_LABEL(state->updates_status),
+                    progress_notice->message.c_str());
+        }
+        g_object_unref(progress_notice->window);
+        delete progress_notice;
+        return G_SOURCE_REMOVE;
+    }, queued_notice, nullptr);
+}
+
+void external_apply_worker(
+    GTask *task,
+    gpointer,
+    gpointer task_data,
+    GCancellable *)
+{
+    auto *data =
+        static_cast<ExternalApplyTaskData *>(
+            task_data);
+    auto *result =
+        new ExternalApplyResult{};
+    result->flatpak =
+        data != nullptr && data->flatpak;
+
+    if (data == nullptr) {
+        result->error =
+            "External update task state is unavailable.";
+    } else if (data->flatpak) {
+        result->selected = data->selected;
+        result->success =
+            apply_flatpak_updates_selected(
+                data->selected,
+                result->error,
+                [task](std::string_view message) {
+                    publish_external_progress(task, message);
+                },
+                &result->completed);
+    } else {
+        result->selected = data->selected;
+        result->success =
+            apply_cinnamon_updates_selected(
+                data->selected,
+                result->error,
+                [task](std::string_view message) {
+                    publish_external_progress(task, message);
+                },
+                &result->completed);
+    }
+
+    g_task_return_pointer(
+        task,
+        result,
+        [](gpointer value) {
+            delete static_cast<
+                ExternalApplyResult *>(value);
+        });
+}
+
+void external_apply_complete(
+    GObject *source_object,
+    GAsyncResult *async_result,
+    gpointer)
+{
+    auto *window =
+        GTK_WINDOW(source_object);
+    auto *state =
+        window == nullptr
+            ? nullptr
+            : static_cast<WindowState *>(
+                  g_object_get_data(
+                      G_OBJECT(window),
+                      "infiltrator-window-state"));
+    auto *result =
+        static_cast<ExternalApplyResult *>(
+            g_task_propagate_pointer(
+                G_TASK(async_result),
+                nullptr));
+
+    if (state == nullptr ||
+        result == nullptr) {
+        delete result;
+        return;
+    }
+
+    state->external_updates_active = false;
+    if (state->external_updates_spinner != nullptr) {
+        gtk_spinner_stop(GTK_SPINNER(state->external_updates_spinner));
+        gtk_widget_set_visible(state->external_updates_spinner, false);
+    }
+
+    if (!result->completed.empty()) {
+        TransactionPlan history_plan;
+        for (const ExternalUpdate &update : result->completed) {
+            TransactionItem item;
+            item.package_id =
+                update.backend + ":" + update.id;
+            item.action = TransactionAction::upgrade;
+            item.to_version = update.version;
+            item.download_bytes = update.download_bytes;
+            item.source = update.backend;
+            item.requested = true;
+            history_plan.download_bytes +=
+                update.download_bytes;
+            history_plan.items.emplace_back(
+                std::move(item));
+        }
+        record_transaction_history(
+            history_plan,
+            true,
+            result->success
+                ? (result->flatpak
+                    ? "Selected Flatpak updates completed successfully."
+                    : "Selected Cinnamon and Nemo updates completed successfully.")
+                : "External update batch stopped after partially successful work; completed items are recorded here.");
+    }
+
+    if (result->success) {
+        if (state->external_updates_status != nullptr) {
+            gtk_label_set_text(
+                GTK_LABEL(
+                    state->external_updates_status),
+                result->flatpak
+                    ? "Flatpak updates complete. Rechecking…"
+                    : "Cinnamon Spice updates complete. Rechecking…");
+        }
+        state->updates_busy = false;
+        update_nav_updates_badge(state);
+        delete result;
+        refresh_updates(state, false);
+        return;
+    }
+
+    state->updates_busy = false;
+    update_nav_updates_badge(state);
+    if (state->external_updates_status != nullptr) {
+        const std::string message =
+            result->error.empty()
+                ? "External update failed."
+                : result->error;
+        gtk_label_set_text(
+            GTK_LABEL(
+                state->external_updates_status),
+            message.c_str());
+    }
+    delete result;
+    refresh_updates(state, false);
+}
+
+void begin_external_apply(WindowState *state, const bool flatpak)
+{
+    if (state == nullptr ||
+        state->window == nullptr ||
+        state->updates_busy) {
+        return;
+    }
+
+    std::vector<ExternalUpdate> selected;
+    for (const ExternalUpdate &update :
+         state->external_update_records) {
+        if (flatpak &&
+            update.backend == "Flatpak" &&
+            state->selected_flatpak_refs.count(
+                flatpak_selection_key(update)) != 0U) {
+            selected.push_back(update);
+        } else if (!flatpak &&
+                   update.backend == "Cinnamon" &&
+                   state->selected_cinnamon_refs.count(
+                       cinnamon_selection_key(update)) != 0U) {
+            selected.push_back(update);
+        }
+    }
+    if (selected.empty()) return;
+
+    state->updates_busy = true;
+    state->external_updates_active = true;
+    update_nav_updates_badge(state);
+    rebuild_external_updates(state);
+    if (state->external_updates_spinner != nullptr) {
+        gtk_widget_set_visible(
+            state->external_updates_spinner, true);
+        gtk_spinner_start(
+            GTK_SPINNER(state->external_updates_spinner));
+    }
+    if (state->external_flatpak_apply != nullptr) {
+        gtk_widget_set_sensitive(
+            state->external_flatpak_apply, false);
+    }
+    if (state->external_cinnamon_apply != nullptr) {
+        gtk_widget_set_sensitive(
+            state->external_cinnamon_apply, false);
+    }
+    if (state->external_updates_status != nullptr) {
+        gtk_label_set_text(
+            GTK_LABEL(state->external_updates_status),
+            flatpak
+                ? "Updating selected Flatpaks…"
+                : "Updating selected Cinnamon items…");
+    }
+
+    auto *data = new ExternalApplyTaskData{};
+    data->flatpak = flatpak;
+    data->selected = std::move(selected);
+
+    GTask *task =
+        g_task_new(
+            G_OBJECT(state->window),
+            nullptr,
+            external_apply_complete,
+            nullptr);
+    g_task_set_task_data(
+        task,
+        data,
+        [](gpointer value) {
+            delete static_cast<ExternalApplyTaskData *>(value);
+        });
+    g_task_run_in_thread(task, external_apply_worker);
+    g_object_unref(task);
+}
+
+void external_apply_clicked(GtkButton *button, gpointer user_data)
+{
+    auto *state = static_cast<WindowState *>(user_data);
+    if (state == nullptr ||
+        state->window == nullptr ||
+        state->updates_busy) {
+        return;
+    }
+    const bool flatpak =
+        button == GTK_BUTTON(state->external_flatpak_apply);
+
+    std::ostringstream review;
+    std::size_t count = 0U;
+    for (const ExternalUpdate &update :
+         state->external_update_records) {
+        if (flatpak) {
+            if (update.backend != "Flatpak" ||
+                state->selected_flatpak_refs.count(
+                    flatpak_selection_key(update)) == 0U) {
+                continue;
+            }
+            review
+                << (update.user_installation ? "User" : "System")
+                << " • " << update.ref;
+        } else {
+            if (update.backend != "Cinnamon" ||
+                state->selected_cinnamon_refs.count(
+                    cinnamon_selection_key(update)) == 0U) {
+                continue;
+            }
+            review
+                << external_update_kind_name(update.kind)
+                << " • "
+                << (update.name.empty() ? update.id : update.name)
+                << " [" << update.id << "]";
+        }
+        if (!update.version.empty()) {
+            review << " → " << update.version;
+        }
+        review << '\n';
+        ++count;
+    }
+    if (count == 0U) return;
+
+    G_GNUC_BEGIN_IGNORE_DEPRECATIONS
+    GtkWidget *dialog =
+        gtk_dialog_new_with_buttons(
+            flatpak
+                ? "Review selected Flatpak updates"
+                : "Review selected Cinnamon updates",
+            state->window,
+            static_cast<GtkDialogFlags>(
+                GTK_DIALOG_MODAL |
+                GTK_DIALOG_DESTROY_WITH_PARENT),
+            "Cancel", GTK_RESPONSE_CANCEL,
+            "Update selected", GTK_RESPONSE_ACCEPT,
+            nullptr);
+    gtk_window_set_default_size(
+        GTK_WINDOW(dialog), 560, 380);
+    GtkWidget *content =
+        gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+    gtk_box_set_spacing(GTK_BOX(content), 12);
+    gtk_widget_set_margin_start(content, 16);
+    gtk_widget_set_margin_end(content, 16);
+    gtk_widget_set_margin_top(content, 16);
+    gtk_widget_set_margin_bottom(content, 16);
+
+    GtkWidget *summary =
+        make_label(
+            flatpak
+                ? "Only the selected Flatpak refs will be requested. Dependencies may also change."
+                : "Only the selected Cinnamon applets, desklets, extensions, themes and Nemo actions will be updated.",
+            "card-copy");
+    gtk_label_set_wrap(GTK_LABEL(summary), true);
+    gtk_box_append(GTK_BOX(content), summary);
+
+    GtkWidget *scroller = gtk_scrolled_window_new();
+    gtk_scrolled_window_set_policy(
+        GTK_SCROLLED_WINDOW(scroller),
+        GTK_POLICY_NEVER,
+        GTK_POLICY_AUTOMATIC);
+    gtk_widget_set_vexpand(scroller, true);
+    GtkWidget *list =
+        make_label(review.str().c_str(), "card-copy");
+    gtk_label_set_wrap(GTK_LABEL(list), true);
+    gtk_label_set_selectable(GTK_LABEL(list), true);
+    gtk_scrolled_window_set_child(
+        GTK_SCROLLED_WINDOW(scroller), list);
+    gtk_box_append(GTK_BOX(content), scroller);
+
+    g_object_set_data(
+        G_OBJECT(dialog),
+        "external-flatpak",
+        GINT_TO_POINTER(flatpak));
+    g_signal_connect_data(
+        dialog,
+        "response",
+        G_CALLBACK(+[](GtkDialog *response_dialog,
+                       gint response,
+                       gpointer response_data) {
+            auto *response_window =
+                GTK_WINDOW(response_data);
+            const bool apply_flatpak =
+                GPOINTER_TO_INT(
+                    g_object_get_data(
+                        G_OBJECT(response_dialog),
+                        "external-flatpak")) != 0;
+            gtk_window_destroy(
+                GTK_WINDOW(response_dialog));
+            auto *window_state =
+                static_cast<WindowState *>(
+                    g_object_get_data(
+                        G_OBJECT(response_window),
+                        "infiltrator-window-state"));
+            if (response == GTK_RESPONSE_ACCEPT &&
+                window_state != nullptr) {
+                begin_external_apply(
+                    window_state,
+                    apply_flatpak);
+            }
+        }),
+        g_object_ref(state->window),
+        +[](gpointer data, GClosure *) {
+            g_object_unref(data);
+        },
+        GConnectFlags(0));
+    gtk_window_present(GTK_WINDOW(dialog));
+}
+
+void updates_worker(
+    GTask *task,
+    gpointer,
+    gpointer task_data,
+    GCancellable *)
+{
+    auto *data =
+        static_cast<UpdatesRefreshRequest *>(task_data);
+    auto *result = new UpdatesRefreshResult{};
+    if (data == nullptr) {
+        result->error =
+            "Update task state is unavailable.";
+    } else {
+        *result = refresh_updates_data(*data);
+    }
+
+    g_task_return_pointer(
+        task,
+        result,
+        [](gpointer pointer) {
+            delete static_cast<UpdatesRefreshResult *>(pointer);
+        });
+}
+
+gboolean auto_refresh_updates_idle(gpointer user_data)
+{
+    auto *window = GTK_WINDOW(user_data);
+    if (window == nullptr) {
+        return G_SOURCE_REMOVE;
+    }
+
+    auto *state = static_cast<WindowState *>(
+        g_object_get_data(
+            G_OBJECT(window),
+            "infiltrator-window-state"));
+    if (state != nullptr && !state->updates_busy) {
+        refresh_updates_internal(state, true, false);
+    }
+    return G_SOURCE_REMOVE;
+}
+
+void updates_complete(
+    GObject *source_object,
+    GAsyncResult *async_result,
+    gpointer)
+{
+    auto *window = GTK_WINDOW(source_object);
+    auto *state = static_cast<WindowState *>(
+        g_object_get_data(
+            G_OBJECT(window), "infiltrator-window-state"));
+    auto *result = static_cast<UpdatesRefreshResult *>(
+        g_task_propagate_pointer(G_TASK(async_result), nullptr));
+
+    if (state == nullptr || result == nullptr) {
+        delete result;
+        return;
+    }
+
+    if (result->generation != state->updates_generation) {
+        delete result;
+        return;
+    }
+
+    const bool post_install =
+        state->updates_post_install_refresh;
+    state->updates_busy = false;
+    if (!post_install) {
+        stop_update_progress(state);
+    }
+    state->update_records = std::move(result->records);
+    state->update_records.erase(
+        std::remove_if(
+            state->update_records.begin(),
+            state->update_records.end(),
+            [&](const PackageRecord &package) {
+                return update_is_ignored(
+                    package, state->preferences);
+            }),
+        state->update_records.end());
+
+    /*
+     * Match Mint Update Manager's priority-update rule.  Software must update
+     * its own package engine/client contract before attempting unrelated APT,
+     * Flatpak or Cinnamon changes.  This also guarantees that migrations such
+     * as an engine API bump cannot be hidden in a larger transaction.
+     */
+    const bool self_update =
+        std::any_of(
+            state->update_records.begin(),
+            state->update_records.end(),
+            [](const PackageRecord &package) {
+                const std::string_view name =
+                    package.package_name.empty()
+                        ? std::string_view(package.id)
+                        : std::string_view(package.package_name);
+                return name == "infiltrator-software";
+            });
+    if (self_update) {
+        state->update_records.erase(
+            std::remove_if(
+                state->update_records.begin(),
+                state->update_records.end(),
+                [](const PackageRecord &package) {
+                    const std::string_view name =
+                        package.package_name.empty()
+                            ? std::string_view(package.id)
+                            : std::string_view(package.package_name);
+                    return name != "infiltrator-software";
+                }),
+            state->update_records.end());
+        result->external_refreshed = true;
+        result->external_records.clear();
+        result->external_error.clear();
+    }
+
+    if (state->discover_updates_summary != nullptr) {
+        const std::string summary =
+            std::to_string(
+                state->update_records.size());
+        gtk_label_set_text(
+            GTK_LABEL(state->discover_updates_summary),
+            summary.c_str());
+    }
+
+    rebuild_discover_update_preview(state);
+    update_nav_updates_badge(state);
+
+    if (state->updates_reboot_banner != nullptr) {
+        const bool required = reboot_required();
+        gtk_widget_set_visible(
+            state->updates_reboot_banner,
+            required);
+        if (required &&
+            state->updates_reboot_detail != nullptr) {
+            const auto packages =
+                reboot_required_packages();
+            std::string detail =
+                "A restart is required to finish applying system updates.";
+            if (!packages.empty()) {
+                detail += " Requested by: ";
+                for (std::size_t index = 0U;
+                     index < packages.size();
+                     ++index) {
+                    if (index != 0U) {
+                        detail += ", ";
+                    }
+                    detail += packages[index];
+                    if (index == 5U &&
+                        packages.size() > 6U) {
+                        detail += ", …";
+                        break;
+                    }
+                }
+            }
+            gtk_label_set_text(
+                GTK_LABEL(state->updates_reboot_detail),
+                detail.c_str());
+        }
+    }
+    state->selected_update_ids.clear();
+    const std::string selection_preset =
+        std::exchange(
+            state->pending_update_selection,
+            std::string{});
+    for (const PackageRecord &package : state->update_records) {
+        const bool include =
+            selection_preset == "security"
+                ? package.security_update
+                : selection_preset == "kernel"
+                    ? package.kind ==
+                        infiltrator::software::PackageKind::kernel
+                    : true;
+        if (!include) continue;
+        const std::string identity = update_identity(package);
+        if (!identity.empty()) {
+            state->selected_update_ids.insert(identity);
+        }
+    }
+    const bool external_refreshed =
+        result->external_refreshed;
+    const std::string external_error =
+        external_refreshed
+            ? result->external_error
+            : std::string{};
+    if (external_refreshed) {
+        state->external_update_records =
+            std::move(result->external_records);
+        state->selected_flatpak_refs.clear();
+        state->selected_cinnamon_refs.clear();
+        for (const ExternalUpdate &update :
+             state->external_update_records) {
+            if (update.backend == "Flatpak") {
+                state->selected_flatpak_refs.insert(
+                    flatpak_selection_key(update));
+            } else if (update.backend == "Cinnamon") {
+                state->selected_cinnamon_refs.insert(
+                    cinnamon_selection_key(update));
+            }
+        }
+        rebuild_external_updates(state);
+    }
+
+    const bool refreshed_metadata =
+        result->refreshed_metadata;
+    const std::string error =
+        result->error;
+    delete result;
+
+    if (refreshed_metadata && error.empty()) {
+        state->updates_last_metadata_refresh_us =
+            g_get_monotonic_time();
+    }
+
+    state->updates_post_install_refresh = false;
+
+    /*
+     * Present the coherent local generation immediately, then reconcile
+     * repository metadata once per application session. Do not start a second
+     * network refresh immediately after an install: the privileged executor
+     * has already refreshed metadata and the local dpkg reconciliation above
+     * is sufficient to prove which approved versions are now installed.
+     */
+    const bool schedule_auto_refresh =
+        !post_install &&
+        !refreshed_metadata &&
+        error.empty() &&
+        state->updates_auto_refresh_pending;
+    if (schedule_auto_refresh || refreshed_metadata) {
+        state->updates_auto_refresh_pending = false;
+    }
+
+    if (state->updates_backend != nullptr) {
+        gtk_label_set_text(
+            GTK_LABEL(state->updates_backend),
+            "Native engine");
+    }
+
+    rebuild_updates(state);
+
+    if (state->updates_status != nullptr) {
+        if (!error.empty()) {
+            const std::string message =
+                std::string(
+                    post_install
+                        ? "Updates were installed, but final state verification failed: "
+                        : refreshed_metadata
+                            ? "Unable to refresh package metadata: "
+                            : "Unable to check for updates: ") +
+                one_line(error);
+            gtk_label_set_text(
+                GTK_LABEL(state->updates_status), message.c_str());
+        } else if (post_install) {
+            const std::string message =
+                state->update_records.empty()
+                    ? "Installation complete. Final package state verified; the system is up to date."
+                    : "Installation complete. Final package state verified; " +
+                        std::to_string(state->update_records.size()) +
+                        (state->update_records.size() == 1U
+                             ? " preferred update remains."
+                             : " preferred updates remain.");
+            gtk_label_set_text(
+                GTK_LABEL(state->updates_status), message.c_str());
+        } else if (schedule_auto_refresh) {
+            gtk_label_set_text(
+                GTK_LABEL(state->updates_status),
+                state->update_records.empty()
+                    ? "Cached package state has no updates; checking repositories for newer metadata…"
+                    : "Cached updates loaded; checking repositories for newer metadata…");
+        } else if (state->update_records.empty()) {
+            gtk_label_set_text(
+                GTK_LABEL(state->updates_status),
+                "Your system is up to date.");
+        } else {
+            const std::string message =
+                std::to_string(state->update_records.size()) +
+                (state->update_records.size() == 1U
+                     ? " update is available."
+                     : " updates are available.");
+            gtk_label_set_text(
+                GTK_LABEL(state->updates_status), message.c_str());
+        }
+    }
+
+    if (state->updates_install != nullptr) {
+        if (!error.empty()) {
+            gtk_widget_set_sensitive(state->updates_install, false);
+        } else {
+            update_selection_controls(state);
+        }
+    }
+    if (state->updates_refresh != nullptr) {
+        gtk_widget_set_sensitive(
+            state->updates_refresh, true);
+    }
+
+    if (!external_error.empty() &&
+        state->external_updates_status != nullptr) {
+        gtk_label_set_text(
+            GTK_LABEL(
+                state->external_updates_status),
+            external_error.c_str());
+    }
+
+    if (error.empty()) {
+        set_update_runtime_state({});
+    } else {
+        set_update_runtime_state(
+            "error:" + one_line(error));
+    }
+
+    if (post_install) {
+        finish_update_progress(
+            state,
+            error.empty(),
+            error.empty()
+                ? "Installation complete. Final installed state has been verified."
+                : "Packages were applied, but final state verification did not complete successfully.");
+        if (error.empty() &&
+            state->preferences.hide_window_after_update &&
+            state->window != nullptr) {
+            gtk_widget_set_visible(
+                GTK_WIDGET(state->window), false);
+        }
+        if (error.empty()) {
+            /*
+             * The native refresh has now published the authoritative
+             * post-transaction generation.  Only now may other pages reload.
+             */
+            refresh_installed(state);
+            refresh_discover(state);
+            refresh_repositories(state);
+
+            if (state->updates_restart_after_verify) {
+                state->updates_restart_after_verify = false;
+                /*
+                 * Replace this process with the newly installed executable.
+                 * Spawning another GtkApplication first is racy: while this
+                 * process still owns the application bus name, the new
+                 * executable can simply forward --updates back to the old
+                 * instance and exit. exec() gives a deterministic hand-off.
+                 */
+                (void)execl(
+                    "/usr/bin/infiltrator-software",
+                    "infiltrator-software",
+                    "--updates",
+                    static_cast<char *>(nullptr));
+                g_warning(
+                    "Software updated successfully but could not replace "
+                    "the running process: %s",
+                    g_strerror(errno));
+            }
+        }
+    }
+
+    if (schedule_auto_refresh &&
+        state->window != nullptr) {
+        g_idle_add_full(
+            G_PRIORITY_DEFAULT_IDLE,
+            auto_refresh_updates_idle,
+            g_object_ref(state->window),
+            reinterpret_cast<GDestroyNotify>(g_object_unref));
+    }
+}
+
+void refresh_updates_internal(
+    WindowState *state,
+    const bool refresh_metadata,
+    const bool refresh_external)
+{
+    if (state == nullptr || state->window == nullptr ||
+        state->updates_list == nullptr || state->updates_busy) {
+        return;
+    }
+
+    if (refresh_metadata) {
+        state->updates_auto_refresh_pending = false;
+    }
+
+    state->updates_loaded = true;
+    state->updates_busy = true;
+    ++state->updates_generation;
+
+    if (state->updates_status != nullptr) {
+        gtk_label_set_text(
+            GTK_LABEL(state->updates_status),
+            state->updates_post_install_refresh
+                ? "Installation finished. Verifying installed versions and remaining updates…"
+                : refresh_metadata
+                    ? "Refreshing repository metadata without administrator access…"
+                    : "Checking installed versions and available updates…");
+    }
+    if (state->updates_install != nullptr) {
+        gtk_widget_set_sensitive(state->updates_install, false);
+    }
+    if (state->updates_refresh != nullptr) {
+        gtk_widget_set_sensitive(state->updates_refresh, false);
+    }
+
+    set_update_runtime_state("checking");
+
+    auto *data = new UpdatesRefreshRequest{
+        state->updates_generation,
+        refresh_metadata,
+        refresh_external,
+        state->preferences.show_flatpak_updates,
+        state->preferences.show_cinnamon_updates};
+    GTask *task = g_task_new(
+        G_OBJECT(state->window),
+        nullptr,
+        updates_complete,
+        nullptr);
+    g_task_set_task_data(
+        task, data,
+        [](gpointer pointer) {
+            delete static_cast<UpdatesRefreshRequest *>(pointer);
+        });
+    g_task_run_in_thread(task, updates_worker);
+    g_object_unref(task);
+}
+
+void refresh_updates(
+    WindowState *state,
+    const bool refresh_metadata)
+{
+    refresh_updates_internal(
+        state,
+        refresh_metadata,
+        true);
+}
+
+void destroy_update_process_run(UpdateProcessRun *run)
+{
+    if (run == nullptr) {
+        return;
+    }
+    if (run->window != nullptr) {
+        g_object_unref(run->window);
+    }
+    delete run;
+}
+
+void update_process_complete(
+    GObject *source_object,
+    GAsyncResult *async_result,
+    gpointer user_data)
+{
+    auto *run = static_cast<UpdateProcessRun *>(user_data);
+    auto *process = G_SUBPROCESS(source_object);
+
+    GError *error = nullptr;
+    gchar *stdout_text = nullptr;
+    gchar *stderr_text = nullptr;
+    const gboolean communicated =
+        g_subprocess_communicate_utf8_finish(
+            process, async_result,
+            &stdout_text, &stderr_text, &error);
+
+    auto *state =
+        run == nullptr || run->window == nullptr
+            ? nullptr
+            : static_cast<WindowState *>(
+                  g_object_get_data(
+                      G_OBJECT(run->window),
+                      "infiltrator-window-state"));
+
+    const bool success =
+        communicated && g_subprocess_get_successful(process);
+    const bool no_changes_required =
+        success &&
+        stdout_text != nullptr &&
+        std::string_view(stdout_text).find(
+            "INFILTRATOR_NO_CHANGES_REQUIRED") !=
+            std::string_view::npos;
+
+    if (state != nullptr) {
+        state->updates_busy = false;
+
+        if (run != nullptr &&
+            run->operation == "install" &&
+            !run->plan.items.empty()) {
+            std::string history_message;
+            if (no_changes_required) {
+                history_message =
+                    "Approved package versions were already installed; no package changes were required.";
+            } else if (success) {
+                history_message = "Transaction completed successfully.";
+            } else if (g_subprocess_get_if_exited(process) &&
+                       g_subprocess_get_exit_status(process) == 126) {
+                history_message = "Administrator authentication was cancelled.";
+            } else if (stderr_text != nullptr && *stderr_text != '\0') {
+                history_message = one_line(stderr_text);
+            } else if (error != nullptr && error->message != nullptr) {
+                history_message = one_line(error->message);
+            } else {
+                history_message = "Transaction failed.";
+            }
+            record_transaction_history(
+                run->plan, success, history_message);
+            if (state->history.loaded) {
+                refresh_history(state);
+            }
+        }
+
+        if (success) {
+            set_update_runtime_state({});
+            if (state->updates_status != nullptr) {
+                gtk_label_set_text(
+                    GTK_LABEL(state->updates_status),
+                    run->operation == "refresh"
+                        ? "Package lists refreshed. Checking updates…"
+                        : no_changes_required
+                            ? "Selected updates were already installed. Checking current package state…"
+                            : "Updates installed. Checking system state…");
+            }
+
+            state->updates_post_install_refresh =
+                run->operation == "install";
+            if (run->operation == "install") {
+                state->updates_restart_after_verify =
+                    std::any_of(
+                        run->plan.items.begin(),
+                        run->plan.items.end(),
+                        [](const TransactionItem &item) {
+                            const std::string_view id(
+                                item.package_id);
+                            return id == "infiltrator-software" ||
+                                   id.rfind(
+                                       "infiltrator-software:",
+                                       0U) == 0U;
+                        });
+            }
+            /*
+             * Re-read authoritative dpkg state first. Repository metadata was
+             * already refreshed by the privileged helper before mutation, so
+             * repeating the full network reconciliation here only delays the
+             * UI and can leave completed packages visible as stale updates.
+             */
+            refresh_updates_internal(
+                state,
+                run->operation == "refresh",
+                run->operation == "refresh");
+        } else {
+            std::string message =
+                run->operation == "refresh"
+                    ? "Unable to refresh package lists."
+                    : "Unable to install updates.";
+
+            if (g_subprocess_get_if_exited(process) &&
+                g_subprocess_get_exit_status(process) == 126) {
+                message = "Authentication was cancelled.";
+                set_update_runtime_state({});
+            } else {
+                if (stderr_text != nullptr && *stderr_text != '\0') {
+                    message += " ";
+                    message += one_line(stderr_text);
+                } else if (error != nullptr &&
+                           error->message != nullptr) {
+                    message += " ";
+                    message += one_line(error->message);
+                }
+                set_update_runtime_state(
+                    "error:" + one_line(message));
+            }
+
+            if (state->updates_status != nullptr) {
+                gtk_label_set_text(
+                    GTK_LABEL(state->updates_status),
+                    message.c_str());
+            }
+            finish_update_progress(
+                state, false, message);
+            if (state->updates_install != nullptr) {
+                update_selection_controls(state);
+            }
+            if (state->updates_refresh != nullptr) {
+                gtk_widget_set_sensitive(
+                    state->updates_refresh, true);
+            }
+        }
+    }
+
+    g_free(stdout_text);
+    g_free(stderr_text);
+    g_clear_error(&error);
+    destroy_update_process_run(run);
+}
+
+void start_update_process(
+    WindowState *state,
+    std::vector<std::string> arguments,
+    const std::string &operation,
+    TransactionPlan plan)
+{
+    if (state == nullptr || state->window == nullptr ||
+        arguments.empty()) {
+        return;
+    }
+
+    std::vector<const gchar *> argv;
+    argv.reserve(arguments.size() + 1U);
+    for (const std::string &argument : arguments) {
+        argv.push_back(argument.c_str());
+    }
+    argv.push_back(nullptr);
+
+    GError *error = nullptr;
+    GSubprocess *process = g_subprocess_newv(
+        argv.data(),
+        static_cast<GSubprocessFlags>(
+            G_SUBPROCESS_FLAGS_STDOUT_PIPE |
+            G_SUBPROCESS_FLAGS_STDERR_PIPE),
+        &error);
+
+    if (process == nullptr) {
+        state->updates_busy = false;
+        std::string message =
+            operation == "refresh"
+                ? "Unable to start package-list refresh."
+                : "Unable to start update installation.";
+        if (error != nullptr && error->message != nullptr) {
+            message += " ";
+            message += one_line(error->message);
+        }
+        if (state->updates_status != nullptr) {
+            gtk_label_set_text(
+                GTK_LABEL(state->updates_status),
+                message.c_str());
+        }
+        set_update_runtime_state(
+            "error:" + one_line(message));
+        g_clear_error(&error);
+        if (state->updates_refresh != nullptr) {
+            gtk_widget_set_sensitive(
+                state->updates_refresh, true);
+        }
+        if (state->updates_install != nullptr) {
+            update_selection_controls(state);
+        }
+        finish_update_progress(
+            state, false, message);
+        if (!plan.items.empty()) {
+            record_transaction_history(
+                plan, false, message);
+            if (state->history.loaded) {
+                refresh_history(state);
+            }
+        }
+        return;
+    }
+
+    auto *run = new UpdateProcessRun{
+        GTK_WINDOW(g_object_ref(state->window)),
+        operation,
+        std::move(plan)};
+
+    g_subprocess_communicate_utf8_async(
+        process, nullptr, nullptr,
+        update_process_complete, run);
+    g_object_unref(process);
+}
+
+void update_refresh_clicked(GtkButton *, gpointer user_data)
+{
+    auto *state = static_cast<WindowState *>(user_data);
+    if (state == nullptr || state->updates_busy) {
+        return;
+    }
+
+    /*
+     * Refresh is read-only and is owned by the shared native engine.  It
+     * verifies configured repository metadata, publishes a new coherent
+     * generation, and requires no administrator prompt.
+     */
+    refresh_updates(state, true);
+}
+
+void begin_apply_updates(WindowState *state)
+{
+    if (state == nullptr || !state->pending_update_plan.has_value()) {
+        return;
+    }
+
+    std::vector<std::string> specs;
+    std::string plan_error;
+    if (!exact_transaction_specs(
+            *state->pending_update_plan, specs, plan_error)) {
+        state->updates_busy = false;
+        state->pending_update_plan.reset();
+        if (state->updates_status != nullptr) {
+            gtk_label_set_text(
+                GTK_LABEL(state->updates_status),
+                plan_error.c_str());
+        }
+        if (state->updates_install != nullptr) {
+            update_selection_controls(state);
+        }
+        if (state->updates_refresh != nullptr) {
+            gtk_widget_set_sensitive(state->updates_refresh, true);
+        }
+        set_update_runtime_state("error:" + one_line(plan_error));
+        return;
+    }
+
+    const TransactionPlan approved_plan =
+        *state->pending_update_plan;
+
+    state->updates_busy = true;
+    if (state->updates_status != nullptr) {
+        gtk_label_set_text(
+            GTK_LABEL(state->updates_status),
+            "Starting the approved update transaction; administrator authentication may be requested…");
+    }
+    if (state->updates_install != nullptr) {
+        gtk_widget_set_sensitive(state->updates_install, false);
+    }
+    if (state->updates_refresh != nullptr) {
+        gtk_widget_set_sensitive(state->updates_refresh, false);
+    }
+    set_update_runtime_state("installing");
+    start_update_progress(
+        state, approved_plan);
+
+    std::vector<std::string> arguments{
+        "pkexec",
+        "/usr/libexec/infiltrator-software-update-helper",
+        "apply-plan",
+        "--progress-token=" +
+            state->updates_progress_token};
+    if (state->preferences.keep_configuration) {
+        arguments.emplace_back(
+            "--force-confold");
+    }
+    arguments.reserve(
+        specs.size() + 5U);
+    arguments.insert(
+        arguments.end(),
+        specs.begin(),
+        specs.end());
+
+    state->pending_update_plan.reset();
+    start_update_process(
+        state,
+        std::move(arguments),
+        "install",
+        approved_plan);
+}
+
+struct UpdateSnapshotRun {
+    GtkWindow *window{};
+};
+
+void update_snapshot_complete(
+    GObject *source_object,
+    GAsyncResult *async_result,
+    gpointer user_data)
+{
+    auto *run =
+        static_cast<UpdateSnapshotRun *>(
+            user_data);
+    auto *process =
+        G_SUBPROCESS(source_object);
+    GError *error = nullptr;
+    gchar *out = nullptr;
+    gchar *err = nullptr;
+    const gboolean communicated =
+        g_subprocess_communicate_utf8_finish(
+            process,
+            async_result,
+            &out,
+            &err,
+            &error);
+
+    auto *state =
+        run == nullptr ||
+        run->window == nullptr
+            ? nullptr
+            : static_cast<WindowState *>(
+                  g_object_get_data(
+                      G_OBJECT(run->window),
+                      "infiltrator-window-state"));
+
+    const bool success =
+        communicated &&
+        g_subprocess_get_successful(process);
+    if (state != nullptr) {
+        if (success) {
+            if (state->updates_status != nullptr) {
+                gtk_label_set_text(
+                    GTK_LABEL(
+                        state->updates_status),
+                    "Pre-update snapshot created. Starting the reviewed update transaction…");
+            }
+            begin_apply_updates(state);
+        } else {
+            state->updates_busy = false;
+            state->pending_update_plan.reset();
+            std::string message =
+                "The system update was not started because the requested pre-update snapshot failed.";
+            if (err != nullptr &&
+                *err != '\0') {
+                message += " ";
+                message += one_line(err);
+            } else if (
+                error != nullptr &&
+                error->message != nullptr) {
+                message += " ";
+                message += one_line(
+                    error->message);
+            }
+            if (state->updates_status != nullptr) {
+                gtk_label_set_text(
+                    GTK_LABEL(
+                        state->updates_status),
+                    message.c_str());
+            }
+            if (state->updates_install != nullptr) {
+                update_selection_controls(state);
+            }
+            if (state->updates_refresh != nullptr) {
+                gtk_widget_set_sensitive(
+                    state->updates_refresh,
+                    true);
+            }
+        }
+    }
+
+    g_free(out);
+    g_free(err);
+    g_clear_error(&error);
+    if (run != nullptr) {
+        if (run->window != nullptr) {
+            g_object_unref(run->window);
+        }
+        delete run;
+    }
+}
+
+bool create_snapshot_before_update(
+    WindowState *state)
+{
+    if (state == nullptr ||
+        state->window == nullptr) {
+        return false;
+    }
+
+    const char *timeshift =
+        g_find_program_in_path(
+            "timeshift");
+    if (timeshift == nullptr) {
+        if (state->updates_status != nullptr) {
+            gtk_label_set_text(
+                GTK_LABEL(
+                    state->updates_status),
+                "A pre-update snapshot was requested, but Timeshift is not installed.");
+        }
+        return false;
+    }
+    g_free(
+        const_cast<char *>(timeshift));
+
+    const gchar *argv[] = {
+        "pkexec",
+        "timeshift",
+        "--create",
+        "--comments",
+        "Infiltrator Software system update",
+        "--tags",
+        "D",
+        nullptr
+    };
+
+    GError *error = nullptr;
+    GSubprocess *process =
+        g_subprocess_newv(
+            argv,
+            static_cast<GSubprocessFlags>(
+                G_SUBPROCESS_FLAGS_STDOUT_PIPE |
+                G_SUBPROCESS_FLAGS_STDERR_PIPE),
+            &error);
+    if (process == nullptr) {
+        if (state->updates_status != nullptr) {
+            gtk_label_set_text(
+                GTK_LABEL(
+                    state->updates_status),
+                error != nullptr &&
+                error->message != nullptr
+                    ? error->message
+                    : "Unable to start the snapshot tool.");
+        }
+        g_clear_error(&error);
+        return false;
+    }
+
+    if (state->updates_status != nullptr) {
+        gtk_label_set_text(
+            GTK_LABEL(
+                state->updates_status),
+            "Creating the requested pre-update system snapshot…");
+    }
+    auto *run =
+        new UpdateSnapshotRun{
+            GTK_WINDOW(
+                g_object_ref(
+                    state->window))};
+    g_subprocess_communicate_utf8_async(
+        process,
+        nullptr,
+        nullptr,
+        update_snapshot_complete,
+        run);
+    g_object_unref(process);
+    return true;
+}
+
+void update_confirm_response(
+    GtkDialog *dialog,
+    gint response_id,
+    gpointer user_data)
+{
+    auto *state = static_cast<WindowState *>(user_data);
+    gtk_window_destroy(GTK_WINDOW(dialog));
+
+    if (state == nullptr) {
+        return;
+    }
+
+    if (response_id == GTK_RESPONSE_ACCEPT) {
+        if (state->pending_update_plan.has_value() &&
+            state->pending_update_plan->touches_system &&
+            state->preferences.snapshot_before_system_updates) {
+            if (!create_snapshot_before_update(state)) {
+                state->updates_busy = false;
+                state->pending_update_plan.reset();
+                if (state->updates_install != nullptr) {
+                    update_selection_controls(state);
+                }
+                if (state->updates_refresh != nullptr) {
+                    gtk_widget_set_sensitive(
+                        state->updates_refresh,
+                        true);
+                }
+            }
+            return;
+        }
+        begin_apply_updates(state);
+        return;
+    }
+
+    state->updates_busy = false;
+    state->pending_update_plan.reset();
+    if (state->updates_status != nullptr) {
+        gtk_label_set_text(
+            GTK_LABEL(state->updates_status),
+            "Update installation cancelled.");
+    }
+    if (state->updates_install != nullptr) {
+        update_selection_controls(state);
+    }
+    if (state->updates_refresh != nullptr) {
+        gtk_widget_set_sensitive(state->updates_refresh, true);
+    }
+    set_update_runtime_state({});
+}
+
+void update_plan_worker(
+    GTask *task,
+    gpointer,
+    gpointer task_data,
+    GCancellable *)
+{
+    auto *data =
+        static_cast<UpdatePlanRequest *>(task_data);
+    auto *result = new UpdatePlanResult{};
+    if (data == nullptr) {
+        result->error =
+            "No updates are available to plan.";
+    } else {
+        *result = plan_updates(*data);
+    }
+
+    g_task_return_pointer(
+        task,
+        result,
+        [](gpointer pointer) {
+            delete static_cast<UpdatePlanResult *>(pointer);
+        });
+}
+
+void update_plan_complete(
+    GObject *source_object,
+    GAsyncResult *async_result,
+    gpointer)
+{
+    auto *window = GTK_WINDOW(source_object);
+    auto *state = static_cast<WindowState *>(
+        g_object_get_data(
+            G_OBJECT(window), "infiltrator-window-state"));
+    auto *result = static_cast<UpdatePlanResult *>(
+        g_task_propagate_pointer(G_TASK(async_result), nullptr));
+
+    if (state == nullptr || result == nullptr) {
+        delete result;
+        return;
+    }
+
+    if (!result->plan.has_value()) {
+        state->updates_busy = false;
+        state->pending_update_plan.reset();
+        std::string message =
+            "Unable to plan updates: " + one_line(result->error);
+        if (state->updates_status != nullptr) {
+            gtk_label_set_text(
+                GTK_LABEL(state->updates_status),
+                message.c_str());
+        }
+        if (state->updates_install != nullptr) {
+            update_selection_controls(state);
+        }
+        if (state->updates_refresh != nullptr) {
+            gtk_widget_set_sensitive(state->updates_refresh, true);
+        }
+        set_update_runtime_state(
+            "error:" + one_line(message));
+        delete result;
+        return;
+    }
+
+    const infiltrator::software::TransactionPlan plan =
+        *result->plan;
+    delete result;
+
+    state->pending_update_plan = plan;
+
+    const std::size_t requested_count =
+        static_cast<std::size_t>(std::count_if(
+            plan.items.begin(),
+            plan.items.end(),
+            [](const infiltrator::software::TransactionItem &item) {
+                return item.requested;
+            }));
+    std::ostringstream heading;
+    heading << "Install "
+            << requested_count
+            << (requested_count == 1U
+                    ? " selected software update?"
+                    : " selected software updates?");
+
+    GtkWidget *dialog =
+        make_transaction_confirmation_dialog(
+            state->window,
+            "Review updates",
+            heading.str(),
+            "Install updates",
+            plan);
+    g_signal_connect(
+        dialog, "response",
+        G_CALLBACK(update_confirm_response), state);
+    gtk_window_present(GTK_WINDOW(dialog));
+}
+
+void updates_select_all_clicked(GtkButton *, gpointer user_data)
+{
+    auto *state = static_cast<WindowState *>(user_data);
+    if (state == nullptr || state->updates_busy) return;
+
+    state->selected_update_ids.clear();
+    for (const PackageRecord &package : state->update_records) {
+        const std::string identity = update_identity(package);
+        if (!identity.empty()) state->selected_update_ids.insert(identity);
+    }
+    rebuild_updates(state);
+    update_selection_controls(state);
+}
+
+void updates_clear_selection_clicked(GtkButton *, gpointer user_data)
+{
+    auto *state = static_cast<WindowState *>(user_data);
+    if (state == nullptr || state->updates_busy) return;
+
+    state->selected_update_ids.clear();
+    rebuild_updates(state);
+    update_selection_controls(state);
+}
+
+void update_install_clicked(GtkButton *, gpointer user_data)
+{
+    auto *state = static_cast<WindowState *>(user_data);
+    if (state == nullptr || state->window == nullptr ||
+        state->updates_busy || state->update_records.empty() ||
+        state->selected_update_ids.empty()) {
+        return;
+    }
+
+    state->updates_busy = true;
+    state->pending_update_plan.reset();
+    if (state->updates_status != nullptr) {
+        gtk_label_set_text(
+            GTK_LABEL(state->updates_status),
+            "Resolving the complete update transaction…");
+    }
+    if (state->updates_install != nullptr) {
+        gtk_widget_set_sensitive(state->updates_install, false);
+    }
+    if (state->updates_refresh != nullptr) {
+        gtk_widget_set_sensitive(state->updates_refresh, false);
+    }
+    set_update_runtime_state("checking");
+
+    auto *data = new UpdatePlanRequest{};
+    data->install_recommends =
+        state->preferences.install_recommends;
+    data->package_ids.reserve(state->selected_update_ids.size());
+    for (const PackageRecord &package : state->update_records) {
+        const std::string identity = update_identity(package);
+        if (state->selected_update_ids.find(identity) !=
+            state->selected_update_ids.end()) {
+            data->package_ids.push_back(identity);
+        }
+    }
+
+    GTask *task = g_task_new(
+        G_OBJECT(state->window),
+        nullptr,
+        update_plan_complete,
+        nullptr);
+    g_task_set_task_data(
+        task, data,
+        [](gpointer pointer) {
+            delete static_cast<UpdatePlanRequest *>(pointer);
+        });
+    g_task_run_in_thread(task, update_plan_worker);
+    g_object_unref(task);
+}
+
+void restart_system_clicked(
+    GtkButton *,
+    gpointer user_data)
+{
+    auto *state = static_cast<WindowState *>(user_data);
+    if (state == nullptr || state->window == nullptr) {
+        return;
+    }
+
+    const char *desktop = g_getenv("XDG_CURRENT_DESKTOP");
+    std::vector<std::string> candidates;
+    if (desktop != nullptr &&
+        (std::string_view(desktop) == "Cinnamon" ||
+         std::string_view(desktop) == "X-Cinnamon")) {
+        candidates.emplace_back(
+            "cinnamon-session-quit --reboot");
+    } else if (desktop != nullptr &&
+               std::string_view(desktop).find("XFCE") !=
+                   std::string_view::npos) {
+        candidates.emplace_back(
+            "xfce4-session-logout --reboot");
+    }
+    candidates.emplace_back("systemctl reboot");
+
+    GError *last_error = nullptr;
+    for (const std::string &command : candidates) {
+        GError *error = nullptr;
+        if (g_spawn_command_line_async(
+                command.c_str(), &error)) {
+            g_clear_error(&last_error);
+            return;
+        }
+        g_clear_error(&last_error);
+        last_error = error;
+    }
+
+    if (state->updates_status != nullptr) {
+        gtk_label_set_text(
+            GTK_LABEL(state->updates_status),
+            last_error != nullptr &&
+                    last_error->message != nullptr
+                ? last_error->message
+                : "Unable to request a system restart.");
+    }
+    g_clear_error(&last_error);
+}
+
+GtkWidget *make_updates_page(WindowState *state)
+{
+    GtkWidget *page = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
+    gtk_widget_add_css_class(page, "content");
+    gtk_widget_add_css_class(page, "page-updates");
+
+    gtk_box_append(
+        GTK_BOX(page),
+        make_page_intro(
+            "software-update-available-symbolic",
+            "Updates",
+            "Application, library, kernel and system updates in one place."));
+
+    GtkWidget *stats = gtk_grid_new();
+    gtk_grid_set_column_spacing(GTK_GRID(stats), 10);
+    gtk_grid_set_column_homogeneous(GTK_GRID(stats), true);
+    gtk_grid_attach(
+        GTK_GRID(stats),
+        make_stat_card(
+            "AVAILABLE", "0", "stat-operation",
+            &state->updates_count),
+        0, 0, 1, 1);
+    gtk_grid_attach(
+        GTK_GRID(stats),
+        make_stat_card(
+            "SYSTEM-CRITICAL", "0", "stat-warning",
+            &state->updates_critical),
+        1, 0, 1, 1);
+    gtk_grid_attach(
+        GTK_GRID(stats),
+        make_stat_card(
+            "BACKEND", "Loading", "stat-info",
+            &state->updates_backend),
+        2, 0, 1, 1);
+    gtk_box_append(GTK_BOX(page), stats);
+
+    GtkWidget *controls =
+        gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    gtk_widget_add_css_class(controls, "card");
+    gtk_widget_add_css_class(controls, "updates-action-bar");
+
+    GtkWidget *updates_status_icon =
+        make_icon("view-refresh-symbolic", 24);
+    gtk_widget_add_css_class(
+        updates_status_icon, "updates-status-icon");
+    gtk_widget_set_valign(
+        updates_status_icon, GTK_ALIGN_CENTER);
+    gtk_box_append(
+        GTK_BOX(controls), updates_status_icon);
+
+    state->updates_status =
+        make_label("Checking for updates…", "card-copy");
+    gtk_label_set_wrap(GTK_LABEL(state->updates_status), true);
+    gtk_widget_set_hexpand(state->updates_status, true);
+    gtk_box_append(GTK_BOX(controls), state->updates_status);
+
+    GtkWidget *select_all =
+        gtk_button_new_with_label("Select all");
+    gtk_widget_add_css_class(select_all, "discover-details");
+    g_signal_connect(
+        select_all, "clicked",
+        G_CALLBACK(updates_select_all_clicked), state);
+
+    state->updates_security =
+        gtk_button_new_with_label("Security");
+    gtk_widget_add_css_class(
+        state->updates_security,
+        "discover-details");
+    gtk_widget_set_tooltip_text(
+        state->updates_security,
+        "Select only updates classified as security fixes (Ctrl+S).");
+    g_signal_connect(
+        state->updates_security,
+        "clicked",
+        G_CALLBACK(select_security_updates),
+        state);
+
+    GtkWidget *kernel_only =
+        gtk_button_new_with_label("Kernel");
+    gtk_widget_add_css_class(
+        kernel_only,
+        "discover-details");
+    gtk_widget_set_tooltip_text(
+        kernel_only,
+        "Select only Linux kernel package updates (Ctrl+K).");
+    g_signal_connect(
+        kernel_only,
+        "clicked",
+        G_CALLBACK(select_kernel_updates),
+        state);
+
+    GtkWidget *clear_selection =
+        gtk_button_new_with_label("Clear");
+    gtk_widget_add_css_class(clear_selection, "discover-details");
+    g_signal_connect(
+        clear_selection, "clicked",
+        G_CALLBACK(updates_clear_selection_clicked), state);
+
+    state->updates_refresh =
+        gtk_button_new_with_label("Check again");
+    gtk_widget_add_css_class(
+        state->updates_refresh, "discover-details");
+    g_signal_connect(
+        state->updates_refresh, "clicked",
+        G_CALLBACK(update_refresh_clicked), state);
+    gtk_box_append(GTK_BOX(controls), state->updates_refresh);
+
+    state->updates_install =
+        gtk_button_new_with_label("Install selected updates");
+    gtk_widget_add_css_class(
+        state->updates_install, "suggested-action");
+    gtk_widget_set_sensitive(state->updates_install, false);
+    g_signal_connect(
+        state->updates_install, "clicked",
+        G_CALLBACK(update_install_clicked), state);
+    gtk_box_append(GTK_BOX(controls), state->updates_install);
+
+    gtk_box_append(GTK_BOX(page), controls);
+
+    state->updates_transaction_panel =
+        gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
+    gtk_widget_add_css_class(
+        state->updates_transaction_panel,
+        "update-transaction-panel");
+    gtk_widget_set_visible(
+        state->updates_transaction_panel,
+        false);
+
+    GtkWidget *transaction_header =
+        gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
+    GtkWidget *transaction_icon_well =
+        gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    gtk_widget_add_css_class(
+        transaction_icon_well,
+        "update-transaction-icon");
+    GtkWidget *transaction_icon =
+        make_icon("software-update-available-symbolic", 25);
+    gtk_widget_set_halign(
+        transaction_icon, GTK_ALIGN_CENTER);
+    gtk_widget_set_valign(
+        transaction_icon, GTK_ALIGN_CENTER);
+    gtk_box_append(
+        GTK_BOX(transaction_icon_well),
+        transaction_icon);
+    gtk_box_append(
+        GTK_BOX(transaction_header),
+        transaction_icon_well);
+
+    GtkWidget *transaction_copy =
+        gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
+    gtk_widget_set_hexpand(transaction_copy, true);
+    gtk_box_append(
+        GTK_BOX(transaction_copy),
+        make_label(
+            "Update transaction",
+            "update-transaction-title"));
+    state->updates_transaction_phase =
+        make_label(
+            "Preparing updates",
+            "update-transaction-phase");
+    gtk_box_append(
+        GTK_BOX(transaction_copy),
+        state->updates_transaction_phase);
+    gtk_box_append(
+        GTK_BOX(transaction_header),
+        transaction_copy);
+    state->updates_transaction_meta =
+        make_label(
+            "",
+            "update-transaction-meta",
+            1.0F);
+    gtk_widget_set_valign(
+        state->updates_transaction_meta,
+        GTK_ALIGN_CENTER);
+    gtk_box_append(
+        GTK_BOX(transaction_header),
+        state->updates_transaction_meta);
+    gtk_box_append(
+        GTK_BOX(state->updates_transaction_panel),
+        transaction_header);
+
+    GtkWidget *stage_strip =
+        gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+    gtk_widget_add_css_class(
+        stage_strip, "update-stage-strip");
+    static constexpr const char *stage_names[] = {
+        "Authorize",
+        "Refresh",
+        "Validate",
+        "Download",
+        "Install",
+        "Verify"
+    };
+    for (int stage = 0; stage < 6; ++stage) {
+        state->updates_stage_labels[stage] =
+            make_label(
+                stage_names[stage],
+                "update-stage",
+                0.5F);
+        gtk_widget_set_hexpand(
+            state->updates_stage_labels[stage],
+            true);
+        gtk_box_append(
+            GTK_BOX(stage_strip),
+            state->updates_stage_labels[stage]);
+    }
+    gtk_box_append(
+        GTK_BOX(state->updates_transaction_panel),
+        stage_strip);
+
+    state->updates_progress = gtk_progress_bar_new();
+    gtk_widget_add_css_class(
+        state->updates_progress,
+        "update-transaction-progress");
+    gtk_progress_bar_set_show_text(
+        GTK_PROGRESS_BAR(state->updates_progress),
+        false);
+    gtk_widget_set_tooltip_text(
+        state->updates_progress,
+        "Live graphical state for the approved update transaction.");
+    gtk_box_append(
+        GTK_BOX(state->updates_transaction_panel),
+        state->updates_progress);
+
+    state->updates_transaction_detail =
+        make_label(
+            "",
+            "update-transaction-detail");
+    gtk_label_set_wrap(
+        GTK_LABEL(state->updates_transaction_detail),
+        true);
+    gtk_box_append(
+        GTK_BOX(state->updates_transaction_panel),
+        state->updates_transaction_detail);
+    gtk_box_append(
+        GTK_BOX(page),
+        state->updates_transaction_panel);
+
+    state->updates_reboot_banner =
+        gtk_box_new(
+            GTK_ORIENTATION_HORIZONTAL, 12);
+    gtk_widget_add_css_class(
+        state->updates_reboot_banner,
+        "reboot-required-banner");
+    GtkWidget *reboot_icon =
+        make_icon(
+            "system-reboot-symbolic", 22);
+    gtk_box_append(
+        GTK_BOX(state->updates_reboot_banner),
+        reboot_icon);
+    state->updates_reboot_detail =
+        make_label(
+            "A restart is required to finish applying system updates.",
+            "reboot-required-copy");
+    gtk_label_set_wrap(
+        GTK_LABEL(state->updates_reboot_detail),
+        true);
+    gtk_widget_set_hexpand(
+        state->updates_reboot_detail,
+        true);
+    gtk_box_append(
+        GTK_BOX(state->updates_reboot_banner),
+        state->updates_reboot_detail);
+    GtkWidget *restart_now =
+        gtk_button_new_with_label("Restart");
+    gtk_widget_add_css_class(
+        restart_now,
+        "suggested-action");
+    gtk_widget_set_tooltip_text(
+        restart_now,
+        "Restart the system now so installed kernel and system updates take effect.");
+    g_signal_connect(
+        restart_now,
+        "clicked",
+        G_CALLBACK(restart_system_clicked),
+        state);
+    gtk_box_append(
+        GTK_BOX(state->updates_reboot_banner),
+        restart_now);
+    gtk_widget_set_visible(
+        state->updates_reboot_banner,
+        reboot_required());
+    gtk_box_append(
+        GTK_BOX(page),
+        state->updates_reboot_banner);
+
+    GtkWidget *card =
+        gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
+    gtk_widget_add_css_class(card, "card");
+    gtk_widget_add_css_class(card, "card-info");
+    gtk_widget_set_vexpand(card, true);
+
+    GtkWidget *heading_row =
+        gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    GtkWidget *heading_icon =
+        make_icon("software-update-available-symbolic", 22);
+    gtk_widget_add_css_class(
+        heading_icon, "updates-section-icon");
+    GtkWidget *heading_copy =
+        gtk_box_new(GTK_ORIENTATION_VERTICAL, 1);
+    gtk_widget_set_hexpand(
+        heading_copy, true);
+    GtkWidget *heading =
+        make_label("Available updates", "card-title");
+    GtkWidget *heading_note =
+        make_label(
+            "Grouped by the part of the system they affect.",
+            "card-copy");
+    gtk_box_append(GTK_BOX(heading_copy), heading);
+    gtk_box_append(GTK_BOX(heading_copy), heading_note);
+    gtk_box_append(GTK_BOX(heading_row), heading_icon);
+    gtk_box_append(GTK_BOX(heading_row), heading_copy);
+
+
+    GtkWidget *selection_tools =
+        gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+    gtk_widget_add_css_class(
+        selection_tools, "updates-selection-tools");
+    gtk_widget_set_valign(
+        selection_tools, GTK_ALIGN_CENTER);
+    gtk_box_append(
+        GTK_BOX(selection_tools), select_all);
+    gtk_box_append(
+        GTK_BOX(selection_tools), state->updates_security);
+    gtk_box_append(
+        GTK_BOX(selection_tools), kernel_only);
+    gtk_box_append(
+        GTK_BOX(selection_tools), clear_selection);
+    gtk_box_append(
+        GTK_BOX(heading_row), selection_tools);
+    gtk_box_append(GTK_BOX(card), heading_row);
+
+    GtkWidget *list = gtk_list_box_new();
+    state->updates_list = GTK_LIST_BOX(list);
+    gtk_widget_add_css_class(list, "package-list");
+    gtk_list_box_set_selection_mode(
+        state->updates_list, GTK_SELECTION_NONE);
+
+    GtkWidget *scroll = gtk_scrolled_window_new();
+    gtk_widget_set_vexpand(scroll, true);
+    gtk_scrolled_window_set_policy(
+        GTK_SCROLLED_WINDOW(scroll),
+        GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
+    gtk_scrolled_window_set_child(
+        GTK_SCROLLED_WINDOW(scroll), list);
+    gtk_box_append(GTK_BOX(card), scroll);
+
+    gtk_box_append(GTK_BOX(page), card);
+
+    GtkWidget *external_card =
+        gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
+    gtk_widget_add_css_class(
+        external_card, "card");
+    gtk_widget_add_css_class(
+        external_card, "card-info");
+
+    GtkWidget *external_heading =
+        gtk_box_new(
+            GTK_ORIENTATION_HORIZONTAL, 10);
+    GtkWidget *external_icon =
+        make_icon(
+            "applications-system-symbolic", 22);
+    gtk_box_append(
+        GTK_BOX(external_heading),
+        external_icon);
+
+    GtkWidget *external_copy =
+        gtk_box_new(
+            GTK_ORIENTATION_VERTICAL, 1);
+    gtk_widget_set_hexpand(
+        external_copy, true);
+    gtk_box_append(
+        GTK_BOX(external_copy),
+        make_label(
+            "Flatpak & Cinnamon updates",
+            "card-title"));
+    state->external_updates_status =
+        make_label(
+            "Checking Flatpak and Cinnamon sources…",
+            "card-copy");
+    gtk_box_append(
+        GTK_BOX(external_copy),
+        state->external_updates_status);
+    gtk_box_append(
+        GTK_BOX(external_heading),
+        external_copy);
+
+    state->external_updates_spinner = gtk_spinner_new();
+    gtk_widget_set_size_request(state->external_updates_spinner, 24, 24);
+    gtk_widget_set_visible(state->external_updates_spinner, false);
+    gtk_box_append(GTK_BOX(external_heading),
+        state->external_updates_spinner);
+
+    state->external_flatpak_apply =
+        gtk_button_new_with_label(
+            "Update selected Flatpaks");
+    gtk_widget_add_css_class(
+        state->external_flatpak_apply,
+        "discover-details");
+    gtk_widget_set_sensitive(
+        state->external_flatpak_apply,
+        false);
+    g_signal_connect(
+        state->external_flatpak_apply,
+        "clicked",
+        G_CALLBACK(external_apply_clicked),
+        state);
+    gtk_box_append(
+        GTK_BOX(external_heading),
+        state->external_flatpak_apply);
+
+    state->external_cinnamon_apply =
+        gtk_button_new_with_label(
+            "Update selected Cinnamon");
+    gtk_widget_add_css_class(
+        state->external_cinnamon_apply,
+        "discover-details");
+    gtk_widget_set_sensitive(
+        state->external_cinnamon_apply,
+        false);
+    g_signal_connect(
+        state->external_cinnamon_apply,
+        "clicked",
+        G_CALLBACK(external_apply_clicked),
+        state);
+    gtk_box_append(
+        GTK_BOX(external_heading),
+        state->external_cinnamon_apply);
+
+    gtk_box_append(
+        GTK_BOX(external_card),
+        external_heading);
+
+    GtkWidget *external_list =
+        gtk_list_box_new();
+    state->external_updates_list =
+        GTK_LIST_BOX(external_list);
+    gtk_widget_add_css_class(
+        external_list, "package-list");
+    gtk_list_box_set_selection_mode(
+        state->external_updates_list,
+        GTK_SELECTION_NONE);
+    gtk_box_append(
+        GTK_BOX(external_card),
+        external_list);
+
+    gtk_box_append(
+        GTK_BOX(page),
+        external_card);
+
+    return page;
+}
+
+
+void refresh_history(WindowState *state)
+{
+    if (state == nullptr) return;
+    refresh_history_controller(&state->history);
+}
+
+void global_search_changed(
+    GtkSearchEntry *entry,
+    gpointer user_data)
+{
+    auto *state =
+        static_cast<WindowState *>(user_data);
+    if (state == nullptr ||
+        state->discover_search == nullptr ||
+        state->search_syncing) {
+        return;
+    }
+
+    const char *entry_text =
+        gtk_editable_get_text(GTK_EDITABLE(entry));
+    const std::string text =
+        entry_text == nullptr ? "" : entry_text;
+    const char *local =
+        gtk_editable_get_text(
+            GTK_EDITABLE(state->discover_search));
+    if (g_strcmp0(text.c_str(), local) != 0) {
+        state->search_syncing = true;
+        gtk_editable_set_text(
+            GTK_EDITABLE(state->discover_search),
+            text.c_str());
+        state->search_syncing = false;
+    } else {
+        /* No mirrored signal will rebuild the result set in this case. */
+        rebuild_discover(state);
+    }
+
+    if (!text.empty()) {
+        const char *visible =
+            state->stack == nullptr
+                ? nullptr
+                : gtk_stack_get_visible_child_name(state->stack);
+        if (visible == nullptr ||
+            std::strcmp(visible, "discover") != 0) {
+            /*
+             * A global search should move to Discover once, not re-select the
+             * navigation row on every keystroke.  Reassert focus afterwards
+             * so typing continues as one uninterrupted query.
+             */
+            select_page(state, 0);
+            gtk_widget_grab_focus(GTK_WIDGET(entry));
+            gtk_editable_set_position(GTK_EDITABLE(entry), -1);
+        }
+    }
+}
+
+
+void update_maximize_button(WindowState *state)
+{
+    if (state == nullptr ||
+        state->window == nullptr ||
+        state->maximize_button == nullptr) {
+        return;
+    }
+
+    const bool maximized =
+        gtk_window_is_maximized(state->window);
+    gtk_button_set_icon_name(
+        GTK_BUTTON(state->maximize_button),
+        maximized
+            ? "window-restore-symbolic"
+            : "window-maximize-symbolic");
+    gtk_widget_set_tooltip_text(
+        state->maximize_button,
+        maximized
+            ? "Restore window"
+            : "Maximize window");
+}
+
+void window_maximized_changed(
+    GObject *,
+    GParamSpec *,
+    gpointer user_data)
+{
+    update_maximize_button(
+        static_cast<WindowState *>(user_data));
+}
+
+void minimize_clicked(
+    GtkButton *,
+    gpointer user_data)
+{
+    auto *state =
+        static_cast<WindowState *>(user_data);
+    if (state != nullptr &&
+        state->window != nullptr) {
+        gtk_window_minimize(state->window);
+    }
+}
+
+void maximize_clicked(
+    GtkButton *,
+    gpointer user_data)
+{
+    auto *state =
+        static_cast<WindowState *>(user_data);
+    if (state == nullptr ||
+        state->window == nullptr) {
+        return;
+    }
+
+    if (gtk_window_is_maximized(
+            state->window)) {
+        gtk_window_unmaximize(
+            state->window);
+    } else {
+        gtk_window_maximize(
+            state->window);
+    }
+    update_maximize_button(state);
+}
+
+void close_clicked(
+    GtkButton *,
+    gpointer user_data)
+{
+    auto *state =
+        static_cast<WindowState *>(user_data);
+    if (state != nullptr &&
+        state->window != nullptr) {
+        gtk_window_close(state->window);
+    }
+}
+
+GtkWidget *make_header_bar(WindowState *state)
+{
+    GtkWidget *bar = gtk_header_bar_new();
+    gtk_widget_add_css_class(
+        bar, "infiltrator-titlebar");
+    gtk_widget_add_css_class(bar, "shell-header");
+    gtk_header_bar_set_show_title_buttons(
+        GTK_HEADER_BAR(bar), false);
+
+    /*
+     * Keep this shell structurally identical to System Settings: application
+     * identity at the leading edge, then one trailing group containing search
+     * followed by the conventional Minimize / Maximize / Close controls.
+     * Software deliberately differs only in its authored two-slash raster mark
+     * and its product identity copy.
+     */
+    GtkWidget *empty_title =
+        gtk_label_new("");
+    gtk_header_bar_set_title_widget(
+        GTK_HEADER_BAR(bar),
+        empty_title);
+
+    GtkWidget *brand =
+        gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    gtk_widget_add_css_class(
+        brand, "titlebar-brand");
+
+    GtkWidget *brand_icon_wrap =
+        gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    gtk_widget_add_css_class(
+        brand_icon_wrap, "titlebar-brand-icon");
+
+    GtkWidget *brand_logo =
+        make_embedded_picture(
+            kTitlebarLogoBase64,
+            "titlebar-logo",
+            GTK_CONTENT_FIT_CONTAIN);
+    if (brand_logo != nullptr) {
+        gtk_widget_set_size_request(
+            brand_logo, 48, 32);
+        gtk_widget_set_valign(
+            brand_logo, GTK_ALIGN_CENTER);
+        gtk_box_append(
+            GTK_BOX(brand_icon_wrap),
+            brand_logo);
+    } else {
+        GtkWidget *brand_icon =
+            make_icon(
+                "net.ssmith.infiltrator.software",
+                28);
+        gtk_widget_add_css_class(
+            brand_icon, "titlebar-logo-fallback");
+        gtk_box_append(
+            GTK_BOX(brand_icon_wrap),
+            brand_icon);
+    }
+    gtk_box_append(
+        GTK_BOX(brand),
+        brand_icon_wrap);
+
+    GtkWidget *brand_copy =
+        gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    GtkWidget *title =
+        make_label(
+            "Software",
+            "titlebar-title");
+    GtkWidget *subtitle =
+        make_label(
+            "Infiltrator OS",
+            "titlebar-subtitle");
+    gtk_box_append(GTK_BOX(brand_copy), title);
+    gtk_box_append(GTK_BOX(brand_copy), subtitle);
+    gtk_box_append(GTK_BOX(brand), brand_copy);
+    gtk_header_bar_pack_start(
+        GTK_HEADER_BAR(bar), brand);
+
+    GtkWidget *header_end =
+        gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+    gtk_widget_add_css_class(
+        header_end, "titlebar-header-end");
+
+    state->global_search =
+        gtk_search_entry_new();
+    gtk_widget_add_css_class(
+        state->global_search,
+        "global-search");
+    gtk_search_entry_set_placeholder_text(
+        GTK_SEARCH_ENTRY(state->global_search),
+        "Search for software, applications, and packages…");
+    gtk_widget_set_size_request(
+        state->global_search, 200, -1);
+    g_signal_connect(
+        state->global_search,
+        "search-changed",
+        G_CALLBACK(global_search_changed),
+        state);
+
+    GtkWidget *minimize =
+        gtk_button_new_from_icon_name(
+            "window-minimize-symbolic");
+    gtk_widget_add_css_class(
+        minimize, "window-control");
+    gtk_widget_set_tooltip_text(
+        minimize, "Minimize");
+    gtk_widget_set_focusable(
+        minimize, false);
+    g_signal_connect(
+        minimize,
+        "clicked",
+        G_CALLBACK(minimize_clicked),
+        state);
+
+    state->maximize_button =
+        gtk_button_new_from_icon_name(
+            "window-maximize-symbolic");
+    gtk_widget_add_css_class(
+        state->maximize_button,
+        "window-control");
+    gtk_widget_set_tooltip_text(
+        state->maximize_button,
+        "Maximize / Restore");
+    gtk_widget_set_focusable(
+        state->maximize_button, false);
+    g_signal_connect(
+        state->maximize_button,
+        "clicked",
+        G_CALLBACK(maximize_clicked),
+        state);
+
+    GtkWidget *close =
+        gtk_button_new_from_icon_name(
+            "window-close-symbolic");
+    gtk_widget_add_css_class(
+        close, "window-control");
+    gtk_widget_add_css_class(
+        close, "window-close-control");
+    gtk_widget_set_tooltip_text(
+        close, "Close");
+    gtk_widget_set_focusable(
+        close, false);
+    g_signal_connect(
+        close,
+        "clicked",
+        G_CALLBACK(close_clicked),
+        state);
+
+    /*
+     * One explicit trailing box makes the visual order deterministic, exactly
+     * as in System Settings: Search | Minimize | Maximize | Close.
+     */
+    gtk_box_append(
+        GTK_BOX(header_end),
+        state->global_search);
+    gtk_box_append(
+        GTK_BOX(header_end),
+        minimize);
+    gtk_box_append(
+        GTK_BOX(header_end),
+        state->maximize_button);
+    gtk_box_append(
+        GTK_BOX(header_end),
+        close);
+    gtk_header_bar_pack_end(
+        GTK_HEADER_BAR(bar),
+        header_end);
+
+    update_maximize_button(state);
+    return bar;
+}
+
+GtkWidget *make_status_bar()
+{
+    GtkWidget *bar = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    gtk_widget_add_css_class(bar, "statusbar");
+
+    GtkWidget *ready = make_label("Ready", "statusbar-text");
+    gtk_widget_set_hexpand(ready, true);
+    gtk_box_append(GTK_BOX(bar), ready);
+
+    const std::string common =
+        std::string("Common ") + INFILTRATR_COMMON_VERSION;
+    GtkWidget *common_label =
+        make_label(common.c_str(), "statusbar-text", 1.0F);
+    gtk_widget_set_margin_end(common_label, 14);
+    gtk_box_append(GTK_BOX(bar), common_label);
+
+    const std::string version =
+        std::string("Version ") + INFILTRATOR_SOFTWARE_VERSION;
+    GtkWidget *version_label =
+        make_label(version.c_str(), "statusbar-text", 1.0F);
+    gtk_box_append(GTK_BOX(bar), version_label);
+
+    return bar;
+}
+
+void destroy_window_state(gpointer data)
+{
+    auto *state = static_cast<WindowState *>(data);
+    if (state == nullptr) {
+        return;
+    }
+
+    if (state->installed.strings != nullptr) {
+        g_object_unref(state->installed.strings);
+        state->installed.strings = nullptr;
+    }
+    if (state->discover_categories != nullptr) {
+        g_object_unref(state->discover_categories);
+        state->discover_categories = nullptr;
+    }
+    if (state->discover_visible != nullptr) {
+        g_object_unref(state->discover_visible);
+        state->discover_visible = nullptr;
+    }
+    if (state->updates_refresh_timer_id != 0U) {
+        g_source_remove(state->updates_refresh_timer_id);
+        state->updates_refresh_timer_id = 0U;
+    }
+    if (state->updates_progress_timer_id != 0U) {
+        g_source_remove(state->updates_progress_timer_id);
+        state->updates_progress_timer_id = 0U;
+    }
+    delete state;
+}
+
+void ensure_update_indicator()
+{
+    gchar *program = g_find_program_in_path("infiltrator-software-tray");
+    if (program == nullptr) {
+        return;
+    }
+    g_free(program);
+
+    /*
+     * Ensure the tray exists, but do not replace a healthy resident instance
+     * every time the main window opens.  The tray owns a single-instance lock
+     * and already self-reexecs when it detects that its installed executable
+     * changed after an upgrade.  Forcing --replace here needlessly restarts the
+     * tray and triggers another package-state reconciliation during startup.
+     */
+    GError *error = nullptr;
+    if (!g_spawn_command_line_async(
+            "infiltrator-software-tray", &error)) {
+        if (error != nullptr) {
+            g_warning(
+                "Unable to start software update indicator: %s",
+                error->message);
+            g_error_free(error);
+        }
+    }
+}
+
+void select_page(WindowState *state, const int index)
+{
+    if (state == nullptr || state->navigation_list == nullptr ||
+        index < 0 || index >= 7) {
+        return;
+    }
+
+    GtkListBoxRow *row =
+        gtk_list_box_get_row_at_index(
+            state->navigation_list, index);
+    if (row != nullptr) {
+        gtk_list_box_select_row(
+            state->navigation_list, row);
+    }
+}
+
+gboolean window_key_pressed(
+    GtkEventControllerKey *,
+    guint keyval,
+    guint,
+    GdkModifierType state_mask,
+    gpointer user_data)
+{
+    auto *state = static_cast<WindowState *>(user_data);
+    if (state == nullptr ||
+        (state_mask & GDK_CONTROL_MASK) == 0) {
+        return FALSE;
+    }
+
+    if (keyval != GDK_KEY_k &&
+        keyval != GDK_KEY_K &&
+        keyval != GDK_KEY_s &&
+        keyval != GDK_KEY_S) {
+        return FALSE;
+    }
+
+    const bool kernels =
+        keyval == GDK_KEY_k ||
+        keyval == GDK_KEY_K;
+    state->pending_update_selection =
+        kernels ? "kernel" : "security";
+    select_page(state, 2);
+
+    if (state->updates_loaded &&
+        !state->updates_busy) {
+        if (kernels) {
+            select_kernel_updates(nullptr, state);
+        } else {
+            select_security_updates(nullptr, state);
+        }
+        state->pending_update_selection.clear();
+    }
+    return TRUE;
+}
+
+void activate(GtkApplication *application, gpointer)
+{
+    const bool open_updates =
+        g_object_get_data(
+            G_OBJECT(application),
+            "infiltrator-open-updates") != nullptr;
+
+    GList *windows =
+        gtk_application_get_windows(application);
+    GtkWindow *existing =
+        windows == nullptr
+            ? nullptr
+            : GTK_WINDOW(windows->data);
+    if (existing != nullptr) {
+        auto *state =
+            static_cast<WindowState *>(
+                g_object_get_data(
+                    G_OBJECT(existing),
+                    "infiltrator-window-state"));
+        if (open_updates && state != nullptr) {
+            select_page(state, 2);
+        }
+        gtk_window_present(existing);
+        g_object_set_data(
+            G_OBJECT(application),
+            "infiltrator-open-updates",
+            nullptr);
+        return;
+    }
+
+    GtkWidget *window = gtk_application_window_new(application);
+    gtk_window_set_title(GTK_WINDOW(window), "Software");
+    gtk_window_set_icon_name(GTK_WINDOW(window), "net.ssmith.infiltrator.software");
+    gtk_window_set_default_size(GTK_WINDOW(window), 1440, 860);
+    gtk_window_set_resizable(GTK_WINDOW(window), true);
+
+    auto *state = new WindowState{};
+    state->window = GTK_WINDOW(window);
+    std::string preferences_error;
+    if (!load_software_preferences(
+            state->preferences,
+            preferences_error) &&
+        !preferences_error.empty()) {
+        g_warning(
+            "Unable to load Software preferences: %s",
+            preferences_error.c_str());
+    }
+    g_signal_connect(
+        window,
+        "notify::maximized",
+        G_CALLBACK(window_maximized_changed),
+        state);
+
+    GtkEventController *keyboard_controller =
+        gtk_event_controller_key_new();
+    g_signal_connect(
+        keyboard_controller,
+        "key-pressed",
+        G_CALLBACK(window_key_pressed),
+        state);
+    gtk_widget_add_controller(
+        window,
+        keyboard_controller);
+
+    state->theme.initialise();
+    ensure_update_indicator();
+
+    g_object_set_data_full(
+        G_OBJECT(window), "infiltrator-window-state",
+        state, destroy_window_state);
+
+    GtkWidget *header = make_header_bar(state);
+    gtk_window_set_titlebar(GTK_WINDOW(window), header);
+
+    GtkWidget *root = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    gtk_widget_add_css_class(root, "app-shell");
+    gtk_window_set_child(GTK_WINDOW(window), root);
+
+    GtkWidget *body = gtk_grid_new();
+    gtk_grid_set_column_homogeneous(
+        GTK_GRID(body), true);
+    gtk_widget_set_vexpand(body, true);
+    gtk_box_append(GTK_BOX(root), body);
+
+    GtkWidget *stack = gtk_stack_new();
+    state->stack = GTK_STACK(stack);
+    /*
+     * Page trees are now constructed before they become visible and their
+     * expensive refresh work starts only from the subsequent idle callback.
+     * That makes the InfiltratorOS 110 ms shell crossfade safe again without
+     * allowing backend work to hold a half-painted transition on screen.
+     */
+    gtk_stack_set_transition_type(
+        state->stack, GTK_STACK_TRANSITION_TYPE_CROSSFADE);
+    gtk_stack_set_transition_duration(state->stack, 110U);
+    gtk_widget_set_hexpand(stack, true);
+    gtk_widget_set_vexpand(stack, true);
+
+    gtk_grid_attach(
+        GTK_GRID(body),
+        make_navigation(state),
+        0, 0, 1, 1);
+    gtk_grid_attach(
+        GTK_GRID(body),
+        stack,
+        1, 0, 5, 1);
+
+    /*
+     * First paint owns only Discover.  Every other page is constructed on
+     * first navigation, matching the lazy-module lifecycle used by current
+     * InfiltratorOS System Settings.  This removes six inactive GTK widget
+     * trees from Software startup without changing their refresh semantics.
+     */
+    gtk_stack_add_named(
+        state->stack,
+        make_discover_page(state),
+        "discover");
+
+    const int initial_page = open_updates ? 2 : 0;
+    select_page(state, initial_page);
+    gtk_box_append(GTK_BOX(root), make_status_bar());
+
+    gtk_window_present(GTK_WINDOW(window));
+    state->window_presented = true;
+
+    g_idle_add_full(
+        G_PRIORITY_DEFAULT_IDLE,
+        [](gpointer data) -> gboolean {
+            auto *idle_window = GTK_WINDOW(data);
+            auto *idle_state =
+                static_cast<WindowState *>(
+                    g_object_get_data(
+                        G_OBJECT(idle_window),
+                        "infiltrator-window-state"));
+            if (idle_state != nullptr &&
+                idle_state->navigation_list != nullptr) {
+                GtkListBoxRow *selected =
+                    gtk_list_box_get_selected_row(
+                        idle_state->navigation_list);
+                if (selected != nullptr) {
+                    refresh_page_if_needed(
+                        idle_state,
+                        gtk_list_box_row_get_index(selected));
+                }
+            }
+            return G_SOURCE_REMOVE;
+        },
+        g_object_ref(window),
+        [](gpointer data) {
+            g_object_unref(data);
+        });
+
+    g_object_set_data(
+        G_OBJECT(application),
+        "infiltrator-open-updates",
+        nullptr);
+}
+
+int command_line(
+    GApplication *application,
+    GApplicationCommandLine *command_line,
+    gpointer)
+{
+    GVariantDict *options =
+        g_application_command_line_get_options_dict(command_line);
+    const bool open_updates =
+        options != nullptr &&
+        g_variant_dict_contains(options, "updates");
+
+    g_object_set_data(
+        G_OBJECT(application),
+        "infiltrator-open-updates",
+        open_updates ? GINT_TO_POINTER(1) : nullptr);
+    g_application_activate(application);
+    return 0;
+}
+
+} // namespace infiltrator::software::app
+
+int main(int argc, char **argv)
+{
+    GtkApplication *application = gtk_application_new(
+        "net.ssmith.infiltrator.software",
+        G_APPLICATION_HANDLES_COMMAND_LINE);
+
+    static const GOptionEntry options[] = {
+        {
+            "updates",
+            0,
+            0,
+            G_OPTION_ARG_NONE,
+            nullptr,
+            "Open the Updates page",
+            nullptr
+        },
+        {nullptr, 0, 0, G_OPTION_ARG_NONE, nullptr, nullptr, nullptr}
+    };
+    g_application_add_main_option_entries(
+        G_APPLICATION(application),
+        options);
+
+    g_signal_connect(
+        application,
+        "activate",
+        G_CALLBACK(infiltrator::software::app::activate),
+        nullptr);
+    g_signal_connect(
+        application,
+        "command-line",
+        G_CALLBACK(infiltrator::software::app::command_line),
+        nullptr);
+
+    const int status =
+        g_application_run(
+            G_APPLICATION(application),
+            argc,
+            argv);
+    g_object_unref(application);
+    return status;
+}
