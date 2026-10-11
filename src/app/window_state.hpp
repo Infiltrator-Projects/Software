@@ -29,10 +29,12 @@ struct ShellState {
 };
 
 /*
- * WindowState is the composition root for shell and page owners. Discover and
- * Updates no longer have a second reference-member surface. System and Repair
- * retain only their pre-existing compatibility refs while those two extracted
- * views are converted to owner-qualified access; do not add new aliases.
+ * WindowState is the shell composition root.  Page/controller state is owned
+ * exactly once by the named members below and is not re-exported through a
+ * parallel forest of reference members.  The one system_critical compatibility
+ * reference remains only because the legacy main.cpp spelling collides with
+ * PackageRecord::system_critical when represented as a macro; it disappears
+ * with the main.cpp split.
  */
 struct WindowState final : ShellState {
     DiscoverPageState discover;
@@ -44,49 +46,16 @@ struct WindowState final : ShellState {
     HistoryController history;
     SoftwarePreferences preferences{};
 
-    // Final compatibility tranche: System view.
-    GtkListBox *&system_list = system.system_list;
-    GtkWidget *&system_status = system.system_status;
-    GtkWidget *&system_count = system.system_count;
-    GtkWidget *&system_updates = system.system_updates;
     GtkWidget *&system_critical = system.system_critical;
-    GtkWidget *&system_refresh = system.system_refresh;
-    GtkWidget *&system_review_updates = system.system_review_updates;
-    std::vector<PackageRecord> &system_records = system.system_records;
-    std::vector<PackageRecord> &system_update_records = system.system_update_records;
-    unsigned int &system_generation = system.system_generation;
-    bool &system_busy = system.system_busy;
-    bool &system_loaded = system.system_loaded;
-
-    // Final compatibility tranche: Repair view.
-    GtkListBox *&repair_list = repair.repair_list;
-    GtkWidget *&repair_status = repair.repair_status;
-    GtkWidget *&repair_engine = repair.repair_engine;
-    GtkWidget *&repair_sources = repair.repair_sources;
-    GtkWidget *&repair_issues = repair.repair_issues;
-    GtkWidget *&repair_health_banner = repair.repair_health_banner;
-    GtkWidget *&repair_health_icon = repair.repair_health_icon;
-    GtkWidget *&repair_health_title = repair.repair_health_title;
-    GtkWidget *&repair_health_copy = repair.repair_health_copy;
-    GtkWidget *&repair_recheck = repair.repair_recheck;
-    GtkWidget *&repair_rebuild = repair.repair_rebuild;
-    GtkWidget *&repair_configure = repair.repair_configure;
-    unsigned int &repair_generation = repair.repair_generation;
-    bool &repair_busy = repair.repair_busy;
-    bool &repair_interrupted = repair.repair_interrupted;
-    bool &repair_loaded = repair.repair_loaded;
-
-    // Repair currently updates two Discover health presentation fields.
-    GtkWidget *&discover_health_banner_state = discover.discover_health_banner_state;
-    GtkWidget *&discover_health_summary = discover.discover_health_summary;
 };
 
 } // namespace infiltrator::software::app
 
 /*
- * The large Discover/Updates compatibility surface is confined to the legacy
- * app translation unit while it is split. These macros are not object members,
- * cannot be captured or addressed, and are deleted with that source split.
+ * Final main.cpp source-compatibility bridge.  These are preprocessor aliases,
+ * not WindowState members, and therefore do not create a second ownership
+ * surface.  Do not add new aliases; delete this block with the legacy shell
+ * split.
  */
 #ifdef INFILTRATOR_SOFTWARE_KERNEL_MANAGER_HPP
 #define discover_visible discover.discover_visible
@@ -101,7 +70,9 @@ struct WindowState final : ShellState {
 #define discover_update_preview discover.discover_update_preview
 #define discover_repository_preview discover.discover_repository_preview
 #define discover_activity_preview discover.discover_activity_preview
+#define discover_health_banner_state discover.discover_health_banner_state
 #define discover_updates_summary discover.discover_updates_summary
+#define discover_health_summary discover.discover_health_summary
 #define discover_repositories_summary discover.discover_repositories_summary
 #define discover_records discover.discover_records
 #define discover_search_texts discover.discover_search_texts
@@ -151,6 +122,35 @@ struct WindowState final : ShellState {
 #define updates_last_metadata_refresh_us updates.updates_last_metadata_refresh_us
 #define updates_refresh_timer_id updates.updates_refresh_timer_id
 #define updates_loaded updates.updates_loaded
+
+#define system_list system.system_list
+#define system_status system.system_status
+#define system_count system.system_count
+#define system_updates system.system_updates
+#define system_refresh system.system_refresh
+#define system_review_updates system.system_review_updates
+#define system_records system.system_records
+#define system_update_records system.system_update_records
+#define system_generation system.system_generation
+#define system_busy system.system_busy
+#define system_loaded system.system_loaded
+
+#define repair_list repair.repair_list
+#define repair_status repair.repair_status
+#define repair_engine repair.repair_engine
+#define repair_sources repair.repair_sources
+#define repair_issues repair.repair_issues
+#define repair_health_banner repair.repair_health_banner
+#define repair_health_icon repair.repair_health_icon
+#define repair_health_title repair.repair_health_title
+#define repair_health_copy repair.repair_health_copy
+#define repair_recheck repair.repair_recheck
+#define repair_rebuild repair.repair_rebuild
+#define repair_configure repair.repair_configure
+#define repair_generation repair.repair_generation
+#define repair_busy repair.repair_busy
+#define repair_interrupted repair.repair_interrupted
+#define repair_loaded repair.repair_loaded
 #endif
 
 #endif
