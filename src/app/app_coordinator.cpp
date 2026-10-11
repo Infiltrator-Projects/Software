@@ -103,7 +103,9 @@ void refresh_updates_if_needed(WindowState *state)
 
 void refresh_system_if_needed(WindowState *state)
 {
-    if (state != nullptr && !system_page_busy(state->system)) {
+    if (state != nullptr &&
+        !system_page_loaded(state->system) &&
+        !system_page_busy(state->system)) {
         refresh_system(state, false);
     }
 }
