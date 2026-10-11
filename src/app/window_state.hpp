@@ -52,9 +52,6 @@ struct WindowState final : ShellState {
  * complete, and only for the explicitly marked legacy translation units.
  * Ordinary includes of WindowState and page headers never expose these macros.
  */
-#ifdef INFILTRATOR_SOFTWARE_SYSTEM_VIEW_LEGACY_ALIASES
-#include "app/system_view_legacy_aliases.hpp"
-#endif
 #ifdef INFILTRATOR_SOFTWARE_REPAIR_VIEW_LEGACY_ALIASES
 #include "app/repair_view_legacy_aliases.hpp"
 #endif
