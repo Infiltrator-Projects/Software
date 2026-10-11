@@ -155,25 +155,25 @@ GtkWidget *make_system_row(
 
 void rebuild_system(WindowState *state)
 {
-    if (state == nullptr || state->system_list == nullptr) {
+    if (state == nullptr || state->system.system_list == nullptr) {
         return;
     }
 
     GtkWidget *child =
         gtk_widget_get_first_child(
-            GTK_WIDGET(state->system_list));
+            GTK_WIDGET(state->system.system_list));
     while (child != nullptr) {
         GtkWidget *next =
             gtk_widget_get_next_sibling(child);
-        gtk_list_box_remove(state->system_list, child);
+        gtk_list_box_remove(state->system.system_list, child);
         child = next;
     }
 
     std::unordered_map<std::string, const PackageRecord *> updates;
-    updates.reserve(state->system_update_records.size());
+    updates.reserve(state->system.system_update_records.size());
     std::size_t critical_count = 0U;
     for (const PackageRecord &update :
-         state->system_update_records) {
+         state->system.system_update_records) {
         updates[system_identity(update)] = &update;
         if (update.system_critical) {
             ++critical_count;
@@ -181,7 +181,7 @@ void rebuild_system(WindowState *state)
     }
 
     for (const PackageRecord &package :
-         state->system_records) {
+         state->system.system_records) {
         const auto found =
             updates.find(system_identity(package));
         const PackageRecord *update =
@@ -193,21 +193,21 @@ void rebuild_system(WindowState *state)
         gtk_list_box_row_set_child(
             GTK_LIST_BOX_ROW(row),
             make_system_row(package, update));
-        gtk_list_box_append(state->system_list, row);
+        gtk_list_box_append(state->system.system_list, row);
     }
 
-    if (state->system_count != nullptr) {
+    if (state->system.system_count != nullptr) {
         const std::string count =
-            std::to_string(state->system_records.size());
+            std::to_string(state->system.system_records.size());
         gtk_label_set_text(
-            GTK_LABEL(state->system_count), count.c_str());
+            GTK_LABEL(state->system.system_count), count.c_str());
     }
-    if (state->system_updates != nullptr) {
+    if (state->system.system_updates != nullptr) {
         const std::string count =
             std::to_string(
-                state->system_update_records.size());
+                state->system.system_update_records.size());
         gtk_label_set_text(
-            GTK_LABEL(state->system_updates), count.c_str());
+            GTK_LABEL(state->system.system_updates), count.c_str());
     }
     if (state->system.system_critical != nullptr) {
         const std::string count =
@@ -215,10 +215,10 @@ void rebuild_system(WindowState *state)
         gtk_label_set_text(
             GTK_LABEL(state->system.system_critical), count.c_str());
     }
-    if (state->system_review_updates != nullptr) {
+    if (state->system.system_review_updates != nullptr) {
         gtk_widget_set_sensitive(
-            state->system_review_updates,
-            !state->system_update_records.empty());
+            state->system.system_review_updates,
+            !state->system.system_update_records.empty());
     }
 }
 
@@ -272,15 +272,15 @@ void system_complete(
         delete result;
         return;
     }
-    if (result->generation != state->system_generation) {
+    if (result->generation != state->system.system_generation) {
         delete result;
         return;
     }
 
-    state->system_busy = false;
-    state->system_records =
+    state->system.system_busy = false;
+    state->system.system_records =
         std::move(result->components);
-    state->system_update_records =
+    state->system.system_update_records =
         std::move(result->updates);
 
     const std::string error = result->error;
@@ -290,7 +290,7 @@ void system_complete(
 
     rebuild_system(state);
 
-    if (state->system_status != nullptr) {
+    if (state->system.system_status != nullptr) {
         std::ostringstream message;
         if (!error.empty()) {
             message
@@ -298,7 +298,7 @@ void system_complete(
                 << error;
         } else {
             message
-                << state->system_records.size()
+                << state->system.system_records.size()
                 << " kernel, driver and core system components read "
                 << (from_engine
                         ? "from the shared native package engine."
@@ -307,28 +307,28 @@ void system_complete(
                 message
                     << " Update status: "
                     << warning;
-            } else if (state->system_update_records.empty()) {
+            } else if (state->system.system_update_records.empty()) {
                 message
                     << " No preferred system updates are currently available.";
             } else {
                 message
                     << " "
-                    << state->system_update_records.size()
+                    << state->system.system_update_records.size()
                     << " preferred system update"
-                    << (state->system_update_records.size() == 1U
+                    << (state->system.system_update_records.size() == 1U
                             ? " is"
                             : "s are")
                     << " available.";
             }
         }
         gtk_label_set_text(
-            GTK_LABEL(state->system_status),
+            GTK_LABEL(state->system.system_status),
             message.str().c_str());
     }
 
-    if (state->system_refresh != nullptr) {
+    if (state->system.system_refresh != nullptr) {
         gtk_widget_set_sensitive(
-            state->system_refresh, true);
+            state->system.system_refresh, true);
     }
 }
 
@@ -338,29 +338,29 @@ void refresh_system(
 {
     if (state == nullptr ||
         state->window == nullptr ||
-        state->system_list == nullptr ||
-        state->system_busy) {
+        state->system.system_list == nullptr ||
+        state->system.system_busy) {
         return;
     }
 
-    state->system_loaded = true;
-    state->system_busy = true;
-    ++state->system_generation;
+    state->system.system_loaded = true;
+    state->system.system_busy = true;
+    ++state->system.system_generation;
 
-    if (state->system_status != nullptr) {
+    if (state->system.system_status != nullptr) {
         gtk_label_set_text(
-            GTK_LABEL(state->system_status),
+            GTK_LABEL(state->system.system_status),
             refresh_metadata
                 ? "Refreshing repository state and system components…"
                 : "Reading system components from shared state…");
     }
-    if (state->system_refresh != nullptr) {
+    if (state->system.system_refresh != nullptr) {
         gtk_widget_set_sensitive(
-            state->system_refresh, false);
+            state->system.system_refresh, false);
     }
 
     auto *data = new SystemTaskData{
-        state->system_generation,
+        state->system.system_generation,
         refresh_metadata};
     GTask *task = g_task_new(
         G_OBJECT(state->window),
@@ -628,7 +628,7 @@ void release_upgrade_apply_complete(
 
     if (apply != nullptr &&
         apply->state != nullptr &&
-        apply->state->system_status != nullptr) {
+        apply->state->system.system_status != nullptr) {
         std::string message;
         if (success) {
             message =
@@ -653,7 +653,7 @@ void release_upgrade_apply_complete(
         }
         gtk_label_set_text(
             GTK_LABEL(
-                apply->state->system_status),
+                apply->state->system.system_status),
             message.c_str());
     }
 
@@ -710,10 +710,10 @@ void release_upgrade_confirm_response(
             &error);
     if (process == nullptr) {
         if (apply->state != nullptr &&
-            apply->state->system_status != nullptr) {
+            apply->state->system.system_status != nullptr) {
             gtk_label_set_text(
                 GTK_LABEL(
-                    apply->state->system_status),
+                    apply->state->system.system_status),
                 error != nullptr &&
                 error->message != nullptr
                     ? error->message
@@ -725,10 +725,10 @@ void release_upgrade_confirm_response(
     }
 
     if (apply->state != nullptr &&
-        apply->state->system_status != nullptr) {
+        apply->state->system.system_status != nullptr) {
         gtk_label_set_text(
             GTK_LABEL(
-                apply->state->system_status),
+                apply->state->system.system_status),
             "Release upgrade is running. Do not shut down the computer.");
     }
 
@@ -766,9 +766,9 @@ void release_upgrade_plan_complete(
     }
 
     if (!result->error.empty()) {
-        if (state->system_status != nullptr) {
+        if (state->system.system_status != nullptr) {
             gtk_label_set_text(
-                GTK_LABEL(state->system_status),
+                GTK_LABEL(state->system.system_status),
                 result->error.c_str());
         }
         delete result;
@@ -841,9 +841,9 @@ void system_release_upgrade_clicked(
         return;
     }
 
-    if (state->system_status != nullptr) {
+    if (state->system.system_status != nullptr) {
         gtk_label_set_text(
-            GTK_LABEL(state->system_status),
+            GTK_LABEL(state->system.system_status),
             "Checking Linux Mint release-upgrade metadata and calculating the exact target package plan…");
     }
 
@@ -871,9 +871,9 @@ void system_snapshots_clicked(
             "pkexec timeshift-gtk",
             &error) &&
         state != nullptr &&
-        state->system_status != nullptr) {
+        state->system.system_status != nullptr) {
         gtk_label_set_text(
-            GTK_LABEL(state->system_status),
+            GTK_LABEL(state->system.system_status),
             error != nullptr &&
             error->message != nullptr
                 ? error->message
@@ -904,13 +904,13 @@ GtkWidget *make_system_page(WindowState *state)
         GTK_GRID(stats),
         make_stat_card(
             "COMPONENTS", "0", "stat-info",
-            &state->system_count),
+            &state->system.system_count),
         0, 0, 1, 1);
     gtk_grid_attach(
         GTK_GRID(stats),
         make_stat_card(
             "UPDATES", "0", "stat-operation",
-            &state->system_updates),
+            &state->system.system_updates),
         1, 0, 1, 1);
     gtk_grid_attach(
         GTK_GRID(stats),
@@ -924,43 +924,43 @@ GtkWidget *make_system_page(WindowState *state)
         gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
     gtk_widget_add_css_class(controls, "card");
 
-    state->system_status =
+    state->system.system_status =
         make_label(
             "System inventory has not been loaded yet.",
             "card-copy");
     gtk_label_set_wrap(
-        GTK_LABEL(state->system_status), true);
+        GTK_LABEL(state->system.system_status), true);
     gtk_widget_set_hexpand(
-        state->system_status, true);
+        state->system.system_status, true);
     gtk_box_append(
-        GTK_BOX(controls), state->system_status);
+        GTK_BOX(controls), state->system.system_status);
 
-    state->system_refresh =
+    state->system.system_refresh =
         gtk_button_new_with_label("Refresh");
     gtk_widget_add_css_class(
-        state->system_refresh, "control-button");
+        state->system.system_refresh, "control-button");
     g_signal_connect(
-        state->system_refresh,
+        state->system.system_refresh,
         "clicked",
         G_CALLBACK(system_refresh_clicked),
         state);
     gtk_box_append(
-        GTK_BOX(controls), state->system_refresh);
+        GTK_BOX(controls), state->system.system_refresh);
 
-    state->system_review_updates =
+    state->system.system_review_updates =
         gtk_button_new_with_label("Review system updates");
     gtk_widget_add_css_class(
-        state->system_review_updates, "accent-button");
+        state->system.system_review_updates, "accent-button");
     gtk_widget_set_sensitive(
-        state->system_review_updates, false);
+        state->system.system_review_updates, false);
     g_signal_connect(
-        state->system_review_updates,
+        state->system.system_review_updates,
         "clicked",
         G_CALLBACK(system_review_updates_clicked),
         state);
     gtk_box_append(
         GTK_BOX(controls),
-        state->system_review_updates);
+        state->system.system_review_updates);
 
     GtkWidget *kernels =
         gtk_button_new_with_label(
@@ -1019,10 +1019,10 @@ GtkWidget *make_system_page(WindowState *state)
     gtk_box_append(GTK_BOX(card), heading);
 
     GtkWidget *list = gtk_list_box_new();
-    state->system_list = GTK_LIST_BOX(list);
+    state->system.system_list = GTK_LIST_BOX(list);
     gtk_widget_add_css_class(list, "package-list");
     gtk_list_box_set_selection_mode(
-        state->system_list,
+        state->system.system_list,
         GTK_SELECTION_NONE);
 
     GtkWidget *scroll =
