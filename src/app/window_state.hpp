@@ -32,7 +32,7 @@ struct ShellState {
  * WindowState is the shell composition root. Page/controller state is owned
  * exactly once by the named members below. It deliberately does not re-export
  * page widgets, vectors, timers, generations, or loaded flags: callers use the
- * page/controller owner instead. Do not add new aliases here.
+ * page/controller owner instead; do not add new aliases here.
  *
  * The single system_critical compatibility reference remains because the
  * quarantined legacy provider's spelling collides with
