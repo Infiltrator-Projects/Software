@@ -45,6 +45,13 @@ struct WindowState final : ShellState {
     RepositoryController repositories;
     HistoryController history;
     SoftwarePreferences preferences{};
+
+    /*
+     * One temporary collision-safe bridge remains for old main.cpp only.  A
+     * macro cannot represent this spelling because PackageRecord also has a
+     * system_critical field.  Delete this member with the main.cpp split.
+     */
+    GtkWidget *&system_critical = system.system_critical;
 };
 
 } // namespace infiltrator::software::app
@@ -125,7 +132,6 @@ struct WindowState final : ShellState {
 #define system_status system.system_status
 #define system_count system.system_count
 #define system_updates system.system_updates
-#define system_critical system.system_critical
 #define system_refresh system.system_refresh
 #define system_review_updates system.system_review_updates
 #define system_records system.system_records
