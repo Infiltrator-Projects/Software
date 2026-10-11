@@ -80,7 +80,7 @@ void select_update_preset(
      * during its normal first refresh after navigation.
      */
     if (updates_controller_loaded(state->updates) &&
-        !state->updates.updates_busy) {
+        !updates_controller_busy(state->updates)) {
         refresh_updates(state, false);
     }
 }
@@ -88,15 +88,7 @@ void select_update_preset(
 void destroy_updates_page(WindowState *state)
 {
     if (state == nullptr) return;
-
-    if (state->updates.updates_refresh_timer_id != 0U) {
-        g_source_remove(state->updates.updates_refresh_timer_id);
-        state->updates.updates_refresh_timer_id = 0U;
-    }
-    if (state->updates.updates_progress_timer_id != 0U) {
-        g_source_remove(state->updates.updates_progress_timer_id);
-        state->updates.updates_progress_timer_id = 0U;
-    }
+    destroy_updates_controller(state->updates);
 }
 
 } // namespace infiltrator::software::app
