@@ -1,3 +1,18 @@
+infiltrator-software (0.3.77) unstable; urgency=high
+
+  * Remove the obsolete transitional app-shell contract now that Discover and
+    Updates expose their real page interfaces directly.
+  * Stop refreshing the System page on every navigation selection once its
+    owner state is already loaded and idle.
+  * Remove System view dependence on legacy state-rewriting macros and use the
+    explicit SystemPageState owner for all view, task and release-upgrade state.
+  * Stop injecting System compatibility aliases from WindowState, reducing the
+    active compatibility bridge to Repair and the quarantined legacy provider.
+  * Preserve the full build, contract, engine smoke, graphical launch, AppStream
+    and Debian-package verification gates for the coupling reduction.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Mon, 12 Oct 2026 10:30:00 +1100
+
 infiltrator-software (0.3.76) unstable; urgency=high
 
   * Move System and Repair compatibility spellings out of public page headers

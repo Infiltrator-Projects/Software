@@ -34,6 +34,11 @@
   <url type="homepage">https://github.com/Infiltrator-Projects/Software</url>
 
   <releases>
+    <release version="0.3.77" date="2026-10-12">
+      <description>
+        <p>Further reduces application-layer brittleness by removing the obsolete transitional shell contract, preventing redundant System refreshes, and migrating the System view away from legacy state-rewriting aliases to explicit owner-qualified state.</p>
+      </description>
+    </release>
     <release version="0.3.76" date="2026-10-12">
       <description>
         <p>Confines transitional System and Repair state aliases to explicit compatibility-only translation units, removes include-order macro leakage from public page headers, and replaces the legacy main-macro probe with a dedicated source marker.</p>
@@ -171,7 +176,7 @@
     </release>
     <release version="0.3.25" date="2026-09-24">
       <description>
-        <p>Keeps update installation visibly active on the Updates page with animated elapsed progress through privileged execution and final verification, while retaining the live durable transaction History view.</p>
+        <p>Keeps update installation visibly active on the Updates page with animated elapsed progress through privileged execution and final state verification, while retaining the live durable transaction History view.</p>
       </description>
     </release>
     <release version="0.3.24" date="2026-09-24">
