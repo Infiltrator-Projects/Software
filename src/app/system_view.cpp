@@ -209,11 +209,11 @@ void rebuild_system(WindowState *state)
         gtk_label_set_text(
             GTK_LABEL(state->system_updates), count.c_str());
     }
-    if (state->system_critical != nullptr) {
+    if (state->system.system_critical != nullptr) {
         const std::string count =
             std::to_string(critical_count);
         gtk_label_set_text(
-            GTK_LABEL(state->system_critical), count.c_str());
+            GTK_LABEL(state->system.system_critical), count.c_str());
     }
     if (state->system_review_updates != nullptr) {
         gtk_widget_set_sensitive(
@@ -916,7 +916,7 @@ GtkWidget *make_system_page(WindowState *state)
         GTK_GRID(stats),
         make_stat_card(
             "SYSTEM-CRITICAL", "0", "stat-warning",
-            &state->system_critical),
+            &state->system.system_critical),
         2, 0, 1, 1);
     gtk_box_append(GTK_BOX(page), stats);
 
