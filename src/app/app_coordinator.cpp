@@ -13,7 +13,6 @@
 #include "app/updates_controller.hpp"
 #include "app/updates_view.hpp"
 #include "app/window_state.hpp"
-#include "core/update_freshness.hpp"
 
 namespace infiltrator::software::app {
 
@@ -24,7 +23,6 @@ using infiltrator::software::installed_controller_loaded;
 using infiltrator::software::refresh_history_controller;
 using infiltrator::software::refresh_installed_controller;
 using infiltrator::software::repository_controller_loaded;
-using infiltrator::software::update_metadata_refresh_due;
 
 namespace {
 
@@ -96,17 +94,16 @@ void refresh_updates_if_needed(WindowState *state)
     if (state == nullptr) return;
     if (!updates_controller_loaded(state->updates)) {
         refresh_updates(state, false);
-    } else if (update_metadata_refresh_due(
-                   g_get_monotonic_time(),
-                   state->updates.updates_last_metadata_refresh_us,
-                   state->updates.updates_busy)) {
+    } else if (updates_controller_metadata_refresh_due(
+                   state->updates,
+                   g_get_monotonic_time())) {
         refresh_updates_internal(state, true, false);
     }
 }
 
 void refresh_system_if_needed(WindowState *state)
 {
-    if (state != nullptr && !state->system.system_busy) {
+    if (state != nullptr && !system_page_busy(state->system)) {
         refresh_system(state, false);
     }
 }
@@ -132,28 +129,18 @@ void refresh_repair_if_needed(WindowState *state)
     }
 }
 
-void stop_updates_refresh_timer(WindowState *state)
-{
-    if (state == nullptr || state->updates.updates_refresh_timer_id == 0U) {
-        return;
-    }
-    g_source_remove(state->updates.updates_refresh_timer_id);
-    state->updates.updates_refresh_timer_id = 0U;
-}
-
 gboolean periodic_updates_refresh(gpointer user_data)
 {
     auto *state = static_cast<WindowState *>(user_data);
     if (state == nullptr ||
         !updates_controller_loaded(state->updates) ||
-        state->updates.updates_busy) {
+        updates_controller_busy(state->updates)) {
         return G_SOURCE_CONTINUE;
     }
 
-    if (update_metadata_refresh_due(
-            g_get_monotonic_time(),
-            state->updates.updates_last_metadata_refresh_us,
-            state->updates.updates_busy)) {
+    if (updates_controller_metadata_refresh_due(
+            state->updates,
+            g_get_monotonic_time())) {
         refresh_updates_internal(state, true, false);
     }
     return G_SOURCE_CONTINUE;
@@ -162,14 +149,11 @@ gboolean periodic_updates_refresh(gpointer user_data)
 void updates_selection_changed(WindowState *state, const bool selected)
 {
     if (state == nullptr) return;
-    if (!selected) {
-        stop_updates_refresh_timer(state);
-        return;
-    }
-    if (state->updates.updates_refresh_timer_id == 0U) {
-        state->updates.updates_refresh_timer_id =
-            g_timeout_add_seconds(60U, periodic_updates_refresh, state);
-    }
+    updates_controller_set_selected(
+        state->updates,
+        selected,
+        periodic_updates_refresh,
+        state);
 }
 
 void no_selection_hook(WindowState *, bool) {}
