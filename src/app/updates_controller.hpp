@@ -70,6 +70,22 @@ inline bool updates_controller_loaded(
     return controller.updates_loaded;
 }
 
+[[nodiscard]] bool updates_controller_busy(
+    const UpdatesController &controller) noexcept;
+
+[[nodiscard]] bool updates_controller_metadata_refresh_due(
+    const UpdatesController &controller,
+    gint64 now_us) noexcept;
+
+void updates_controller_set_selected(
+    UpdatesController &controller,
+    bool selected,
+    GSourceFunc refresh_callback,
+    gpointer user_data);
+
+void destroy_updates_controller(
+    UpdatesController &controller) noexcept;
+
 struct UpdatesRefreshRequest {
     unsigned int generation{0U};
     bool refresh_metadata{false};
