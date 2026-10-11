@@ -10,6 +10,7 @@ struct WindowState;
 
 GtkWidget *make_navigation(WindowState *state);
 void refresh_page_if_needed(WindowState *state, int index);
+void refresh_selected_page(WindowState *state);
 
 } // namespace infiltrator::software::app
 
