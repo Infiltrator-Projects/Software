@@ -39,12 +39,13 @@ void refresh_repair(WindowState *state, bool refresh_metadata);
 } // namespace infiltrator::software::app
 
 /*
- * repair_view.cpp still uses the historical WindowState spelling.  When this
- * header is the translation unit's first view header, map those spellings to
- * the owned RepairPageState.  WindowState itself never exposes these aliases.
+ * Temporary source-compatibility spellings exist only for the unmigrated
+ * Repair/legacy implementation units.  The coordinator is deliberately
+ * excluded so cross-page code can only use the public RepairPageState boundary.
  */
 #if !defined(INFILTRATOR_SOFTWARE_WINDOW_STATE_HPP) && \
-    !defined(INFILTRATOR_SOFTWARE_KERNEL_MANAGER_HPP)
+    !defined(INFILTRATOR_SOFTWARE_KERNEL_MANAGER_HPP) && \
+    !defined(INFILTRATOR_SOFTWARE_APP_COORDINATOR_HPP)
 #define repair_list repair.repair_list
 #define repair_status repair.repair_status
 #define repair_engine repair.repair_engine
