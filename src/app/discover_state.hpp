@@ -10,6 +10,23 @@
 #include <string>
 #include <vector>
 
+/*
+ * A pair of temporary Repair compatibility spellings may be active in the
+ * legacy translation unit before this owner header is reached.  Never allow
+ * those macros to rewrite the actual DiscoverPageState declaration or its
+ * owner-local helpers; restore them only after this header has been parsed.
+ */
+#ifdef discover_health_banner_state
+#pragma push_macro("discover_health_banner_state")
+#undef discover_health_banner_state
+#define INFILTRATOR_RESTORE_DISCOVER_HEALTH_BANNER_STATE 1
+#endif
+#ifdef discover_health_summary
+#pragma push_macro("discover_health_summary")
+#undef discover_health_summary
+#define INFILTRATOR_RESTORE_DISCOVER_HEALTH_SUMMARY 1
+#endif
+
 namespace infiltrator::software::app {
 
 /* Mutable state owned exclusively by the Discover page. */
@@ -56,5 +73,14 @@ inline void set_discover_repository_summary(
 }
 
 } // namespace infiltrator::software::app
+
+#ifdef INFILTRATOR_RESTORE_DISCOVER_HEALTH_SUMMARY
+#pragma pop_macro("discover_health_summary")
+#undef INFILTRATOR_RESTORE_DISCOVER_HEALTH_SUMMARY
+#endif
+#ifdef INFILTRATOR_RESTORE_DISCOVER_HEALTH_BANNER_STATE
+#pragma pop_macro("discover_health_banner_state")
+#undef INFILTRATOR_RESTORE_DISCOVER_HEALTH_BANNER_STATE
+#endif
 
 #endif
