@@ -32,9 +32,9 @@ struct ShellState {
  * WindowState is the shell composition root.  Page/controller state is owned
  * exactly once by the named members below and is not re-exported through a
  * parallel forest of reference members.  The one system_critical compatibility
- * reference remains only because the legacy main.cpp spelling collides with
- * PackageRecord::system_critical when represented as a macro; it disappears
- * with the main.cpp split.
+ * reference remains only because the legacy page-provider spelling collides
+ * with PackageRecord::system_critical when represented as a macro; it disappears
+ * as that final legacy implementation is decomposed.
  */
 struct WindowState final : ShellState {
     DiscoverPageState discover;
@@ -52,10 +52,10 @@ struct WindowState final : ShellState {
 } // namespace infiltrator::software::app
 
 /*
- * Final main.cpp source-compatibility bridge.  These are preprocessor aliases,
- * not WindowState members, and therefore do not create a second ownership
- * surface.  Do not add new aliases; delete this block with the legacy shell
- * split.
+ * Legacy page-provider source-compatibility bridge.  These are preprocessor
+ * aliases, not WindowState members, and therefore do not create a second
+ * ownership surface.  do not add new aliases; delete this block as the
+ * quarantined legacy page implementation is decomposed into its page owners.
  */
 #ifdef INFILTRATOR_SOFTWARE_KERNEL_MANAGER_HPP
 #define discover_visible discover.discover_visible
@@ -145,7 +145,7 @@ struct WindowState final : ShellState {
 #define repair_health_title repair.repair_health_title
 #define repair_health_copy repair.repair_health_copy
 #define repair_recheck repair.repair_recheck
-#define repair_rebuild repair.repair_rebuild
+#define repair_rebuild repair.rebuild
 #define repair_configure repair.repair_configure
 #define repair_generation repair.repair_generation
 #define repair_busy repair.repair_busy
