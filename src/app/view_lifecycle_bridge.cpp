@@ -64,13 +64,13 @@ void select_update_preset(
 
     switch (preset) {
     case UpdateSelectionPreset::all:
-        state->updates.pending_update_selection.clear();
+        updates_controller_set_pending_selection(state->updates, "");
         break;
     case UpdateSelectionPreset::security:
-        state->updates.pending_update_selection = "security";
+        updates_controller_set_pending_selection(state->updates, "security");
         break;
     case UpdateSelectionPreset::kernel:
-        state->updates.pending_update_selection = "kernel";
+        updates_controller_set_pending_selection(state->updates, "kernel");
         break;
     }
 
