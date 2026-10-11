@@ -34,6 +34,11 @@
   <url type="homepage">https://github.com/Infiltrator-Projects/Software</url>
 
   <releases>
+    <release version="0.3.75" date="2026-10-12">
+      <description>
+        <p>Reduces application-layer coupling by moving Updates lifecycle state behind its controller, splitting Updates state into cohesive ownership blocks, and preventing coordinator/lifecycle code from inspecting page internals.</p>
+      </description>
+    </release>
     <release version="0.3.74" date="2026-10-11">
       <description>
         <p>Finishes the current app-shell decoupling tranche by removing page-state compatibility aliases from WindowState and confining remaining legacy shims to the quarantined legacy implementation while retaining the small shell and descriptor-driven navigation.</p>

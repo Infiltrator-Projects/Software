@@ -1,3 +1,16 @@
+infiltrator-software (0.3.75) unstable; urgency=high
+
+  * Move Updates refresh timing, freshness, busy-state and teardown policy behind
+    the Updates controller instead of exposing those internals to coordination code.
+  * Split Updates mutable state into cohesive inventory/refresh, transaction/progress
+    and external-update ownership blocks while preserving existing page behaviour.
+  * Route update preset state and System busy-state checks through explicit owner
+    boundaries, reducing cross-page knowledge in coordinator and lifecycle code.
+  * Preserve the full build, contract, engine smoke, graphical launch, AppStream
+    and Debian-package verification gates for the decoupling change.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Mon, 12 Oct 2026 08:30:00 +1100
+
 infiltrator-software (0.3.74) unstable; urgency=high
 
   * Remove the legacy page-state alias forest from WindowState so the GTK shell
