@@ -34,6 +34,11 @@
   <url type="homepage">https://github.com/Infiltrator-Projects/Software</url>
 
   <releases>
+    <release version="0.3.76" date="2026-10-12">
+      <description>
+        <p>Confines transitional System and Repair state aliases to explicit compatibility-only translation units, removes include-order macro leakage from public page headers, and replaces the legacy main-macro probe with a dedicated source marker.</p>
+      </description>
+    </release>
     <release version="0.3.75" date="2026-10-12">
       <description>
         <p>Reduces application-layer coupling by moving Updates lifecycle state behind its controller, splitting Updates state into cohesive ownership blocks, and preventing coordinator/lifecycle code from inspecting page internals.</p>

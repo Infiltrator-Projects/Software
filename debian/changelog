@@ -1,3 +1,18 @@
+infiltrator-software (0.3.76) unstable; urgency=high
+
+  * Move System and Repair compatibility spellings out of public page headers
+    into explicit compatibility-only headers selected per translation unit.
+  * Replace include-order activation and the legacy `main` macro probe with
+    dedicated source-local build markers so ordinary headers cannot leak aliases.
+  * Remove Discover's defensive push/undef/pop macro armour now that owner-state
+    declarations are parsed before any compatibility aliases are injected.
+  * Reuse the narrow System and Repair compatibility shims from the quarantined
+    legacy page bridge instead of maintaining duplicate alias definitions.
+  * Preserve the full build, contract, engine smoke, graphical launch, AppStream
+    and Debian-package verification gates for the coupling reduction.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Mon, 12 Oct 2026 09:20:00 +1100
+
 infiltrator-software (0.3.75) unstable; urgency=high
 
   * Move Updates refresh timing, freshness, busy-state and teardown policy behind
