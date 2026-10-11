@@ -33,6 +33,12 @@ inline bool system_page_loaded(
     return state.system_loaded;
 }
 
+inline bool system_page_busy(
+    const SystemPageState &state) noexcept
+{
+    return state.system_busy;
+}
+
 GtkWidget *make_system_page(WindowState *state);
 void refresh_system(WindowState *state, bool refresh_metadata);
 void system_manage_kernels_clicked(GtkButton *button, gpointer user_data);
