@@ -50,11 +50,12 @@ struct WindowState final : ShellState {
 } // namespace infiltrator::software::app
 
 /*
- * Transitional source compatibility only. Unlike the old WindowState bridge,
- * these are not object members and therefore cannot be captured, addressed or
- * exposed as a second ownership surface. They intentionally preserve existing
- * call sites while those implementations move to their page owners.
+ * main.cpp includes kernel_manager.hpp before this header; the extracted
+ * controller/view units do not. Keep the final source-compatibility bridge
+ * confined to that one legacy translation unit so owner-qualified code cannot
+ * be rewritten by these macros. The bridge is deleted with the main split.
  */
+#ifdef INFILTRATOR_SOFTWARE_KERNEL_MANAGER_HPP
 #define discover_visible discover.discover_visible
 #define discover_search discover.discover_search
 #define discover_category discover.discover_category
@@ -149,5 +150,6 @@ struct WindowState final : ShellState {
 #define repair_busy repair.repair_busy
 #define repair_interrupted repair.repair_interrupted
 #define repair_loaded repair.repair_loaded
+#endif
 
 #endif
