@@ -10,23 +10,13 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <unordered_set>
 #include <vector>
 
 namespace infiltrator::software::app {
 
-struct UpdatesController {
-    GtkListBox *updates_list{};
-    GtkWidget *updates_status{};
-    GtkWidget *updates_count{};
-    GtkWidget *updates_critical{};
-    GtkWidget *updates_install{};
-    GtkWidget *updates_security{};
-    GtkWidget *updates_refresh{};
-    GtkWidget *updates_reboot_banner{};
-    GtkWidget *updates_reboot_detail{};
-    GtkWidget *updates_backend{};
-
+struct ExternalUpdatesState {
     GtkListBox *external_updates_list{};
     GtkWidget *external_updates_status{};
     GtkWidget *external_updates_spinner{};
@@ -35,7 +25,10 @@ struct UpdatesController {
     std::vector<ExternalUpdate> external_update_records;
     std::unordered_set<std::string> selected_flatpak_refs;
     std::unordered_set<std::string> selected_cinnamon_refs;
+    bool external_updates_active{false};
+};
 
+struct UpdateTransactionState {
     GtkWidget *updates_transaction_panel{};
     GtkWidget *updates_transaction_phase{};
     GtkWidget *updates_transaction_detail{};
@@ -50,24 +43,42 @@ struct UpdatesController {
     std::string updates_progress_phase;
     bool updates_post_install_refresh{false};
     bool updates_restart_after_verify{false};
+    std::optional<TransactionPlan> pending_update_plan;
+};
 
+struct UpdateInventoryState {
     std::vector<PackageRecord> update_records;
     std::unordered_set<std::string> selected_update_ids;
     std::string pending_update_selection;
-    std::optional<TransactionPlan> pending_update_plan;
     unsigned int updates_generation{0U};
     bool updates_busy{false};
-    bool external_updates_active{false};
     bool updates_auto_refresh_pending{true};
     gint64 updates_last_metadata_refresh_us{0};
     guint updates_refresh_timer_id{0U};
     bool updates_loaded{false};
 };
 
+struct UpdatesController {
+    GtkListBox *updates_list{};
+    GtkWidget *updates_status{};
+    GtkWidget *updates_count{};
+    GtkWidget *updates_critical{};
+    GtkWidget *updates_install{};
+    GtkWidget *updates_security{};
+    GtkWidget *updates_refresh{};
+    GtkWidget *updates_reboot_banner{};
+    GtkWidget *updates_reboot_detail{};
+    GtkWidget *updates_backend{};
+
+    ExternalUpdatesState external;
+    UpdateTransactionState transaction;
+    UpdateInventoryState inventory;
+};
+
 inline bool updates_controller_loaded(
     const UpdatesController &controller) noexcept
 {
-    return controller.updates_loaded;
+    return controller.inventory.updates_loaded;
 }
 
 [[nodiscard]] bool updates_controller_busy(
@@ -82,6 +93,10 @@ void updates_controller_set_selected(
     bool selected,
     GSourceFunc refresh_callback,
     gpointer user_data);
+
+void updates_controller_set_pending_selection(
+    UpdatesController &controller,
+    std::string_view selection);
 
 void destroy_updates_controller(
     UpdatesController &controller) noexcept;
