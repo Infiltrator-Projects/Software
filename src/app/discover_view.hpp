@@ -15,6 +15,7 @@ void rebuild_discover_repository_preview(WindowState *state);
 void rebuild_discover_activity_preview(WindowState *state);
 void rebuild_discover_update_preview(WindowState *state);
 void set_discover_search_query(WindowState *state, std::string_view query);
+void set_discover_health_state(WindowState *state, bool healthy);
 void destroy_discover_page(WindowState *state);
 
 } // namespace infiltrator::software::app
