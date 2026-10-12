@@ -34,6 +34,11 @@
   <url type="homepage">https://github.com/Infiltrator-Projects/Software</url>
 
   <releases>
+    <release version="0.3.80" date="2026-10-12">
+      <description>
+        <p>Deletes the retired System and Repair compatibility headers and reduces the quarantined legacy state-rewriting bridge to the still-unmigrated Discover and Updates surfaces.</p>
+      </description>
+    </release>
     <release version="0.3.79" date="2026-10-12">
       <description>
         <p>Removes obsolete System and Repair legacy-alias build modes, confines compatibility rewriting to the quarantined legacy provider, and adds CI contracts that prevent those page-level coupling regressions from returning.</p>
@@ -201,7 +206,7 @@
     </release>
     <release version="0.3.22" date="2026-09-24">
       <description>
-        <p>Replaces the System placeholder with live kernel, driver and core operating-system inventory, current/update state, system-critical counts, refresh controls and a hand-off to the unified Updates workflow.</p>
+        <p>Replaces the System placeholder with live kernel, driver and core operating-system inventory, current/update state, system-critical counts, repository refresh controls and a direct hand-off to the unified Updates workflow.</p>
       </description>
     </release>
     <release version="0.3.21" date="2026-09-24">

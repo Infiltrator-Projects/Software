@@ -1,3 +1,16 @@
+infiltrator-software (0.3.80) unstable; urgency=high
+
+  * Remove the retired System and Repair compatibility shims from the remaining
+    legacy page bridge now that both views use explicit owner-qualified state.
+  * Delete the obsolete System and Repair legacy-alias headers instead of
+    carrying dead preprocessor compatibility surfaces in the active source tree.
+  * Reduce the quarantined compatibility bridge to Discover and Updates only,
+    making the remaining application-layer migration debt explicit and smaller.
+  * Preserve the full build, test, source-contract, engine smoke, graphical
+    launch, AppStream and Debian-package verification gates for the cleanup.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Mon, 12 Oct 2026 12:35:00 +1100
+
 infiltrator-software (0.3.79) unstable; urgency=high
 
   * Remove obsolete System and Repair legacy-alias compile definitions now that
