@@ -34,6 +34,11 @@
   <url type="homepage">https://github.com/Infiltrator-Projects/Software</url>
 
   <releases>
+    <release version="0.3.78" date="2026-10-12">
+      <description>
+        <p>Reduces application-layer coupling by moving Repair to explicit owner-qualified state and routing Repair health presentation through the application coordinator and Discover view boundary instead of direct cross-page GTK widget access.</p>
+      </description>
+    </release>
     <release version="0.3.77" date="2026-10-12">
       <description>
         <p>Further reduces application-layer brittleness by removing the obsolete transitional shell contract, preventing redundant System refreshes, and migrating the System view away from legacy state-rewriting aliases to explicit owner-qualified state.</p>
