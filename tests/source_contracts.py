@@ -155,7 +155,11 @@ assert "INFILTRATOR_SOFTWARE_REPAIR_VIEW_LEGACY_ALIASES" not in window_state
 assert "INFILTRATOR_SOFTWARE_SYSTEM_VIEW_LEGACY_ALIASES" not in cmake
 assert "INFILTRATOR_SOFTWARE_REPAIR_VIEW_LEGACY_ALIASES" not in cmake
 assert "INFILTRATOR_SOFTWARE_LEGACY_PAGE_IMPL=1" in cmake
-assert "main=infiltrator_software_legacy_page_impl_main" in cmake
+assert "main=infiltrator_software_legacy_page_impl_main" not in cmake
+assert "int main(" not in legacy_page_impl
+assert "void activate(" not in legacy_page_impl
+assert "GtkWidget *make_header_bar(" not in legacy_page_impl
+assert "void global_search_changed(" not in legacy_page_impl
 assert "state->system_" not in system_view
 assert "state->repair_" not in repair_view
 assert "discover_health_summary" not in repair_view
