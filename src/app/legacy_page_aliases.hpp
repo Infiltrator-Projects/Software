@@ -79,8 +79,4 @@
 #define updates_refresh_timer_id updates.inventory.updates_refresh_timer_id
 #define updates_loaded updates.inventory.updates_loaded
 
-/* Reuse the same narrow compatibility definitions as the owning view bodies. */
-#include "app/system_view_legacy_aliases.hpp"
-#include "app/repair_view_legacy_aliases.hpp"
-
 #endif
