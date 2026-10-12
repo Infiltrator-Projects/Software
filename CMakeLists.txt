@@ -291,19 +291,12 @@ add_executable(infiltrator-software
     src/app/theme.cpp
     src/app/ui_components.cpp)
 
-# Compatibility macros are confined to the three translation units that still
-# contain pre-owner state spellings. The dedicated markers prevent ordinary
-# header include order from activating aliases, while main=... continues only
-# to suppress the obsolete entry point in the quarantined page provider.
+# Compatibility rewriting is confined to the quarantined legacy page provider.
+# The main=... definition suppresses its obsolete duplicate entry point until
+# Discover/Updates extraction lets the provider be deleted.
 set_source_files_properties(src/app/legacy_page_impl.cpp PROPERTIES
     COMPILE_DEFINITIONS
         "main=infiltrator_software_legacy_page_impl_main;INFILTRATOR_SOFTWARE_LEGACY_PAGE_IMPL=1")
-set_source_files_properties(src/app/system_view.cpp PROPERTIES
-    COMPILE_DEFINITIONS
-        "INFILTRATOR_SOFTWARE_SYSTEM_VIEW_LEGACY_ALIASES=1")
-set_source_files_properties(src/app/repair_view.cpp PROPERTIES
-    COMPILE_DEFINITIONS
-        "INFILTRATOR_SOFTWARE_REPAIR_VIEW_LEGACY_ALIASES=1")
 
 target_link_libraries(infiltrator-software PRIVATE
     software-core software-history software-client software-installed-state
