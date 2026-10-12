@@ -112,11 +112,12 @@ grep -Fqx 'StartupWMClass=net.ssmith.infiltrator.software' "$desktop" ||
 grep -Fqx 'Icon=net.ssmith.infiltrator.software' "$desktop" ||
     fail "Installed desktop file has the wrong icon name."
 
-# Behaviour belongs to executable tests, not source-text greps. These checks
-# remain valid if implementation files/functions are reorganised.
-./build/infiltrator-software-cli --version | grep -Fqx "$version" ||
-    fail "CLI version does not match VERSION."
-./build/infiltrator-software-cli --help | grep -Fq 'upgrade' ||
-    fail "CLI help no longer exposes the upgrade command."
+# Behaviour belongs to the installed artefact, not a source/build-tree shape.
+# Exercising the packaged CLI catches packaging and executable regressions with
+# the same check and remains valid if implementation files are reorganised.
+"$root/usr/bin/infiltrator-software-cli" --version | grep -Fqx "$version" ||
+    fail "Packaged CLI version does not match VERSION."
+"$root/usr/bin/infiltrator-software-cli" --help | grep -Fq 'upgrade' ||
+    fail "Packaged CLI help no longer exposes the upgrade command."
 
 echo "Verified Debian package contract: $package"
