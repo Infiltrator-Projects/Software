@@ -1,0 +1,44 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: Prepare Software 0.3.81
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/release-0381.yml
+
+permissions:
+  contents: write
+
+jobs:
+  prepare-release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out exact trigger commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Prepare release metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          test "$(git rev-parse origin/main)" = "$GITHUB_SHA"
+          export DEB_CHANGELOG_DATE="$(TZ=Australia/Melbourne date '+%a, %d %b %Y %H:%M:%S %z')"
+          python3 .github/scripts/release_0381.py
+          python3 tests/source_contracts.py
+          git diff --check
+          git rm .github/scripts/release_0381.py .github/workflows/release-0381.yml
+
+      - name: Commit release
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "Shannon Smith"
+          git config user.email "infiltratr@yandex.com"
+          git add VERSION README.md debian/changelog debian/infiltrator-software.metainfo.xml
+          git commit -m "Release 0.3.81: reduce UI coupling"
+          git push origin HEAD:main
