@@ -11,9 +11,9 @@ permissions:
   contents: read
 
 concurrency:
-  # Development/PR runs may supersede each other. A release commit gets its own
-  # SHA-scoped group so a later main push cannot cancel a release in flight.
-  group: verify-${{ github.repository }}-${{ startsWith(github.event.head_commit.message, 'Release ') && github.sha || github.ref }}
+  # Main pushes use their immutable SHA, so one push can never cancel another.
+  # PR updates share their ref and may supersede an older verification run.
+  group: verify-${{ github.repository }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
   cancel-in-progress: true
 
 jobs:
@@ -49,12 +49,24 @@ jobs:
           test "$(tr -d '[:space:]' < src/infiltratr-common/VERSION)" = "$common_version"
           test "$(git -C src/infiltratr-common rev-parse HEAD)" = "$common_commit"
 
+          # VERSION is the release identity. A push to main releases an untagged
+          # version; an exact rerun of an already-tagged release commit may also
+          # republish/repair it. No commit-message convention is required.
+          git fetch --force --tags origin
           release=false
-          subject="$(git log -1 --format=%s HEAD)"
-          if [[ "$GITHUB_EVENT_NAME" == "push" &&
-                "$GITHUB_REF" == "refs/heads/main" &&
-                "$subject" == "Release $version"* ]]; then
-            release=true
+          eligible=false
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            eligible=true
+          elif [[ "$GITHUB_EVENT_NAME" == "push" &&
+                  "$GITHUB_REF" == "refs/heads/main" ]]; then
+            eligible=true
+          fi
+
+          if [[ "$eligible" == "true" ]]; then
+            tag_sha="$(git rev-list -n 1 "v${version}" 2>/dev/null || true)"
+            if [[ -z "$tag_sha" || "$tag_sha" == "$GITHUB_SHA" ]]; then
+              release=true
+            fi
           fi
 
           echo "version=$version" >> "$GITHUB_OUTPUT"
@@ -236,16 +248,17 @@ jobs:
           set -euo pipefail
           VERSION="${{ needs.linux.outputs.version }}"
           EXPECTED_SHA="$GITHUB_SHA"
+          TAG="v${VERSION}"
 
-          git fetch origin --tags
+          git fetch --force --tags origin
           test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
           test "$(tr -d '[:space:]' < VERSION)" = "$VERSION"
 
-          subject="$(git log -1 --format=%s HEAD)"
-          [[ "$subject" == "Release $VERSION"* ]] || {
-            echo "::error::Release commit subject must begin with Release $VERSION."
+          tag_sha="$(git rev-list -n 1 "$TAG" 2>/dev/null || true)"
+          if [[ -n "$tag_sha" && "$tag_sha" != "$EXPECTED_SHA" ]]; then
+            echo "::error::Existing tag $TAG points to $tag_sha, expected $EXPECTED_SHA."
             exit 1
-          }
+          fi
 
           (
             cd release
@@ -258,7 +271,7 @@ jobs:
           test -f release/SHA256SUMS.txt
           test "$(dpkg-deb -f "release/software_${VERSION}_amd64.deb" Version)" = "$VERSION"
 
-      - name: Publish immutable GitHub release
+      - name: Ensure verified GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
@@ -274,31 +287,42 @@ jobs:
             "software_${VERSION}_source.tar.gz" | sort)"
 
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            git fetch --force --tags origin
             tag_sha="$(git rev-list -n 1 "$TAG" 2>/dev/null || true)"
             [[ "$tag_sha" == "$EXPECTED_SHA" ]] || {
               echo "::error::Existing release $TAG points to $tag_sha, expected $EXPECTED_SHA."
               exit 1
             }
-            actual_assets="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" \
-              --json assets --jq '.assets[].name' | sort)"
-            [[ "$actual_assets" == "$EXPECTED_ASSETS" ]] || {
-              echo "::error::Existing release $TAG has an unexpected asset set."
-              exit 1
-            }
-            echo "Release $TAG already exists with the expected immutable asset set."
-            exit 0
+          else
+            gh release create "$TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$EXPECTED_SHA" \
+              --title "Software ${VERSION}" \
+              --generate-notes \
+              --latest
           fi
 
-          gh release create "$TAG" \
-            "release/software_${VERSION}_amd64.deb" \
-            "release/software_${VERSION}_source.tar.gz" \
-            "release/LICENSE.txt" \
-            "release/SHA256SUMS.txt" \
-            --repo "$GITHUB_REPOSITORY" \
-            --target "$EXPECTED_SHA" \
-            --title "Software ${VERSION}" \
-            --generate-notes \
-            --latest
+          actual_assets="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" \
+            --json assets --jq '.assets[].name' | sort)"
+          if [[ "$actual_assets" != "$EXPECTED_ASSETS" ]]; then
+            # A failed earlier upload may have left a correct release identity
+            # with a partial asset set. Re-uploading the verified bundle makes
+            # the release job safely repeatable without manual cleanup.
+            gh release upload "$TAG" \
+              "release/software_${VERSION}_amd64.deb" \
+              "release/software_${VERSION}_source.tar.gz" \
+              "release/LICENSE.txt" \
+              "release/SHA256SUMS.txt" \
+              --repo "$GITHUB_REPOSITORY" \
+              --clobber
+            actual_assets="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" \
+              --json assets --jq '.assets[].name' | sort)"
+          fi
+
+          [[ "$actual_assets" == "$EXPECTED_ASSETS" ]] || {
+            echo "::error::Release $TAG has an unexpected asset set."
+            exit 1
+          }
 
   apt-publication:
     needs: [linux, publish-release]
