@@ -27,6 +27,7 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
+          import re
 
           path = Path('src/app/legacy_page_impl.cpp')
           source = path.read_text()
@@ -62,9 +63,10 @@ jobs:
           if installed_start < 0 or installed_end < 0:
               raise SystemExit('Installed forwarding bridge not found.')
           source = source[:installed_start] + '\n' + source[installed_end:]
-          source = source.replace(
-              'refresh_installed(state);',
-              'refresh_installed_controller(&state->installed);',
+          source = re.sub(
+              r'\brefresh_installed\(([A-Za-z_][A-Za-z0-9_]*)\);',
+              r'refresh_installed_controller(&\1->installed);',
+              source,
           )
 
           history_start = source.rfind('\nvoid refresh_history(WindowState *state)\n')
@@ -72,9 +74,10 @@ jobs:
           if history_start < 0 or select_start < 0:
               raise SystemExit('History/select forwarding bridges not found.')
           source = source[:history_start] + '\n' + source[select_start:]
-          source = source.replace(
-              'refresh_history(state);',
-              'refresh_history_controller(&state->history);',
+          source = re.sub(
+              r'\brefresh_history\(([A-Za-z_][A-Za-z0-9_]*)\);',
+              r'refresh_history_controller(&\1->history);',
+              source,
           )
 
           # Navigation is coordinated centrally now. Keep dashboard navigation
@@ -101,6 +104,8 @@ jobs:
               'void refresh_history(WindowState *state)',
               'void select_page(WindowState *state',
               'make_transaction_confirmation_dialog',
+              'refresh_installed(',
+              'refresh_history(',
           ):
               if forbidden in source:
                   raise SystemExit(f'Retired bridge survived cleanup: {forbidden}')
