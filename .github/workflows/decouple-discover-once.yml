@@ -1,0 +1,187 @@
+name: Decouple Discover Once
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/decouple-discover-once.yml
+
+permissions:
+  contents: write
+
+jobs:
+  decouple:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out exact main
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Replace cross-page reach-through with controller boundaries
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected exactly one match, found {count}: {old!r}")
+              p.write_text(text.replace(old, new, 1))
+
+          def replace_all(path, old, new, minimum=1):
+              p = Path(path)
+              text = p.read_text()
+              count = text.count(old)
+              if count < minimum:
+                  raise SystemExit(f"{path}: expected at least {minimum} matches, found {count}: {old!r}")
+              p.write_text(text.replace(old, new))
+              return count
+
+          replace_once(
+              "src/app/updates_controller.hpp",
+              '''inline bool updates_controller_loaded(
+              const UpdatesController &controller) noexcept
+          {
+              return controller.inventory.updates_loaded;
+          }
+
+          [[nodiscard]] bool updates_controller_busy(''',
+              '''inline bool updates_controller_loaded(
+              const UpdatesController &controller) noexcept
+          {
+              return controller.inventory.updates_loaded;
+          }
+
+          inline const std::vector<PackageRecord> &updates_controller_records(
+              const UpdatesController &controller) noexcept
+          {
+              return controller.inventory.update_records;
+          }
+
+          [[nodiscard]] bool updates_controller_busy(''')
+
+          replace_once(
+              "src/app/repository_controller.hpp",
+              '''inline std::size_t repository_record_count(
+              const RepositoryController &controller) noexcept
+          {
+              return controller.records.size();
+          }
+
+          void configure_repository_controller(''',
+              '''inline std::size_t repository_record_count(
+              const RepositoryController &controller) noexcept
+          {
+              return controller.records.size();
+          }
+
+          inline const std::vector<SourceRecord> &repository_controller_records(
+              const RepositoryController &controller) noexcept
+          {
+              return controller.records;
+          }
+
+          void configure_repository_controller(''')
+
+          replace_once(
+              "src/app/history_controller.hpp",
+              '''inline bool history_controller_loaded(
+              const HistoryController &controller) noexcept
+          {
+              return controller.loaded;
+          }
+
+          GtkWidget *create_history_controller_page(''',
+              '''inline bool history_controller_loaded(
+              const HistoryController &controller) noexcept
+          {
+              return controller.loaded;
+          }
+
+          inline const std::vector<TransactionHistoryItem> &history_controller_records(
+              const HistoryController &controller) noexcept
+          {
+              return controller.records;
+          }
+
+          GtkWidget *create_history_controller_page(''')
+
+          replacements = {
+              "state->updates.inventory.update_records":
+                  "updates_controller_records(state->updates)",
+              "state->repositories.records":
+                  "repository_controller_records(state->repositories)",
+              "state->history.records":
+                  "history_controller_records(state->history)",
+              "state->installed.loaded":
+                  "installed_controller_loaded(state->installed)",
+              "state->history.loaded":
+                  "history_controller_loaded(state->history)",
+              "state->updates.inventory.updates_loaded":
+                  "updates_controller_loaded(state->updates)",
+              "history_state->history.loaded":
+                  "history_controller_loaded(history_state->history)",
+          }
+          observed = {}
+          for old, new in replacements.items():
+              observed[old] = replace_all("src/app/discover_view.cpp", old, new)
+
+          contract_needle = '''assert "set_discover_repository_summary(" in app_coordinator
+
+          # Native update reconciliation'''
+          contract_replacement = '''assert "set_discover_repository_summary(" in app_coordinator
+
+          # Discover may consume public controller views, but it must not reach into
+          # another page/controller's backing vectors or lifecycle flags directly.
+          for forbidden_discover_reachthrough in (
+              "state->updates.inventory.update_records",
+              "state->repositories.records",
+              "state->history.records",
+              "state->installed.loaded",
+              "state->history.loaded",
+              "state->updates.inventory.updates_loaded",
+              "history_state->history.loaded",
+          ):
+              assert forbidden_discover_reachthrough not in discover_view_cpp
+          assert "updates_controller_records(state->updates)" in discover_view_cpp
+          assert "repository_controller_records(state->repositories)" in discover_view_cpp
+          assert "history_controller_records(state->history)" in discover_view_cpp
+          assert "installed_controller_loaded(state->installed)" in discover_view_cpp
+          assert "updates_controller_loaded(state->updates)" in discover_view_cpp
+          assert "history_controller_loaded(" in discover_view_cpp
+
+          # Native update reconciliation'''
+          replace_once("tests/source_contracts.py", contract_needle, contract_replacement)
+
+          print("Discover decoupling replacements:")
+          for old, count in observed.items():
+              print(f"  {count:2d} x {old}")
+          PY
+
+      - name: Validate architectural contracts
+        run: python3 tests/source_contracts.py
+
+      - name: Check patch integrity
+        run: git diff --check
+
+      - name: Commit validated decoupling
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo "No changes produced" >&2
+            exit 1
+          fi
+          git config user.name "Shannon Smith"
+          git config user.email "infiltratr@yandex.com"
+          git add src/app/discover_view.cpp \
+                  src/app/updates_controller.hpp \
+                  src/app/repository_controller.hpp \
+                  src/app/history_controller.hpp \
+                  tests/source_contracts.py
+          git commit -m "Reduce Discover cross-page coupling"
+          git push origin HEAD:main
