@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-name: One-shot legacy shell cleanup
+name: One-shot legacy alias cleanup
 
 on:
   push:
@@ -21,78 +21,90 @@ jobs:
           fetch-depth: 0
           submodules: recursive
 
-      - name: Remove duplicate legacy shell
+      - name: Replace legacy state aliases with explicit ownership
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
+          import re
 
+          alias_path = Path('src/app/legacy_page_aliases.hpp')
           legacy_path = Path('src/app/legacy_page_impl.cpp')
+          aliases = alias_path.read_text()
           legacy = legacy_path.read_text()
 
-          shell_start_marker = '\nvoid global_search_changed(\n'
-          select_start_marker = '\nvoid select_page(WindowState *state, const int index)\n'
-          select_end_marker = '\n\ngboolean window_key_pressed(\n'
-          for marker in (shell_start_marker, select_start_marker, select_end_marker):
-              if marker not in legacy:
-                  raise SystemExit(f'Expected legacy-shell marker not found: {marker!r}')
+          mapping = {}
+          for line in aliases.splitlines():
+              match = re.fullmatch(r'#define\s+([A-Za-z_][A-Za-z0-9_]*)\s+(.+)', line)
+              if match:
+                  mapping[match.group(1)] = match.group(2).strip()
+          if len(mapping) < 40:
+              raise SystemExit(f'Unexpectedly small legacy alias map: {len(mapping)}')
 
-          shell_start = legacy.index(shell_start_marker)
-          select_start = legacy.index(select_start_marker, shell_start)
-          select_end = legacy.index(select_end_marker, select_start)
-          select_bridge = legacy[select_start:select_end]
+          names = sorted(mapping, key=len, reverse=True)
+          pointer_pattern = re.compile(r'->(' + '|'.join(map(re.escape, names)) + r')\b')
+          matches = pointer_pattern.findall(legacy)
+          if not matches:
+              raise SystemExit('No legacy pointer aliases were found to migrate.')
 
-          legacy = (
-              legacy[:shell_start]
-              + select_bridge
-              + '\n\n} // namespace infiltrator::software::app\n'
+          legacy = pointer_pattern.sub(
+              lambda match: '->' + mapping[match.group(1)],
+              legacy,
           )
 
-          titlebar_asset = '''\nstatic constexpr const char kTitlebarLogoBase64[] =\n#include "titlebar_logo.inc"\n    ;\n'''
-          if titlebar_asset not in legacy:
-              raise SystemExit('Expected legacy titlebar asset declaration not found.')
-          legacy = legacy.replace(titlebar_asset, '\n', 1)
+          remaining_pointer_aliases = [
+              name for name in names
+              if re.search(r'->' + re.escape(name) + r'\b', legacy)
+          ]
+          if remaining_pointer_aliases:
+              raise SystemExit(
+                  'Legacy pointer aliases remain: ' + ', '.join(remaining_pointer_aliases)
+              )
 
-          # These dependencies existed only for the retired duplicate shell.
-          for include in (
-              '#include "app/theme.hpp"\n',
-              '#include "app/kernel_manager.hpp"\n',
-              '#include "app/navigation_controller.hpp"\n',
-              '#include "app/repair_view.hpp"\n',
-              '#include "app/system_view.hpp"\n',
-              '#include "app/preferences_dialog.hpp"\n',
-          ):
-              legacy = legacy.replace(include, '', 1)
-          legacy = legacy.replace(
-              'using infiltrator::software::ThemeController;\n', '', 1)
-
-          if 'int main(' in legacy or 'void activate(' in legacy or 'GtkWidget *make_header_bar(' in legacy:
-              raise SystemExit('Retired shell code survived legacy-page cleanup.')
+          # If a compatibility token is still used in code in another form, do
+          # not delete the shim and hope for the best. The subsequent compile is
+          # authoritative, but flag obvious bare uses here as well.
           legacy_path.write_text(legacy)
+
+          window_path = Path('src/app/window_state.hpp')
+          window = window_path.read_text()
+          old_window = '''\n/*\n * Only the quarantined legacy page provider receives source-compatibility\n * spellings. Ordinary page/view translation units always use explicit owners.\n */\n#ifdef INFILTRATOR_SOFTWARE_LEGACY_PAGE_IMPL\n#include "app/legacy_page_aliases.hpp"\n#endif\n'''
+          if old_window not in window:
+              raise SystemExit('Expected legacy alias injection block not found in WindowState.')
+          window_path.write_text(window.replace(old_window, '\n', 1))
 
           cmake_path = Path('CMakeLists.txt')
           cmake = cmake_path.read_text()
-          old_cmake = '''# Compatibility rewriting is confined to the quarantined legacy page provider.\n# The main=... definition suppresses its obsolete duplicate entry point until\n# Discover/Updates extraction lets the provider be deleted.\nset_source_files_properties(src/app/legacy_page_impl.cpp PROPERTIES\n    COMPILE_DEFINITIONS\n        "main=infiltrator_software_legacy_page_impl_main;INFILTRATOR_SOFTWARE_LEGACY_PAGE_IMPL=1")\n'''
-          new_cmake = '''# Compatibility rewriting is confined to the quarantined legacy page provider.\n# Only the temporary Discover/Updates state aliases remain; the duplicate\n# application entry point and shell have been removed.\nset_source_files_properties(src/app/legacy_page_impl.cpp PROPERTIES\n    COMPILE_DEFINITIONS\n        "INFILTRATOR_SOFTWARE_LEGACY_PAGE_IMPL=1")\n'''
+          old_cmake = '''\n# Compatibility rewriting is confined to the quarantined legacy page provider.\n# Only the temporary Discover/Updates state aliases remain; the duplicate\n# application entry point and shell have been removed.\nset_source_files_properties(src/app/legacy_page_impl.cpp PROPERTIES\n    COMPILE_DEFINITIONS\n        "INFILTRATOR_SOFTWARE_LEGACY_PAGE_IMPL=1")\n'''
           if old_cmake not in cmake:
-              raise SystemExit('Expected legacy CMake compatibility block not found.')
-          cmake_path.write_text(cmake.replace(old_cmake, new_cmake, 1))
+              raise SystemExit('Expected legacy source compile-definition block not found.')
+          cmake_path.write_text(cmake.replace(old_cmake, '\n', 1))
 
           contracts_path = Path('tests/source_contracts.py')
           contracts = contracts_path.read_text()
-          old_assert = 'assert "main=infiltrator_software_legacy_page_impl_main" in cmake\n'
-          if old_assert not in contracts:
-              raise SystemExit('Expected legacy-main source-contract assertion not found.')
-          replacement = '''assert "main=infiltrator_software_legacy_page_impl_main" not in cmake\nassert "int main(" not in legacy_page_impl\nassert "void activate(" not in legacy_page_impl\nassert "GtkWidget *make_header_bar(" not in legacy_page_impl\nassert "void global_search_changed(" not in legacy_page_impl\n'''
-          contracts_path.write_text(contracts.replace(old_assert, replacement, 1))
+          contracts = contracts.replace(
+              '# never a subtype of a page/controller. Compatibility rewriting is permitted\n# only for the quarantined legacy page provider and must only shrink.\n',
+              '# never a subtype of a page/controller. Compatibility state rewriting is\n# forbidden: page implementations must name their owning state explicitly.\n',
+              1,
+          )
+          old_contracts = '''assert "do not add new aliases" in window_state\nassert "INFILTRATOR_SOFTWARE_LEGACY_PAGE_IMPL" in window_state\nassert "INFILTRATOR_SOFTWARE_REPAIR_VIEW_LEGACY_ALIASES" not in window_state\nassert "INFILTRATOR_SOFTWARE_SYSTEM_VIEW_LEGACY_ALIASES" not in cmake\nassert "INFILTRATOR_SOFTWARE_REPAIR_VIEW_LEGACY_ALIASES" not in cmake\nassert "INFILTRATOR_SOFTWARE_LEGACY_PAGE_IMPL=1" in cmake\nassert "main=infiltrator_software_legacy_page_impl_main" not in cmake\n'''
+          new_contracts = '''assert "do not add new aliases" in window_state\nassert "INFILTRATOR_SOFTWARE_LEGACY_PAGE_IMPL" not in window_state\nassert "INFILTRATOR_SOFTWARE_LEGACY_PAGE_IMPL" not in cmake\nassert "INFILTRATOR_SOFTWARE_REPAIR_VIEW_LEGACY_ALIASES" not in window_state\nassert "INFILTRATOR_SOFTWARE_SYSTEM_VIEW_LEGACY_ALIASES" not in cmake\nassert "INFILTRATOR_SOFTWARE_REPAIR_VIEW_LEGACY_ALIASES" not in cmake\nassert "main=infiltrator_software_legacy_page_impl_main" not in cmake\nassert not Path("src/app/legacy_page_aliases.hpp").exists()\n'''
+          if old_contracts not in contracts:
+              raise SystemExit('Expected legacy compatibility source-contract block not found.')
+          contracts_path.write_text(contracts.replace(old_contracts, new_contracts, 1))
+
+          alias_path.unlink()
+          print(f'Migrated {len(matches)} explicit legacy state member accesses across {len(set(matches))} aliases.')
           PY
 
           git diff --check
-          grep -Fq 'INFILTRATOR_SOFTWARE_LEGACY_PAGE_IMPL=1' CMakeLists.txt
-          ! grep -Fq 'main=infiltrator_software_legacy_page_impl_main' CMakeLists.txt
-          ! grep -Fq 'int main(' src/app/legacy_page_impl.cpp
-          ! grep -Fq 'GtkWidget *make_header_bar(' src/app/legacy_page_impl.cpp
+          ! test -e src/app/legacy_page_aliases.hpp
+          ! grep -R -Fq 'INFILTRATOR_SOFTWARE_LEGACY_PAGE_IMPL' src/app CMakeLists.txt
+          ! grep -Fq 'state->discover_status' src/app/legacy_page_impl.cpp
+          ! grep -Fq 'state->updates_list' src/app/legacy_page_impl.cpp
+          grep -Fq 'state->discover.discover_status' src/app/legacy_page_impl.cpp
+          grep -Fq 'state->updates.updates_list' src/app/legacy_page_impl.cpp
 
       - name: Install build dependencies
         env:
@@ -131,7 +143,7 @@ jobs:
           set -euo pipefail
           git config user.name "Shannon Smith"
           git config user.email "infiltratr@yandex.com"
-          git add src/app/legacy_page_impl.cpp CMakeLists.txt tests/source_contracts.py
+          git add src/app/legacy_page_impl.cpp src/app/window_state.hpp src/app/legacy_page_aliases.hpp CMakeLists.txt tests/source_contracts.py
           git diff --cached --check
-          git commit -m "Remove duplicate legacy application shell"
+          git commit -m "Remove legacy page state alias layer"
           git push origin HEAD:main
