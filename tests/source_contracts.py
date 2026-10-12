@@ -223,6 +223,7 @@ assert "history_controller_records(state->history)" in discover_view_cpp
 assert "installed_controller_loaded(state->installed)" in discover_view_cpp
 assert "updates_controller_loaded(state->updates)" in discover_view_cpp
 assert "history_controller_loaded(" in discover_view_cpp
+assert "history_history_controller_loaded" not in discover_view_cpp
 
 # Native update reconciliation, external update discovery and update planning
 # belong to the Updates controller. The Updates view owns GTK task lifetime

@@ -3142,7 +3142,7 @@ void discover_install_process_complete(
                     G_OBJECT(operation->main_window),
                     "infiltrator-window-state"));
             if (history_state != nullptr &&
-                history_history_controller_loaded(state->history)) {
+                history_controller_loaded(history_state->history)) {
                 refresh_history_controller(&history_state->history);
             }
         }
@@ -3238,7 +3238,7 @@ void start_discover_install_operation(
                     G_OBJECT(operation->main_window),
                     "infiltrator-window-state"));
             if (history_state != nullptr &&
-                history_history_controller_loaded(state->history)) {
+                history_controller_loaded(history_state->history)) {
                 refresh_history_controller(&history_state->history);
             }
         }
@@ -3295,7 +3295,7 @@ void start_discover_install_operation(
                     G_OBJECT(operation->main_window),
                     "infiltrator-window-state"));
             if (history_state != nullptr &&
-                history_history_controller_loaded(state->history)) {
+                history_controller_loaded(history_state->history)) {
                 refresh_history_controller(&history_state->history);
             }
         }
