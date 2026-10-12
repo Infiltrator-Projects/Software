@@ -49,23 +49,27 @@ jobs:
           test "$(tr -d '[:space:]' < src/infiltratr-common/VERSION)" = "$common_version"
           test "$(git -C src/infiltratr-common rev-parse HEAD)" = "$common_commit"
 
-          # VERSION is the release identity. A push to main releases an untagged
-          # version; an exact rerun of an already-tagged release commit may also
-          # republish/repair it. No commit-message convention is required.
+          # VERSION is the release identity. Main publishes automatically; a
+          # manual recovery may target main or the exact vVERSION tag only.
+          # Reusing a version on a different commit is an error, never a green
+          # verification run that silently skips publication.
           git fetch --force --tags origin
           release=false
-          eligible=false
-          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
-            eligible=true
-          elif [[ "$GITHUB_EVENT_NAME" == "push" &&
-                  "$GITHUB_REF" == "refs/heads/main" ]]; then
-            eligible=true
-          fi
-
-          if [[ "$eligible" == "true" ]]; then
-            tag_sha="$(git rev-list -n 1 "v${version}" 2>/dev/null || true)"
-            if [[ -z "$tag_sha" || "$tag_sha" == "$GITHUB_SHA" ]]; then
+          case "${GITHUB_EVENT_NAME}:${GITHUB_REF}" in
+            push:refs/heads/main|workflow_dispatch:refs/heads/main|workflow_dispatch:refs/tags/v${version})
               release=true
+              ;;
+            workflow_dispatch:*)
+              echo "::error::Manual release recovery must target main or refs/tags/v${version}; got ${GITHUB_REF}."
+              exit 1
+              ;;
+          esac
+
+          if [[ "$release" == "true" ]]; then
+            tag_sha="$(git rev-list -n 1 "v${version}" 2>/dev/null || true)"
+            if [[ -n "$tag_sha" && "$tag_sha" != "$GITHUB_SHA" ]]; then
+              echo "::error::Version ${version} is already tagged at ${tag_sha}; current commit is ${GITHUB_SHA}."
+              exit 1
             fi
           fi
 
@@ -344,8 +348,13 @@ jobs:
           published() {
             curl -fsS --retry 2 --retry-delay 1 \
               "${catalogue}?release=${RELEASE_SHA}&attempt=${1}" \
-              | jq -e --arg id software --arg version "$VERSION" \
-                  '.[] | select(.id == $id and .version == $version)' >/dev/null
+              | jq -e \
+                  --arg id software \
+                  --arg version "$VERSION" \
+                  --arg package infiltrator-software \
+                  --arg asset "software_${VERSION}_amd64.deb" \
+                  '.[] | select(.id == $id and .version == $version and .package == $package and .asset == $asset)' \
+                >/dev/null
           }
 
           if published 0; then

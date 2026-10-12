@@ -1,3 +1,16 @@
+infiltrator-software (0.3.83) unstable; urgency=high
+
+  * Make reused release versions fail closed instead of allowing a green main
+    commit to silently skip publication when its vVERSION tag belongs elsewhere.
+  * Restrict manual release recovery to main or the exact matching release tag,
+    preventing workflow_dispatch from publishing an arbitrary temporary branch.
+  * Verify the central APT catalogue package and asset identity as well as the
+    Software version before considering repository publication complete.
+  * Preserve the single-workflow, build-once release path and main-only branch
+    model while tightening the remaining recovery and publication invariants.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Tue, 13 Oct 2026 04:51:00 +1100
+
 infiltrator-software (0.3.82) unstable; urgency=high
 
   * Keep release verification, artifact construction, GitHub publication and
