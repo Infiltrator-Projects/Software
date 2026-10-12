@@ -48,13 +48,9 @@ struct WindowState final : ShellState {
 } // namespace infiltrator::software::app
 
 /*
- * Compatibility spellings are injected only after all owner declarations are
- * complete, and only for the explicitly marked legacy translation units.
- * Ordinary includes of WindowState and page headers never expose these macros.
+ * Only the quarantined legacy page provider receives source-compatibility
+ * spellings. Ordinary page/view translation units always use explicit owners.
  */
-#ifdef INFILTRATOR_SOFTWARE_REPAIR_VIEW_LEGACY_ALIASES
-#include "app/repair_view_legacy_aliases.hpp"
-#endif
 #ifdef INFILTRATOR_SOFTWARE_LEGACY_PAGE_IMPL
 #include "app/legacy_page_aliases.hpp"
 #endif
