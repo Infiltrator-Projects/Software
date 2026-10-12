@@ -19,6 +19,10 @@ void notify_kernel_state_changed(WindowState *state);
 void notify_repository_state_changed(WindowState *state);
 void notify_repository_snapshot_changed(WindowState *state);
 void notify_history_state_changed(WindowState *state);
+void notify_transaction_history_changed(WindowState *state);
+void notify_updates_state_changed(WindowState *state);
+void notify_catalogue_transaction_completed(WindowState *state);
+void notify_update_transaction_completed(WindowState *state);
 void notify_repair_health_changed(WindowState *state, bool healthy);
 void notify_repair_state_changed(WindowState *state);
 

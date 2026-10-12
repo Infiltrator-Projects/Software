@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-#include "app/discover_view.hpp"
+#include "app/view_intents.hpp"
 #include "app/updates_view.hpp"
 
 #include "app/discover_state.hpp"

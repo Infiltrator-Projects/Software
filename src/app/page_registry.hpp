@@ -16,7 +16,13 @@ struct WindowState;
 enum class AppStateChange {
     kernel,
     repository,
-    repair
+    repository_snapshot,
+    history_snapshot,
+    transaction_history,
+    repair,
+    updates_snapshot,
+    catalogue_transaction,
+    update_transaction
 };
 
 struct PageDescriptor {
@@ -37,6 +43,7 @@ const std::array<PageDescriptor, kAppPageCount> &page_descriptors();
 const PageDescriptor *page_descriptor(int index) noexcept;
 const PageDescriptor *page_descriptor(AppPage page) noexcept;
 void destroy_page_state(WindowState *state);
+void invalidate_pages(WindowState *state, AppStateChange change);
 
 } // namespace infiltrator::software::app
 

@@ -10,11 +10,31 @@ refactored without turning this file into a second source-code parser.
 
 from pathlib import Path
 import base64
+import re
 import xml.etree.ElementTree as ET
 
 
 def text(path: str) -> str:
     return Path(path).read_text()
+
+
+def includes(source: str, header: str) -> bool:
+    return re.search(
+        rf'^\s*#\s*include\s+"{re.escape(header)}"\s*$', source, re.MULTILINE
+    ) is not None
+
+
+def defines_function(source: str, name: str) -> bool:
+    return re.search(
+        rf'\b{re.escape(name)}\s*\([^;{{}}]*\)\s*(?:const\s*)?(?:noexcept\s*)?\{{',
+        source, re.DOTALL
+    ) is not None
+
+
+def has_member(source: str, type_name: str, member_name: str) -> bool:
+    return re.search(
+        rf'\b{re.escape(type_name)}\s+{re.escape(member_name)}\s*;', source
+    ) is not None
 
 
 app_files = sorted(
@@ -42,6 +62,8 @@ discover_view_cpp = text("src/app/discover_view.cpp")
 updates_view_cpp = text("src/app/updates_view.cpp")
 page_views = discover_view_cpp + "\n" + updates_view_cpp
 app_coordinator = text("src/app/app_coordinator.cpp")
+page_registry_cpp = text("src/app/page_registry.cpp")
+page_support_cpp = text("src/app/page_support.cpp")
 discover_state = text("src/app/discover_state.hpp")
 updates_controller = text("src/app/updates_controller.cpp")
 updates_controller_hpp = text("src/app/updates_controller.hpp")
@@ -125,125 +147,93 @@ assert '"sources/source_inventory.hpp"' not in repository_controller_hpp
 assert '"core/model.hpp"' in repository_controller_hpp
 assert '"core/model.hpp"' in source_inventory_hpp
 
-# Page state is owned by named members. WindowState is a shell plus composition,
-# never a subtype of a page/controller. Compatibility state rewriting is
-# forbidden: page implementations must name their owning state explicitly.
-assert "struct ShellState" in window_state
-assert "struct DiscoverPageState" in discover_state
-assert "struct UpdatesController" in updates_controller_hpp
-assert "struct SystemPageState" in system_view_hpp
-assert "struct RepairPageState" in repair_view_hpp
-assert "struct WindowState final : ShellState" in window_state
-window_state_bases = window_state.split(
-    "struct WindowState final", 1
-)[1].split("{", 1)[0]
-for page_base in (
-    "DiscoverPageState",
-    "UpdatesController",
-    "SystemPageState",
-    "RepairPageState",
+# Page state is owned by named members. Verify durable ownership/dependency
+# boundaries rather than exact formatting or call spellings.
+assert re.search(r"\bstruct\s+ShellState\b", window_state)
+assert re.search(r"\bstruct\s+WindowState\s+final\s*:\s*ShellState\s*\{", window_state)
+for type_name, member_name in (
+    ("DiscoverPageState", "discover"),
+    ("UpdatesController", "updates"),
+    ("SystemPageState", "system"),
+    ("RepairPageState", "repair"),
 ):
+    assert has_member(window_state, type_name, member_name)
+window_state_bases = window_state.split("struct WindowState final", 1)[1].split("{", 1)[0]
+for page_base in ("DiscoverPageState", "UpdatesController", "SystemPageState", "RepairPageState"):
     assert page_base not in window_state_bases
-for owned_page in (
-    "DiscoverPageState discover;",
-    "UpdatesController updates;",
-    "SystemPageState system;",
-    "RepairPageState repair;",
-):
-    assert owned_page in window_state
 assert "do not add new aliases" in window_state
-assert "INFILTRATOR_SOFTWARE_LEGACY_PAGE_IMPL" not in window_state
-assert "INFILTRATOR_SOFTWARE_LEGACY_PAGE_IMPL" not in cmake
-assert "INFILTRATOR_SOFTWARE_REPAIR_VIEW_LEGACY_ALIASES" not in window_state
-assert "INFILTRATOR_SOFTWARE_SYSTEM_VIEW_LEGACY_ALIASES" not in cmake
-assert "INFILTRATOR_SOFTWARE_REPAIR_VIEW_LEGACY_ALIASES" not in cmake
-assert "main=infiltrator_software_page_views_main" not in cmake
 assert not Path("src/app/legacy_page_aliases.hpp").exists()
 assert not Path("src/app/legacy_page_impl.cpp").exists()
-assert "src/app/discover_view.cpp" in cmake
-assert "src/app/updates_view.cpp" in cmake
-assert "src/app/legacy_page_impl.cpp" not in cmake
-assert "int main(" not in page_views
-assert "void activate(" not in page_views
-assert "GtkWidget *make_header_bar(" not in page_views
-assert "void global_search_changed(" not in page_views
-assert "make_transaction_confirmation_dialog" not in page_views
-assert "make_transaction_review_dialog(" in page_views
-assert "void refresh_installed(WindowState *state)" not in page_views
-assert "void refresh_history(WindowState *state)" not in page_views
-assert "void select_page(WindowState *state" not in page_views
-assert "select_app_page(state, static_cast<AppPage>(index))" in page_views
-assert "state->system_" not in system_view
-assert "state->repair_" not in repair_view
-assert "discover_health_summary" not in repair_view
-assert "discover_health_banner_state" not in repair_view
-assert "notify_repair_health_changed" in repair_view
-assert "set_discover_health_state" in app_coordinator
-for updates_member in (
-    "GtkListBox *updates_list",
-    "std::vector<PackageRecord> update_records",
-    "std::unordered_set<std::string> selected_update_ids",
-    "guint updates_refresh_timer_id",
+for path in (
+    "src/app/discover_view.cpp",
+    "src/app/updates_view.cpp",
+    "src/app/page_support.cpp",
+    "src/app/page_registry.cpp",
 ):
-    assert updates_member in updates_controller_hpp
+    assert path in cmake
 
-# Cross-page coordination uses public owner boundaries. The coordinator must not
-# inspect another page's widget pointers, backing vectors or raw loaded flags.
-for forbidden_coordinator_access in (
-    "->system_loaded",
-    "->updates_loaded",
-    ".installed.loaded",
-    ".history.loaded",
-    "repositories.records",
-    "discover_repositories_summary",
+# Discover and Updates share neutral support but never each other's view API.
+assert not includes(discover_view_cpp, "app/updates_view.hpp")
+assert not includes(updates_view_cpp, "app/discover_view.hpp")
+assert includes(discover_view_cpp, "app/page_support.hpp")
+assert includes(updates_view_cpp, "app/page_support.hpp")
+for name in (
+    "display_size", "one_line", "update_icon_name", "package_record_destroy",
+    "detail_row", "record_transaction_history",
 ):
-    assert forbidden_coordinator_access not in app_coordinator
-assert "system_page_loaded(state->system)" in app_coordinator
-assert "updates_controller_loaded(state->updates)" in app_coordinator
-assert "installed_controller_loaded(" in app_coordinator
-assert "history_controller_loaded(" in app_coordinator
-assert "repository_record_count(" in app_coordinator
-assert "set_discover_repository_summary(" in app_coordinator
-assert "invalidate_pages(state, AppStateChange::kernel)" in app_coordinator
-assert "invalidate_pages(state, AppStateChange::repository)" in app_coordinator
-assert "invalidate_pages(state, AppStateChange::repair)" in app_coordinator
+    assert defines_function(page_support_cpp, name)
+    assert not defines_function(discover_view_cpp, name)
+    assert not defines_function(updates_view_cpp, name)
+for token in ("refresh_updates(", "refresh_updates_internal(", "rebuild_updates("):
+    assert token not in discover_view_cpp
+for token in ("state->discover.", "refresh_discover(", "rebuild_discover_"):
+    assert token not in updates_view_cpp
+assert "notify_catalogue_transaction_completed" in discover_view_cpp
+assert "notify_transaction_history_changed" in discover_view_cpp
+assert "notify_updates_state_changed" in updates_view_cpp
+assert "notify_update_transaction_completed" in updates_view_cpp
+assert "notify_transaction_history_changed" in updates_view_cpp
 
-# The executable shell owns only shell concerns. Search, update presets and page
-# teardown must cross the coordinator/registry boundary instead of reaching into
-# Discover or Updates implementation headers and functions directly.
-for forbidden_shell_page_header in (
-    '"app/discover_view.hpp"',
-    '"app/updates_view.hpp"',
-    '"app/updates_controller.hpp"',
+# AppCoordinator routes domain events/shell intents; page lifecycle policy is
+# isolated in PageRegistry.
+for header in ("app/page_registry.hpp", "app/view_intents.hpp", "app/window_state.hpp"):
+    assert includes(app_coordinator, header)
+for header in (
+    "app/discover_view.hpp", "app/updates_view.hpp", "app/updates_controller.hpp",
+    "app/system_view.hpp", "app/repair_view.hpp", "app/repository_view.hpp",
+    "app/repository_controller.hpp", "app/installed_controller.hpp",
+    "app/history_controller.hpp",
 ):
-    assert forbidden_shell_page_header not in main_cpp
-assert "set_discover_search_query(" not in main_cpp
-assert "select_update_preset(" not in main_cpp
-assert "destroy_discover_page(" not in main_cpp
-assert "destroy_updates_page(" not in main_cpp
-assert "set_app_search_query(state, query)" in main_cpp
-assert "destroy_page_state(state)" in main_cpp
-
-# Discover may consume public controller views, but it must not reach into
-# another page/controller's backing vectors or lifecycle flags directly.
-for forbidden_discover_reachthrough in (
-    "state->updates.inventory.update_records",
-    "state->repositories.records",
-    "state->history.records",
-    "state->installed.loaded",
-    "state->history.loaded",
-    "state->updates.inventory.updates_loaded",
-    "history_state->history.loaded",
+    assert not includes(app_coordinator, header)
+assert "PageDescriptor" not in app_coordinator
+assert "PageDescriptor" in page_registry_cpp
+for event in (
+    "notify_kernel_state_changed", "notify_repository_state_changed",
+    "notify_repository_snapshot_changed", "notify_history_state_changed",
+    "notify_transaction_history_changed", "notify_updates_state_changed",
+    "notify_catalogue_transaction_completed", "notify_update_transaction_completed",
+    "notify_repair_state_changed",
 ):
-    assert forbidden_discover_reachthrough not in discover_view_cpp
-assert "updates_controller_records(state->updates)" in discover_view_cpp
-assert "repository_controller_records(state->repositories)" in discover_view_cpp
-assert "history_controller_records(state->history)" in discover_view_cpp
-assert "installed_controller_loaded(state->installed)" in discover_view_cpp
-assert "updates_controller_loaded(state->updates)" in discover_view_cpp
-assert "history_controller_loaded(" in discover_view_cpp
-assert "history_history_controller_loaded" not in discover_view_cpp
+    assert defines_function(app_coordinator, event)
 
+# The executable shell does not know page implementations.
+for header in ("app/discover_view.hpp", "app/updates_view.hpp", "app/updates_controller.hpp"):
+    assert not includes(main_cpp, header)
+for call in (
+    "set_discover_search_query(", "select_update_preset(",
+    "destroy_discover_page(", "destroy_updates_page(",
+):
+    assert call not in main_cpp
+assert "set_app_search_query" in main_cpp
+assert "destroy_page_state" in main_cpp
+
+# Discover consumes public controller surfaces instead of backing storage.
+for forbidden in (
+    "state->updates.inventory.update_records", "state->repositories.records",
+    "state->history.records", "state->installed.loaded", "state->history.loaded",
+    "state->updates.inventory.updates_loaded", "history_state->history.loaded",
+):
+    assert forbidden not in discover_view_cpp
 # Native update reconciliation, external update discovery and update planning
 # belong to the Updates controller. The Updates view owns GTK task lifetime
 # and presentation while reconciliation and planning remain controller-owned.

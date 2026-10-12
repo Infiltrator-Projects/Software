@@ -55,6 +55,15 @@ inline void set_discover_repository_summary(
         count.c_str());
 }
 
+inline void set_discover_updates_summary(
+    DiscoverPageState &state,
+    const std::size_t update_count)
+{
+    if (state.discover_updates_summary == nullptr) return;
+    const std::string count = std::to_string(update_count);
+    gtk_label_set_text(GTK_LABEL(state.discover_updates_summary), count.c_str());
+}
+
 } // namespace infiltrator::software::app
 
 #endif

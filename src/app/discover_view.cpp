@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "app/discover_view.hpp"
 #include "app/app_coordinator.hpp"
+#include "app/page_support.hpp"
 #include "app/transaction_review.hpp"
 #include "app/history_controller.hpp"
 #include "app/history_view.hpp"
@@ -99,21 +100,7 @@ using infiltrator::software::make_label;
 using infiltrator::software::make_page_intro;
 using infiltrator::software::make_stat_card;
 
-void refresh_updates(WindowState *state, bool refresh_metadata = false);
-void refresh_updates_internal(
-    WindowState *state,
-    bool refresh_metadata,
-    bool refresh_external);
-void refresh_discover(WindowState *state, bool force_refresh);
-void rebuild_updates(WindowState *state);
-std::string one_line(std::string value);
-const char *update_icon_name(const PackageRecord &package);
 void discover_install_clicked(GtkButton *button, gpointer user_data);
-
-void record_transaction_history(
-    const TransactionPlan &plan,
-    bool success,
-    std::string_view message);
 
 static constexpr const char kDiscoverHeroBase64[] =
 #include "discover_hero_part01.inc"
@@ -259,14 +246,6 @@ void prepare_discover_presentation(DiscoverResult *result)
     result->categories.assign(categories.begin(), categories.end());
 }
 
-std::string display_size(const std::uint64_t bytes)
-{
-    char text[32];
-    const char *formatted =
-        infiltratr_format_bytes(bytes, text, sizeof(text));
-    return formatted != nullptr ? std::string(formatted) : std::string();
-}
-
 const char *category_icon(const std::string_view category) noexcept
 {
     if (category == "Productivity") return "accessories-calculator-symbolic";
@@ -299,25 +278,6 @@ GtkWidget *catalogue_icon(const PackageRecord &record, const int size)
     gtk_image_set_pixel_size(GTK_IMAGE(icon), size);
     gtk_widget_add_css_class(icon, "discover-app-icon");
     return icon;
-}
-
-void package_record_destroy(gpointer data)
-{
-    delete static_cast<PackageRecord *>(data);
-}
-
-GtkWidget *detail_row(const char *caption, const std::string &value)
-{
-    GtkWidget *row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
-    GtkWidget *left = make_label(caption, "detail-label");
-    gtk_widget_set_size_request(left, 130, -1);
-    GtkWidget *right = make_label(
-        value.empty() ? "—" : value.c_str(), "detail-value");
-    gtk_label_set_wrap(GTK_LABEL(right), true);
-    gtk_widget_set_hexpand(right, true);
-    gtk_box_append(GTK_BOX(row), left);
-    gtk_box_append(GTK_BOX(row), right);
-    return row;
 }
 
 
@@ -2807,16 +2767,10 @@ void discover_flatpak_complete(
                 "infiltrator-window-state"));
         if (state != nullptr) {
             if (success) {
-                refresh_discover(state, true);
-                if (installed_controller_loaded(state->installed)) {
-                    refresh_installed_controller(&state->installed);
-                }
-                if (updates_controller_loaded(state->updates)) {
-                    refresh_updates(state, false);
-                }
+                notify_catalogue_transaction_completed(state);
             }
             if (history_controller_loaded(state->history)) {
-                refresh_history_controller(&state->history);
+                notify_transaction_history_changed(state);
             }
         }
     }
@@ -3143,7 +3097,7 @@ void discover_install_process_complete(
                     "infiltrator-window-state"));
             if (history_state != nullptr &&
                 history_controller_loaded(history_state->history)) {
-                refresh_history_controller(&history_state->history);
+                notify_transaction_history_changed(history_state);
             }
         }
     }
@@ -3202,9 +3156,7 @@ void discover_install_process_complete(
                 G_OBJECT(operation->main_window),
                 "infiltrator-window-state"));
         if (state != nullptr) {
-            refresh_discover(state, true);
-            if (installed_controller_loaded(state->installed)) refresh_installed_controller(&state->installed);
-            if (updates_controller_loaded(state->updates)) refresh_updates(state);
+            notify_catalogue_transaction_completed(state);
         }
     }
 
@@ -3239,7 +3191,7 @@ void start_discover_install_operation(
                     "infiltrator-window-state"));
             if (history_state != nullptr &&
                 history_controller_loaded(history_state->history)) {
-                refresh_history_controller(&history_state->history);
+                notify_transaction_history_changed(history_state);
             }
         }
         destroy_discover_install_operation(operation);
@@ -3296,7 +3248,7 @@ void start_discover_install_operation(
                     "infiltrator-window-state"));
             if (history_state != nullptr &&
                 history_controller_loaded(history_state->history)) {
-                refresh_history_controller(&history_state->history);
+                notify_transaction_history_changed(history_state);
             }
         }
         g_clear_error(&error);

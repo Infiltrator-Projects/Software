@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "app/updates_view.hpp"
-#include "app/discover_view.hpp"
+#include "app/page_support.hpp"
 #include "app/app_coordinator.hpp"
 #include "app/transaction_review.hpp"
 #include "app/history_controller.hpp"
@@ -105,15 +105,7 @@ void refresh_updates_internal(
     WindowState *state,
     bool refresh_metadata,
     bool refresh_external);
-void refresh_discover(WindowState *state, bool force_refresh);
 void rebuild_updates(WindowState *state);
-std::string one_line(std::string value);
-const char *update_icon_name(const PackageRecord &package);
-void discover_install_clicked(GtkButton *button, gpointer user_data);
-
-std::string display_size(std::uint64_t bytes);
-void package_record_destroy(gpointer data);
-GtkWidget *detail_row(const char *caption, const std::string &value);
 
 struct UpdateProcessRun {
     GtkWindow *window{};
@@ -177,53 +169,6 @@ read_privileged_update_progress()
         return std::nullopt;
     }
     return progress;
-}
-
-std::filesystem::path transaction_history_path()
-{
-    const std::string path =
-        infiltrator::software::user_transaction_history_path();
-    return path.empty()
-        ? std::filesystem::path{}
-        : std::filesystem::path(path);
-}
-
-void record_transaction_history(
-    const TransactionPlan &plan,
-    const bool success,
-    const std::string_view message)
-{
-    const std::filesystem::path path =
-        transaction_history_path();
-    if (path.empty() || plan.items.empty()) {
-        return;
-    }
-
-    TransactionHistoryStore store(path.string());
-    std::string error;
-    if (!store.append(plan, success, message, error)) {
-        g_warning(
-            "Unable to record Software transaction history: %s",
-            error.c_str());
-    }
-}
-
-std::string one_line(std::string value)
-{
-    for (char &ch : value) {
-        if (ch == '\n' || ch == '\r' || ch == '\t') {
-            ch = ' ';
-        }
-    }
-    while (!value.empty() &&
-           std::isspace(static_cast<unsigned char>(value.back())) != 0) {
-        value.pop_back();
-    }
-    if (value.size() > 220U) {
-        value.resize(217U);
-        value += "...";
-    }
-    return value;
 }
 
 
@@ -609,32 +554,6 @@ void set_update_runtime_state(const std::string_view value)
     if (ec) {
         std::filesystem::remove(temporary, ec);
     }
-}
-
-const char *update_icon_name(const PackageRecord &package)
-{
-    switch (package.kind) {
-    case infiltrator::software::PackageKind::kernel:
-        return "computer-symbolic";
-    case infiltrator::software::PackageKind::driver:
-        return "preferences-system-symbolic";
-    case infiltrator::software::PackageKind::library:
-    case infiltrator::software::PackageKind::runtime:
-        return "applications-system-symbolic";
-    case infiltrator::software::PackageKind::system:
-        return "emblem-system-symbolic";
-    case infiltrator::software::PackageKind::application:
-    case infiltrator::software::PackageKind::unknown:
-        /*
-         * Mint icon themes may provide software-update-available-symbolic as
-         * a pre-coloured raster asset.  Such assets ignore GtkImage's CSS
-         * foreground and become nearly black on the Software dark palette.
-         * view-refresh-symbolic is a true symbolic icon across the supported
-         * GTK/Mint themes, so it reliably follows .package-icon colour.
-         */
-        return "view-refresh-symbolic";
-    }
-    return "view-refresh-symbolic";
 }
 
 std::string update_identity(const PackageRecord &package)
@@ -2543,16 +2462,7 @@ void updates_complete(
         result->external_error.clear();
     }
 
-    if (state->discover.discover_updates_summary != nullptr) {
-        const std::string summary =
-            std::to_string(
-                state->updates.inventory.update_records.size());
-        gtk_label_set_text(
-            GTK_LABEL(state->discover.discover_updates_summary),
-            summary.c_str());
-    }
-
-    rebuild_discover_update_preview(state);
+    notify_updates_state_changed(state);
     update_nav_updates_badge(state);
 
     if (state->updates.updates_reboot_banner != nullptr) {
@@ -2756,9 +2666,7 @@ void updates_complete(
              * The native refresh has now published the authoritative
              * post-transaction generation.  Only now may other pages reload.
              */
-            refresh_installed_controller(&state->installed);
-            refresh_discover(state);
-            refresh_repositories(state);
+            notify_update_transaction_completed(state);
 
             if (state->updates.transaction.updates_restart_after_verify) {
                 state->updates.transaction.updates_restart_after_verify = false;
@@ -2926,9 +2834,7 @@ void update_process_complete(
             }
             record_transaction_history(
                 run->plan, success, history_message);
-            if (state->history.loaded) {
-                refresh_history_controller(&state->history);
-            }
+            notify_transaction_history_changed(state);
         }
 
         if (success) {
@@ -3071,9 +2977,7 @@ void start_update_process(
         if (!plan.items.empty()) {
             record_transaction_history(
                 plan, false, message);
-            if (state->history.loaded) {
-                refresh_history_controller(&state->history);
-            }
+            notify_transaction_history_changed(state);
         }
         return;
     }
