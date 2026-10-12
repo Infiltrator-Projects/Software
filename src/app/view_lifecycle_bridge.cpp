@@ -6,7 +6,6 @@
 #include "app/updates_controller.hpp"
 #include "app/window_state.hpp"
 
-#include <cstring>
 #include <string>
 
 namespace infiltrator::software::app {
@@ -69,15 +68,6 @@ void destroy_discover_page(WindowState *state)
     }
 }
 
-void set_updates_page_selected(WindowState *, const bool)
-{
-    /*
-     * Selection lifecycle is owned by the page descriptor/coordinator.  Keep
-     * this boundary as a compatibility no-op until all older callers have
-     * migrated to select_app_page().
-     */
-}
-
 void select_update_preset(
     WindowState *state,
     const UpdateSelectionPreset preset)
@@ -98,7 +88,7 @@ void select_update_preset(
 
     /*
      * An already hydrated page needs one local-state refresh so the preset is
-     * applied immediately.  An unhydrated page consumes the pending preset
+     * applied immediately. An unhydrated page consumes the pending preset
      * during its normal first refresh after navigation.
      */
     if (updates_controller_loaded(state->updates) &&
