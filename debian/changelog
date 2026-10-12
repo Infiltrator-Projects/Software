@@ -1,3 +1,16 @@
+infiltrator-software (0.3.82) unstable; urgency=high
+
+  * Keep release verification, artifact construction, GitHub publication and
+    central APT publication in one exact-source workflow and one verified build.
+  * Remove commit-message release magic: VERSION plus immutable tag identity now
+    controls release eligibility, so wording cannot silently suppress a release.
+  * Make exact release reruns repair partial GitHub asset sets idempotently while
+    retaining checksum, package-version and exact-commit verification.
+  * Prune merged development branches so main is the only persistent branch and
+    retain build, test, smoke, AppStream, package and APT publication gates.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Mon, 12 Oct 2026 22:45:16 +1100
+
 infiltrator-software (0.3.81) unstable; urgency=high
 
   * Reduce application-layer brittleness by separating shell coordination from
