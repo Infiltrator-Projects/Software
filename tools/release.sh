@@ -2,6 +2,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 set -euo pipefail
 
+REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
+readonly REPO_ROOT
+cd "$REPO_ROOT"
+
 die() {
     printf '::error::%s\n' "$*" >&2
     exit 1
@@ -101,8 +105,7 @@ identity() {
 source_bundle() {
     local version="$1"
     local expected_sha="$2"
-    local workspace="$3"
-    local temp_root="$4"
+    local temp_root="$3"
     local out root epoch
 
     require_command rsync
@@ -111,9 +114,9 @@ source_bundle() {
     assert_source_version "$version"
     assert_head "$expected_sha"
 
-    out="${workspace}/dist/release"
+    out="${REPO_ROOT}/dist/release"
     root="${temp_root}/software-source/Software-${version}"
-    rm -rf "${workspace}/dist" "${temp_root}/software-source"
+    rm -rf "${REPO_ROOT}/dist" "${temp_root}/software-source"
     mkdir -p "$out" "$root"
 
     # Capture source before the build so generated files can never leak into the
@@ -133,13 +136,12 @@ source_bundle() {
 
 complete_bundle() {
     local version="$1"
-    local workspace="$2"
     local out package
 
     require_command sha256sum
     assert_source_version "$version"
-    out="${workspace}/dist/release"
-    package="../infiltrator-software_${version}_amd64.deb"
+    out="${REPO_ROOT}/dist/release"
+    package="$(dirname "$REPO_ROOT")/infiltrator-software_${version}_amd64.deb"
     [[ -f "$package" ]] || die "Verified Debian package is missing: $package"
     [[ -f "${out}/software_${version}_source.tar.gz" ]] || \
         die "Source bundle is missing before completion."
@@ -302,8 +304,8 @@ Usage: tools/release.sh COMMAND [arguments]
 
 Commands:
   identity EVENT REF SHA [GITHUB_OUTPUT]
-  source-bundle VERSION SHA WORKSPACE TEMP_ROOT
-  complete-bundle VERSION WORKSPACE
+  source-bundle VERSION SHA TEMP_ROOT
+  complete-bundle VERSION
   verify-bundle VERSION SHA RELEASE_DIR
   publish-github VERSION SHA RELEASE_DIR REPOSITORY
   publish-apt VERSION SHA REPOSITORY

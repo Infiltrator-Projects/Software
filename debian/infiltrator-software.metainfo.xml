@@ -25,9 +25,9 @@
   <url type="homepage">https://github.com/Infiltrator-Projects/Software</url>
 
   <releases>
-    <release version="0.3.85" date="2026-10-13">
+    <release version="0.3.86" date="2026-10-13">
       <description>
-        <p>Repairs central APT publication after the release-policy simplification by checking out the exact verified release commit before invoking the repository-owned release tool, while preserving immutable release verification.</p>
+        <p>Reduces release orchestration coupling by publishing GitHub and central APT sequentially in one serialized job, while anchoring the release tool to its own repository root and preserving deterministic verification.</p>
       </description>
     </release>
   </releases>

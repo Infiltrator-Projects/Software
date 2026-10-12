@@ -1,3 +1,14 @@
+infiltrator-software (0.3.86) unstable; urgency=high
+
+  * Collapse GitHub release and central APT publication into one serialized job,
+    removing duplicated checkout and cross-job publication wiring.
+  * Anchor tools/release.sh to its own repository root and remove redundant
+    workspace arguments from source-bundle and complete-bundle commands.
+  * Keep build-once immutable artifacts, exact release verification, main-only
+    branching and end-to-end APT catalogue confirmation intact.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Tue, 13 Oct 2026 08:02:00 +1100
+
 infiltrator-software (0.3.85) unstable; urgency=high
 
   * Check out the exact verified release commit in the central APT publication
