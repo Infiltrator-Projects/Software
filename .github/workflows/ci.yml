@@ -175,6 +175,12 @@ jobs:
     timeout-minutes: 25
 
     steps:
+      - name: Check out exact verified release commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+
       - name: Trigger and verify central APT publication
         env:
           DISPATCH_TOKEN: ${{ secrets.APT_REPOSITORY_DISPATCH_TOKEN }}

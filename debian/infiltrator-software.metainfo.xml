@@ -25,9 +25,9 @@
   <url type="homepage">https://github.com/Infiltrator-Projects/Software</url>
 
   <releases>
-    <release version="0.3.84" date="2026-10-13">
+    <release version="0.3.85" date="2026-10-13">
       <description>
-        <p>Reduces release coupling by moving deterministic release policy out of GitHub Actions YAML into one reusable release tool, removing unreachable self-hosted logic, and pinning artifact-transfer actions to immutable commits.</p>
+        <p>Repairs central APT publication after the release-policy simplification by checking out the exact verified release commit before invoking the repository-owned release tool, while preserving immutable release verification.</p>
       </description>
     </release>
   </releases>

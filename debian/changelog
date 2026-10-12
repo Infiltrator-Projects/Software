@@ -1,3 +1,14 @@
+infiltrator-software (0.3.85) unstable; urgency=high
+
+  * Check out the exact verified release commit in the central APT publication
+    job before invoking the repository-owned release tool.
+  * Preserve the simplified reusable release-policy boundary while repairing the
+    live orchestration fault exposed by the 0.3.84 publication run.
+  * Retain build-once, exact tag/package/asset verification and main-only release
+    semantics; 0.3.84 remains immutable as the GitHub-published failed APT run.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Tue, 13 Oct 2026 05:54:00 +1100
+
 infiltrator-software (0.3.84) unstable; urgency=high
 
   * Move deterministic release identity, bundle and publication policy out of
