@@ -25,9 +25,9 @@
   <url type="homepage">https://github.com/Infiltrator-Projects/Software</url>
 
   <releases>
-    <release version="0.3.83" date="2026-10-13">
+    <release version="0.3.84" date="2026-10-13">
       <description>
-        <p>Hardens the deterministic release path by rejecting reused version tags, constraining manual recovery to main or the exact release tag, and verifying APT package and asset identity before publication is accepted.</p>
+        <p>Reduces release coupling by moving deterministic release policy out of GitHub Actions YAML into one reusable release tool, removing unreachable self-hosted logic, and pinning artifact-transfer actions to immutable commits.</p>
       </description>
     </release>
   </releases>

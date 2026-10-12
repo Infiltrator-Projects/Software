@@ -1,3 +1,16 @@
+infiltrator-software (0.3.84) unstable; urgency=high
+
+  * Move deterministic release identity, bundle and publication policy out of
+    GitHub Actions YAML into one reusable release tool invoked by the workflow.
+  * Remove the unreachable self-hosted dependency branch from the explicitly
+    GitHub-hosted verification job instead of retaining dead release logic.
+  * Pin artifact upload/download actions to immutable commits and verify the
+    exact release-bundle file set, package identity and version before publishing.
+  * Preserve the single-workflow, build-once, main-only release model while
+    making the release contract easier to run, inspect and recover deterministically.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Tue, 13 Oct 2026 05:28:00 +1100
+
 infiltrator-software (0.3.83) unstable; urgency=high
 
   * Make reused release versions fail closed instead of allowing a green main
