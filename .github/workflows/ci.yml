@@ -98,13 +98,9 @@ jobs:
           rm -rf "$GITHUB_WORKSPACE/dist" "$RUNNER_TEMP/software-source"
           mkdir -p "$out" "$root"
 
-          # This runs before configure/build/package/smoke tests so generated
-          # files cannot leak into the source release. Only VCS metadata and the
-          # output directory need excluding.
-          rsync -a \
-            --exclude='.git' \
-            --exclude='dist' \
-            ./ "$root/"
+          # Run before build/package/smoke tests so generated files cannot leak
+          # into the source release. Only VCS metadata and output are excluded.
+          rsync -a --exclude='.git' --exclude='dist' ./ "$root/"
 
           epoch="$(git show -s --format=%ct "$GITHUB_SHA")"
           find "$root" -exec touch -h -d "@$epoch" {} +
@@ -116,24 +112,32 @@ jobs:
             | gzip -n > "$out/software_${VERSION}_source.tar.gz"
           cp LICENSE "$out/LICENSE.txt"
 
-      - name: Configure
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-
-      - name: Build
-        run: cmake --build build --parallel 2
-
-      - name: Test
-        run: ctest --test-dir build --output-on-failure
-
       - name: Verify update authorization and source contracts
         run: python3 tests/source_contracts.py
+
+      - name: Build and test Debian package
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x debian/rules
+          # debian/rules owns the canonical release configuration and runs CTest.
+          # CI therefore compiles exactly once and tests the same build that is
+          # subsequently packaged and released.
+          dpkg-buildpackage -us -uc -b
+
+      - name: Verify Debian package contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          package="../infiltrator-software_${{ steps.identity.outputs.version }}_amd64.deb"
+          bash tests/verify_debian_package.sh "$package"
 
       - name: Engine service smoke test
         shell: bash
         run: |
           set -uo pipefail
           set +e
-          timeout 3s dbus-run-session -- ./build/infiltrator-software-engine >engine.out 2>engine.err
+          timeout 3s dbus-run-session -- ./build-deb/infiltrator-software-engine >engine.out 2>engine.err
           status=$?
           set -e
           cat engine.out || true
@@ -148,7 +152,7 @@ jobs:
         run: |
           set -uo pipefail
           set +e
-          timeout 20s xvfb-run -a ./build/infiltrator-software >launch.out 2>launch.err
+          timeout 20s xvfb-run -a ./build-deb/infiltrator-software >launch.out 2>launch.err
           status=$?
           set -e
           echo "launch exit status: $status"
@@ -168,25 +172,11 @@ jobs:
             -ex "set pagination off" \
             -ex run \
             -ex "thread apply all bt full" \
-            --args ./build/infiltrator-software || true
+            --args ./build-deb/infiltrator-software || true
           exit "$status"
 
       - name: Validate AppStream metadata
         run: appstreamcli validate debian/infiltrator-software.metainfo.xml
-
-      - name: Build Debian package
-        shell: bash
-        run: |
-          set -euo pipefail
-          chmod +x debian/rules
-          dpkg-buildpackage -us -uc -b
-
-      - name: Verify Debian package contract
-        shell: bash
-        run: |
-          set -euo pipefail
-          package="../infiltrator-software_${{ steps.identity.outputs.version }}_amd64.deb"
-          bash tests/verify_debian_package.sh "$package"
 
       - name: Complete verified release bundle
         if: steps.identity.outputs.release == 'true'
@@ -249,8 +239,8 @@ jobs:
 
           git fetch origin --tags
           test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
-
           test "$(tr -d '[:space:]' < VERSION)" = "$VERSION"
+
           subject="$(git log -1 --format=%s HEAD)"
           [[ "$subject" == "Release $VERSION"* ]] || {
             echo "::error::Release commit subject must begin with Release $VERSION."
