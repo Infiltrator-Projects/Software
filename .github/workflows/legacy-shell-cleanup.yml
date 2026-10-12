@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-name: One-shot legacy bridge cleanup
+name: One-shot page view split
 
 on:
   push:
@@ -21,112 +21,135 @@ jobs:
           fetch-depth: 0
           submodules: recursive
 
-      - name: Remove duplicate review and controller bridges
+      - name: Split Discover and Updates implementation ownership
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
-          import re
 
-          path = Path('src/app/legacy_page_impl.cpp')
-          source = path.read_text()
+          legacy_path = Path('src/app/legacy_page_impl.cpp')
+          source = legacy_path.read_text()
 
-          include_anchor = '#include "app/history_controller.hpp"\n'
-          added = (
-              '#include "app/app_coordinator.hpp"\n'
-              '#include "app/transaction_review.hpp"\n'
-          )
-          if added not in source:
-              if include_anchor not in source:
-                  raise SystemExit('Expected include anchor not found.')
-              source = source.replace(include_anchor, added + include_anchor, 1)
+          hero_marker = '\nstatic constexpr const char kDiscoverHeroBase64[] ='
+          updates_state_marker = '\nstruct UpdateProcessRun {\n'
+          discover_ops_marker = '\nstruct DiscoverFlatpakOperation {\n'
+          updates_view_marker = '\nvoid set_update_runtime_state(const std::string_view value)\n'
+          namespace_marker = '\n} // namespace infiltrator::software::app\n'
 
-          # transaction_review.cpp already owns the exact reviewed-transaction
-          # dialog. Remove the older private duplicate and use the shared API.
-          review_start = source.find('\nconst char *transaction_action_label(')
-          review_end = source.find('\nvoid discover_details_clicked(', review_start)
-          if review_start < 0 or review_end < 0:
-              raise SystemExit('Duplicate transaction-review helper block not found.')
-          source = source[:review_start] + '\n' + source[review_end:]
-          source = source.replace(
-              'make_transaction_confirmation_dialog(',
-              'make_transaction_review_dialog(',
-          )
-          if 'make_transaction_confirmation_dialog' in source:
-              raise SystemExit('Duplicate transaction-review call survived cleanup.')
-
-          # Installed and History already have controllers; do not retain local
-          # WindowState forwarding functions in this transitional provider.
-          installed_start = source.find('\nvoid refresh_installed(WindowState *state)\n')
-          installed_end = source.find('\nstruct UpdateProcessRun {', installed_start)
-          if installed_start < 0 or installed_end < 0:
-              raise SystemExit('Installed forwarding bridge not found.')
-          source = source[:installed_start] + '\n' + source[installed_end:]
-          source = re.sub(
-              r'\brefresh_installed\(([A-Za-z_][A-Za-z0-9_]*)\);',
-              r'refresh_installed_controller(&\1->installed);',
-              source,
-          )
-
-          history_start = source.rfind('\nvoid refresh_history(WindowState *state)\n')
-          select_start = source.find('\nvoid select_page(WindowState *state, const int index)\n', history_start)
-          if history_start < 0 or select_start < 0:
-              raise SystemExit('History/select forwarding bridges not found.')
-          source = source[:history_start] + '\n' + source[select_start:]
-          source = re.sub(
-              r'\brefresh_history\(([A-Za-z_][A-Za-z0-9_]*)\);',
-              r'refresh_history_controller(&\1->history);',
-              source,
-          )
-
-          # Navigation is coordinated centrally now. Keep dashboard navigation
-          # on that public boundary and remove the final local index bridge.
-          source = source.replace(
-              'select_page(state, index);',
-              'select_app_page(state, static_cast<AppPage>(index));',
-          )
-          select_start = source.find('\nvoid select_page(WindowState *state, const int index)\n')
-          namespace_close = source.rfind('\n} // namespace infiltrator::software::app\n')
-          if select_start < 0 or namespace_close < 0 or select_start > namespace_close:
-              raise SystemExit('Select-page forwarding bridge not found.')
-          source = source[:select_start] + source[namespace_close:]
-
-          for declaration in (
-              'void refresh_installed(WindowState *state);\n',
-              'void refresh_history(WindowState *state);\n',
-              'void select_page(WindowState *state, int index);\n',
+          positions = {
+              'hero': source.find(hero_marker),
+              'updates_state': source.find(updates_state_marker),
+              'discover_ops': source.find(discover_ops_marker),
+              'updates_view': source.find(updates_view_marker),
+              'namespace': source.rfind(namespace_marker),
+          }
+          if any(value < 0 for value in positions.values()):
+              raise SystemExit(f'Unable to identify page split boundaries: {positions}')
+          if not (
+              positions['hero'] < positions['updates_state'] <
+              positions['discover_ops'] < positions['updates_view'] <
+              positions['namespace']
           ):
-              source = source.replace(declaration, '', 1)
+              raise SystemExit(f'Page split boundaries are out of order: {positions}')
 
-          for forbidden in (
-              'void refresh_installed(WindowState *state)',
-              'void refresh_history(WindowState *state)',
-              'void select_page(WindowState *state',
-              'make_transaction_confirmation_dialog',
-              'refresh_installed(',
-              'refresh_history(',
+          preamble = source[:positions['hero']]
+          discover_primary = source[positions['hero']:positions['updates_state']]
+          updates_shared = source[positions['updates_state']:positions['discover_ops']]
+          discover_operations = source[positions['discover_ops']:positions['updates_view']]
+          updates_primary = source[positions['updates_view']:positions['namespace']]
+          namespace_close = source[positions['namespace']:]
+
+          discover_preamble = preamble.replace(
+              '// SPDX-License-Identifier: GPL-3.0-or-later\n',
+              '// SPDX-License-Identifier: GPL-3.0-or-later\n#include "app/discover_view.hpp"\n',
+              1,
+          )
+          discover_preamble += '''\nvoid record_transaction_history(\n    const TransactionPlan &plan,\n    bool success,\n    std::string_view message);\n'''
+          discover_source = (
+              discover_preamble +
+              discover_primary +
+              discover_operations +
+              namespace_close
+          )
+
+          updates_preamble = preamble.replace(
+              '// SPDX-License-Identifier: GPL-3.0-or-later\n',
+              '// SPDX-License-Identifier: GPL-3.0-or-later\n#include "app/updates_view.hpp"\n#include "app/discover_view.hpp"\n',
+              1,
+          )
+          updates_preamble += '''\nstd::string display_size(std::uint64_t bytes);\nvoid package_record_destroy(gpointer data);\nGtkWidget *detail_row(const char *caption, const std::string &value);\n'''
+          updates_source = (
+              updates_preamble +
+              updates_shared +
+              updates_primary +
+              namespace_close
+          )
+
+          for name, text in (
+              ('Discover', discover_source),
+              ('Updates', updates_source),
           ):
-              if forbidden in source:
-                  raise SystemExit(f'Retired bridge survived cleanup: {forbidden}')
+              if 'namespace infiltrator::software::app {' not in text:
+                  raise SystemExit(f'{name} view lost namespace declaration.')
+              if text.count('} // namespace infiltrator::software::app') != 1:
+                  raise SystemExit(f'{name} view has malformed namespace closure.')
 
-          path.write_text(source)
+          Path('src/app/discover_view.cpp').write_text(discover_source)
+          Path('src/app/updates_view.cpp').write_text(updates_source)
+          legacy_path.unlink()
+
+          cmake_path = Path('CMakeLists.txt')
+          cmake = cmake_path.read_text()
+          old = '    src/app/legacy_page_impl.cpp\n'
+          new = '    src/app/discover_view.cpp\n    src/app/updates_view.cpp\n'
+          if old not in cmake:
+              raise SystemExit('Legacy page source is not present in the app target.')
+          cmake_path.write_text(cmake.replace(old, new, 1))
 
           contracts_path = Path('tests/source_contracts.py')
           contracts = contracts_path.read_text()
-          anchor = 'assert "void global_search_changed(" not in legacy_page_impl\n'
-          addition = '''assert "make_transaction_confirmation_dialog" not in legacy_page_impl\nassert "make_transaction_review_dialog(" in legacy_page_impl\nassert "void refresh_installed(WindowState *state)" not in legacy_page_impl\nassert "void refresh_history(WindowState *state)" not in legacy_page_impl\nassert "void select_page(WindowState *state" not in legacy_page_impl\nassert "select_app_page(state, static_cast<AppPage>(index))" in legacy_page_impl\n'''
+          old_assignment = 'legacy_page_impl = text("src/app/legacy_page_impl.cpp")\n'
+          new_assignment = (
+              'discover_view_cpp = text("src/app/discover_view.cpp")\n'
+              'updates_view_cpp = text("src/app/updates_view.cpp")\n'
+              'page_views = discover_view_cpp + "\\n" + updates_view_cpp\n'
+          )
+          if old_assignment not in contracts:
+              raise SystemExit('Legacy source-contract assignment was not found.')
+          contracts = contracts.replace(old_assignment, new_assignment, 1)
+          contracts = contracts.replace('legacy_page_impl', 'page_views')
+          contracts = contracts.replace(
+              'assert "refresh_updates_data" in page_views',
+              'assert "refresh_updates_data" in updates_view_cpp',
+              1,
+          )
+          anchor = 'assert not Path("src/app/legacy_page_aliases.hpp").exists()\n'
+          addition = (
+              'assert not Path("src/app/legacy_page_impl.cpp").exists()\n'
+              'assert "src/app/discover_view.cpp" in cmake\n'
+              'assert "src/app/updates_view.cpp" in cmake\n'
+              'assert "src/app/legacy_page_impl.cpp" not in cmake\n'
+          )
           if anchor not in contracts:
-              raise SystemExit('Source-contract insertion anchor not found.')
-          contracts_path.write_text(contracts.replace(anchor, anchor + addition, 1))
+              raise SystemExit('Source-contract split anchor not found.')
+          contracts = contracts.replace(anchor, anchor + addition, 1)
+          contracts = contracts.replace(
+              '# belong to the Updates controller. The quarantined legacy page provider still\n# owns GTK task lifetime/presentation until that lifecycle is extracted.\n',
+              '# belong to the Updates controller. The Updates view owns GTK task lifetime\n# and presentation while reconciliation and planning remain controller-owned.\n',
+              1,
+          )
+          contracts_path.write_text(contracts)
           PY
 
           git diff --check
-          ! grep -Fq 'make_transaction_confirmation_dialog' src/app/legacy_page_impl.cpp
-          ! grep -Fq 'void refresh_installed(WindowState *state)' src/app/legacy_page_impl.cpp
-          ! grep -Fq 'void refresh_history(WindowState *state)' src/app/legacy_page_impl.cpp
-          ! grep -Fq 'void select_page(WindowState *state' src/app/legacy_page_impl.cpp
-          grep -Fq 'make_transaction_review_dialog(' src/app/legacy_page_impl.cpp
+          ! test -e src/app/legacy_page_impl.cpp
+          test -s src/app/discover_view.cpp
+          test -s src/app/updates_view.cpp
+          grep -Fq 'make_discover_page' src/app/discover_view.cpp
+          grep -Fq 'make_updates_page' src/app/updates_view.cpp
+          ! grep -Fq 'make_updates_page' src/app/discover_view.cpp
+          ! grep -Fq 'make_discover_page' src/app/updates_view.cpp
 
       - name: Install build dependencies
         env:
@@ -159,13 +182,13 @@ jobs:
           cat launch.err || true
           test "$status" -eq 124
 
-      - name: Commit cleanup
+      - name: Commit split
         shell: bash
         run: |
           set -euo pipefail
           git config user.name "Shannon Smith"
           git config user.email "infiltratr@yandex.com"
-          git add src/app/legacy_page_impl.cpp tests/source_contracts.py
+          git add src/app/discover_view.cpp src/app/updates_view.cpp src/app/legacy_page_impl.cpp CMakeLists.txt tests/source_contracts.py
           git diff --cached --check
-          git commit -m "Remove transitional page bridges"
+          git commit -m "Split Discover and Updates view implementations"
           git push origin HEAD:main
