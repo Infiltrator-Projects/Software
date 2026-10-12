@@ -239,65 +239,6 @@ publish_github() {
         die "Release $tag has an unexpected asset set."
 }
 
-publish_apt() {
-    local version="$1"
-    local release_sha="$2"
-    local repository="$3"
-    local catalogue='https://infiltrator-projects.github.io/Infiltrator-Repository/catalogue/apps.json'
-    local payload attempt
-
-    require_command curl
-    require_command jq
-
-    published() {
-        local cache_buster="$1"
-        curl -fsS --retry 2 --retry-delay 1 \
-            "${catalogue}?release=${release_sha}&attempt=${cache_buster}" \
-            | jq -e \
-                --arg id software \
-                --arg version "$version" \
-                --arg package infiltrator-software \
-                --arg asset "software_${version}_amd64.deb" \
-                '.[] | select(.id == $id and .version == $version and .package == $package and .asset == $asset)' \
-              >/dev/null
-    }
-
-    if published 0; then
-        echo "APT repository already advertises Software $version."
-        return 0
-    fi
-
-    if [[ -n "${DISPATCH_TOKEN:-}" ]]; then
-        payload="$(jq -nc \
-            --arg repository "$repository" \
-            --arg sha "$release_sha" \
-            '{event_type:"application-release",client_payload:{repository:$repository,sha:$sha}}')"
-        if curl --fail-with-body --silent --show-error \
-            --request POST \
-            --header "Authorization: Bearer $DISPATCH_TOKEN" \
-            --header "Accept: application/vnd.github+json" \
-            --header "X-GitHub-Api-Version: 2022-11-28" \
-            --data "$payload" \
-            https://api.github.com/repos/Infiltrator-Projects/Infiltrator-Repository/dispatches; then
-            echo "Central APT publication dispatch accepted."
-        else
-            echo "::warning::APT dispatch failed; scheduled repository recovery will be used."
-        fi
-    else
-        echo "::warning::APT dispatch token unavailable; scheduled repository recovery will be used."
-    fi
-
-    for attempt in $(seq 1 120); do
-        if published "$attempt"; then
-            echo "APT repository advertises Software $version."
-            return 0
-        fi
-        sleep 10
-    done
-
-    die "Central APT repository did not advertise Software $version within 20 minutes."
-}
-
 usage() {
     cat <<'USAGE'
 Usage: tools/release.sh COMMAND [arguments]
@@ -308,7 +249,6 @@ Commands:
   complete-bundle VERSION
   verify-bundle VERSION SHA RELEASE_DIR
   publish-github VERSION SHA RELEASE_DIR REPOSITORY
-  publish-apt VERSION SHA REPOSITORY
 USAGE
 }
 
@@ -325,7 +265,6 @@ case "$command" in
     complete-bundle) complete_bundle "$@" ;;
     verify-bundle) verify_bundle "$@" ;;
     publish-github) publish_github "$@" ;;
-    publish-apt) publish_apt "$@" ;;
     -h|--help|help) usage ;;
     *)
         usage >&2

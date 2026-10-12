@@ -1,3 +1,15 @@
+infiltrator-software (0.3.88) unstable; urgency=high
+
+  * Remove Software's cross-repository APT dispatch secret and polling loop so
+    an application release cannot fail because GitHub Pages or another
+    repository's scheduled workflow is delayed.
+  * Keep central APT publication owned by Infiltrator-Repository as an
+    independent downstream consumer of immutable Software releases.
+  * Preserve build-once artifacts, exact tag/package verification, all runtime
+    and package checks, main-only development and deterministic GitHub release.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Tue, 13 Oct 2026 10:25:00 +1100
+
 infiltrator-software (0.3.87) unstable; urgency=high
 
   * Replace the release-metadata regression test's assert-only checks with

@@ -138,7 +138,7 @@ jobs:
     needs: linux
     if: needs.linux.outputs.release == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 35
+    timeout-minutes: 10
     permissions:
       actions: read
       contents: write
@@ -167,12 +167,3 @@ jobs:
           bash tools/release.sh publish-github
           "${{ needs.linux.outputs.version }}" "$GITHUB_SHA"
           release "$GITHUB_REPOSITORY"
-
-      - name: Trigger and verify central APT publication
-        env:
-          DISPATCH_TOKEN: ${{ secrets.APT_REPOSITORY_DISPATCH_TOKEN }}
-        shell: bash
-        run: >-
-          bash tools/release.sh publish-apt
-          "${{ needs.linux.outputs.version }}" "$GITHUB_SHA"
-          "$GITHUB_REPOSITORY"

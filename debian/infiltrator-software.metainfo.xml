@@ -25,9 +25,9 @@
   <url type="homepage">https://github.com/Infiltrator-Projects/Software</url>
 
   <releases>
-    <release version="0.3.87" date="2026-10-13">
+    <release version="0.3.88" date="2026-10-13">
       <description>
-        <p>Hardens release-metadata regression checks against Release-mode assertion removal and removes stale architecture dependency/version wording that could drift from the build contract.</p>
+        <p>Decouples deterministic Software release verification from the independent central APT repository lifecycle, removing cross-repository secret and timing assumptions.</p>
       </description>
     </release>
   </releases>
