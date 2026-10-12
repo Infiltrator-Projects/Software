@@ -38,11 +38,14 @@ history = text("src/core/transaction_history.cpp")
 installed_controller = text("src/app/installed_controller.cpp")
 installed_inventory = text("src/app/installed_inventory.cpp")
 main_cpp = text("src/app/main.cpp")
+legacy_page_impl = text("src/app/legacy_page_impl.cpp")
 app_coordinator = text("src/app/app_coordinator.cpp")
 discover_state = text("src/app/discover_state.hpp")
 updates_controller = text("src/app/updates_controller.cpp")
 updates_controller_hpp = text("src/app/updates_controller.hpp")
+system_view = text("src/app/system_view.cpp")
 system_view_hpp = text("src/app/system_view.hpp")
+repair_view = text("src/app/repair_view.cpp")
 repair_view_hpp = text("src/app/repair_view.hpp")
 repository_controller = text("src/app/repository_controller.cpp")
 repository_controller_hpp = text("src/app/repository_controller.hpp")
@@ -121,8 +124,8 @@ assert '"core/model.hpp"' in repository_controller_hpp
 assert '"core/model.hpp"' in source_inventory_hpp
 
 # Page state is owned by named members. WindowState is a shell plus composition,
-# never a subtype of a page/controller. The explicit legacy reference aliases
-# are temporary source compatibility for main.cpp and must only shrink.
+# never a subtype of a page/controller. Compatibility rewriting is permitted
+# only for the quarantined legacy page provider and must only shrink.
 assert "struct ShellState" in window_state
 assert "struct DiscoverPageState" in discover_state
 assert "struct UpdatesController" in updates_controller_hpp
@@ -147,6 +150,18 @@ for owned_page in (
 ):
     assert owned_page in window_state
 assert "do not add new aliases" in window_state
+assert "INFILTRATOR_SOFTWARE_LEGACY_PAGE_IMPL" in window_state
+assert "INFILTRATOR_SOFTWARE_REPAIR_VIEW_LEGACY_ALIASES" not in window_state
+assert "INFILTRATOR_SOFTWARE_SYSTEM_VIEW_LEGACY_ALIASES" not in cmake
+assert "INFILTRATOR_SOFTWARE_REPAIR_VIEW_LEGACY_ALIASES" not in cmake
+assert "INFILTRATOR_SOFTWARE_LEGACY_PAGE_IMPL=1" in cmake
+assert "main=infiltrator_software_legacy_page_impl_main" in cmake
+assert "state->system_" not in system_view
+assert "state->repair_" not in repair_view
+assert "discover_health_summary" not in repair_view
+assert "discover_health_banner_state" not in repair_view
+assert "notify_repair_health_changed" in repair_view
+assert "set_discover_health_state" in app_coordinator
 for updates_member in (
     "GtkListBox *updates_list",
     "std::vector<PackageRecord> update_records",
@@ -174,8 +189,8 @@ assert "repository_record_count(" in app_coordinator
 assert "set_discover_repository_summary(" in app_coordinator
 
 # Native update reconciliation, external update discovery and update planning
-# belong to the Updates controller. main.cpp owns GTK task lifetime and
-# presentation only until that final lifecycle is moved onto the controller.
+# belong to the Updates controller. The quarantined legacy page provider still
+# owns GTK task lifetime/presentation until that lifecycle is extracted.
 assert '"app/updates_controller.hpp"' in main_cpp
 assert "src/app/updates_controller.cpp" in cmake
 assert "refresh_updates_data" in updates_controller
@@ -186,6 +201,7 @@ assert "discover_cinnamon_updates(" in updates_controller
 assert "engine.list_updates(" not in main_cpp
 assert "discover_flatpak_updates(" not in main_cpp
 assert "discover_cinnamon_updates(" not in main_cpp
+assert "refresh_updates_data" in legacy_page_impl
 
 # External ecosystems remain explicit and preserve Flatpak installation scope.
 assert "discover_flatpak_updates" in app
