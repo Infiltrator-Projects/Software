@@ -291,12 +291,6 @@ add_executable(infiltrator-software
     src/app/theme.cpp
     src/app/ui_components.cpp)
 
-# Compatibility rewriting is confined to the quarantined legacy page provider.
-# Only the temporary Discover/Updates state aliases remain; the duplicate
-# application entry point and shell have been removed.
-set_source_files_properties(src/app/legacy_page_impl.cpp PROPERTIES
-    COMPILE_DEFINITIONS
-        "INFILTRATOR_SOFTWARE_LEGACY_PAGE_IMPL=1")
 
 target_link_libraries(infiltrator-software PRIVATE
     software-core software-history software-client software-installed-state

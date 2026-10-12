@@ -124,8 +124,8 @@ assert '"core/model.hpp"' in repository_controller_hpp
 assert '"core/model.hpp"' in source_inventory_hpp
 
 # Page state is owned by named members. WindowState is a shell plus composition,
-# never a subtype of a page/controller. Compatibility rewriting is permitted
-# only for the quarantined legacy page provider and must only shrink.
+# never a subtype of a page/controller. Compatibility state rewriting is
+# forbidden: page implementations must name their owning state explicitly.
 assert "struct ShellState" in window_state
 assert "struct DiscoverPageState" in discover_state
 assert "struct UpdatesController" in updates_controller_hpp
@@ -150,12 +150,13 @@ for owned_page in (
 ):
     assert owned_page in window_state
 assert "do not add new aliases" in window_state
-assert "INFILTRATOR_SOFTWARE_LEGACY_PAGE_IMPL" in window_state
+assert "INFILTRATOR_SOFTWARE_LEGACY_PAGE_IMPL" not in window_state
+assert "INFILTRATOR_SOFTWARE_LEGACY_PAGE_IMPL" not in cmake
 assert "INFILTRATOR_SOFTWARE_REPAIR_VIEW_LEGACY_ALIASES" not in window_state
 assert "INFILTRATOR_SOFTWARE_SYSTEM_VIEW_LEGACY_ALIASES" not in cmake
 assert "INFILTRATOR_SOFTWARE_REPAIR_VIEW_LEGACY_ALIASES" not in cmake
-assert "INFILTRATOR_SOFTWARE_LEGACY_PAGE_IMPL=1" in cmake
 assert "main=infiltrator_software_legacy_page_impl_main" not in cmake
+assert not Path("src/app/legacy_page_aliases.hpp").exists()
 assert "int main(" not in legacy_page_impl
 assert "void activate(" not in legacy_page_impl
 assert "GtkWidget *make_header_bar(" not in legacy_page_impl

@@ -908,11 +908,11 @@ const PackageRecord *find_featured_record(
         folded(fallback.name);
 
     for (const std::size_t index : visible_indices) {
-        if (index >= state->discover_records.size()) {
+        if (index >= state->discover.discover_records.size()) {
             continue;
         }
         const PackageRecord &record =
-            state->discover_records[index];
+            state->discover.discover_records[index];
         if (folded(record.package_name) == wanted_package ||
             folded(record.name) == wanted_name) {
             return &record;
@@ -926,7 +926,7 @@ void append_curated_featured(
     const std::vector<std::size_t> *visible_indices = nullptr)
 {
     if (state == nullptr ||
-        state->discover_featured_flow == nullptr) {
+        state->discover.discover_featured_flow == nullptr) {
         return;
     }
 
@@ -945,7 +945,7 @@ void append_curated_featured(
                 state, placeholder, indices);
         gtk_flow_box_append(
             GTK_FLOW_BOX(
-                state->discover_featured_flow),
+                state->discover.discover_featured_flow),
             make_featured_card(
                 state,
                 record != nullptr
@@ -1027,19 +1027,19 @@ void rebuild_discover_update_preview(
     WindowState *state)
 {
     if (state == nullptr ||
-        state->discover_update_preview == nullptr) {
+        state->discover.discover_update_preview == nullptr) {
         return;
     }
     clear_box_children(
-        state->discover_update_preview);
+        state->discover.discover_update_preview);
 
     const std::size_t limit =
         std::min<std::size_t>(
-            state->update_records.size(), 2U);
+            state->updates.inventory.update_records.size(), 2U);
     if (limit == 0U) {
         gtk_box_append(
             GTK_BOX(
-                state->discover_update_preview),
+                state->discover.discover_update_preview),
             make_preview_row(
                 "emblem-ok-symbolic",
                 "System is up to date",
@@ -1052,7 +1052,7 @@ void rebuild_discover_update_preview(
          index < limit;
          ++index) {
         const PackageRecord &record =
-            state->update_records[index];
+            state->updates.inventory.update_records[index];
         std::string version =
             record.installed_version;
         if (!version.empty() &&
@@ -1065,7 +1065,7 @@ void rebuild_discover_update_preview(
         }
         gtk_box_append(
             GTK_BOX(
-                state->discover_update_preview),
+                state->discover.discover_update_preview),
             make_preview_row(
                 update_icon_name(record),
                 record.name.c_str(),
@@ -1080,17 +1080,17 @@ void rebuild_discover_repository_preview(
     WindowState *state)
 {
     if (state == nullptr ||
-        state->discover_repository_preview ==
+        state->discover.discover_repository_preview ==
             nullptr) {
         return;
     }
     clear_box_children(
-        state->discover_repository_preview);
+        state->discover.discover_repository_preview);
 
     if (state->repositories.records.empty()) {
         gtk_box_append(
             GTK_BOX(
-                state->discover_repository_preview),
+                state->discover.discover_repository_preview),
             make_preview_row(
                 "network-workgroup-symbolic",
                 "Repository status",
@@ -1110,7 +1110,7 @@ void rebuild_discover_repository_preview(
             state->repositories.records[index];
         gtk_box_append(
             GTK_BOX(
-                state->discover_repository_preview),
+                state->discover.discover_repository_preview),
             make_preview_row(
                 source.kind ==
                         SourceKind::flatpak
@@ -1132,17 +1132,17 @@ void rebuild_discover_activity_preview(
     WindowState *state)
 {
     if (state == nullptr ||
-        state->discover_activity_preview ==
+        state->discover.discover_activity_preview ==
             nullptr) {
         return;
     }
     clear_box_children(
-        state->discover_activity_preview);
+        state->discover.discover_activity_preview);
 
     if (state->history.records.empty()) {
         gtk_box_append(
             GTK_BOX(
-                state->discover_activity_preview),
+                state->discover.discover_activity_preview),
             make_preview_row(
                 "document-open-recent-symbolic",
                 "No recent activity",
@@ -1182,7 +1182,7 @@ void rebuild_discover_activity_preview(
                 head.completed_at_unix);
         gtk_box_append(
             GTK_BOX(
-                state->discover_activity_preview),
+                state->discover.discover_activity_preview),
             make_preview_row(
                 head.success
                     ? "emblem-ok-symbolic"
@@ -1199,12 +1199,12 @@ void rebuild_discover_activity_preview(
 
 std::string selected_category(WindowState *state)
 {
-    if (state == nullptr || state->discover_category == nullptr) {
+    if (state == nullptr || state->discover.discover_category == nullptr) {
         return "All";
     }
 
     gpointer item = gtk_drop_down_get_selected_item(
-        GTK_DROP_DOWN(state->discover_category));
+        GTK_DROP_DOWN(state->discover.discover_category));
     if (item == nullptr || !GTK_IS_STRING_OBJECT(item)) {
         return "All";
     }
@@ -1223,19 +1223,19 @@ void discover_quick_category_clicked(
         g_object_get_data(
             G_OBJECT(button),
             "discover-quick-category"));
-    if (state == nullptr || state->discover_category == nullptr ||
-        state->discover_categories == nullptr ||
+    if (state == nullptr || state->discover.discover_category == nullptr ||
+        state->discover.discover_categories == nullptr ||
         category == nullptr) {
         return;
     }
 
     const guint count =
         g_list_model_get_n_items(
-            G_LIST_MODEL(state->discover_categories));
+            G_LIST_MODEL(state->discover.discover_categories));
     for (guint index = 0U; index < count; ++index) {
         gpointer object =
             g_list_model_get_item(
-                G_LIST_MODEL(state->discover_categories),
+                G_LIST_MODEL(state->discover.discover_categories),
                 index);
         if (object == nullptr) {
             continue;
@@ -1254,7 +1254,7 @@ void discover_quick_category_clicked(
 
         if (matched) {
             gtk_drop_down_set_selected(
-                GTK_DROP_DOWN(state->discover_category),
+                GTK_DROP_DOWN(state->discover.discover_category),
                 index);
             return;
         }
@@ -1294,32 +1294,32 @@ GtkWidget *make_discover_category_shortcut(
 
 void rebuild_discover(WindowState *state)
 {
-    if (state == nullptr || state->discover_visible == nullptr) {
+    if (state == nullptr || state->discover.discover_visible == nullptr) {
         return;
     }
 
     const char *search_text =
-        state->discover_search == nullptr
+        state->discover.discover_search == nullptr
             ? ""
             : gtk_editable_get_text(
-                  GTK_EDITABLE(state->discover_search));
+                  GTK_EDITABLE(state->discover.discover_search));
     const std::string query =
         folded(search_text == nullptr ? "" : search_text);
     const std::string category = selected_category(state);
 
     std::vector<std::string> indices;
-    indices.reserve(state->discover_records.size());
+    indices.reserve(state->discover.discover_records.size());
     std::vector<std::size_t> visible_indices;
-    visible_indices.reserve(state->discover_records.size());
+    visible_indices.reserve(state->discover.discover_records.size());
     const bool cached_search_text =
-        state->discover_search_texts.size() ==
-        state->discover_records.size();
+        state->discover.discover_search_texts.size() ==
+        state->discover.discover_records.size();
 
     for (std::size_t index = 0U;
-         index < state->discover_records.size();
+         index < state->discover.discover_records.size();
          ++index) {
         const PackageRecord &record =
-            state->discover_records[index];
+            state->discover.discover_records[index];
 
         if (category != "All" && record.category != category) {
             continue;
@@ -1328,7 +1328,7 @@ void rebuild_discover(WindowState *state)
         if (!query.empty()) {
             const std::string haystack =
                 cached_search_text
-                    ? state->discover_search_texts[index]
+                    ? state->discover.discover_search_texts[index]
                     : discover_search_text(record);
             if (haystack.find(query) == std::string::npos) {
                 continue;
@@ -1339,16 +1339,16 @@ void rebuild_discover(WindowState *state)
         indices.emplace_back(std::to_string(index));
     }
 
-    if (state->discover_featured_flow != nullptr) {
+    if (state->discover.discover_featured_flow != nullptr) {
         GtkWidget *child =
             gtk_widget_get_first_child(
-                state->discover_featured_flow);
+                state->discover.discover_featured_flow);
         while (child != nullptr) {
             GtkWidget *next =
                 gtk_widget_get_next_sibling(child);
             gtk_flow_box_remove(
                 GTK_FLOW_BOX(
-                    state->discover_featured_flow),
+                    state->discover.discover_featured_flow),
                 child);
             child = next;
         }
@@ -1372,10 +1372,10 @@ void rebuild_discover(WindowState *state)
                  ++position) {
                 gtk_flow_box_append(
                     GTK_FLOW_BOX(
-                        state->discover_featured_flow),
+                        state->discover.discover_featured_flow),
                     make_featured_card(
                         state,
-                        state->discover_records[
+                        state->discover.discover_records[
                             visible_indices[position]]));
             }
         }
@@ -1389,19 +1389,19 @@ void rebuild_discover(WindowState *state)
     additions.push_back(nullptr);
 
     gtk_string_list_splice(
-        state->discover_visible,
+        state->discover.discover_visible,
         0U,
         g_list_model_get_n_items(
-            G_LIST_MODEL(state->discover_visible)),
+            G_LIST_MODEL(state->discover.discover_visible)),
         additions.data());
 
-    if (state->discover_status != nullptr) {
+    if (state->discover.discover_status != nullptr) {
         std::ostringstream status;
         status << indices.size() << " of "
-               << state->discover_records.size()
+               << state->discover.discover_records.size()
                << " applications shown.";
         gtk_label_set_text(
-            GTK_LABEL(state->discover_status), status.str().c_str());
+            GTK_LABEL(state->discover.discover_status), status.str().c_str());
     }
 }
 
@@ -1450,7 +1450,7 @@ void discover_grid_bind(
     const guint64 index =
         g_ascii_strtoull(text, &end, 10);
     if (end == text || end == nullptr || *end != '\0' ||
-        index >= state->discover_records.size()) {
+        index >= state->discover.discover_records.size()) {
         return;
     }
 
@@ -1458,7 +1458,7 @@ void discover_grid_bind(
         GTK_BOX(holder),
         make_discover_card(
             state,
-            state->discover_records[
+            state->discover.discover_records[
                 static_cast<std::size_t>(index)]));
 }
 
@@ -1488,11 +1488,11 @@ void discover_filter_changed(GtkWidget *, gpointer user_data)
     }
 
     if (!state->search_syncing &&
-        state->discover_search != nullptr &&
+        state->discover.discover_search != nullptr &&
         state->global_search != nullptr) {
         const char *local_text =
             gtk_editable_get_text(
-                GTK_EDITABLE(state->discover_search));
+                GTK_EDITABLE(state->discover.discover_search));
         const char *global_text =
             gtk_editable_get_text(
                 GTK_EDITABLE(state->global_search));
@@ -1758,7 +1758,7 @@ void discover_installed_complete(
     }
     if (state == nullptr || result == nullptr ||
         task_data == nullptr ||
-        task_data->generation != state->discover_generation) {
+        task_data->generation != state->discover.discover_generation) {
         delete result;
         return;
     }
@@ -1771,7 +1771,7 @@ void discover_installed_complete(
             package.installed_version);
     }
 
-    for (PackageRecord &record : state->discover_records) {
+    for (PackageRecord &record : state->discover.discover_records) {
         if (record.id.rfind("flatpak:", 0U) == 0U) {
             continue;
         }
@@ -1792,12 +1792,12 @@ void discover_installed_complete(
     rebuild_discover(state);
 
     if (!result->warning.empty() &&
-        state->discover_status != nullptr) {
+        state->discover.discover_status != nullptr) {
         const std::string message =
             "Applications loaded; installed-state detection is unavailable: " +
             result->warning;
         gtk_label_set_text(
-            GTK_LABEL(state->discover_status),
+            GTK_LABEL(state->discover.discover_status),
             message.c_str());
     }
 
@@ -1809,7 +1809,7 @@ void start_discover_installed_hydration(
     const unsigned int generation)
 {
     if (state == nullptr || state->window == nullptr ||
-        state->discover_records.empty()) {
+        state->discover.discover_records.empty()) {
         return;
     }
 
@@ -1877,7 +1877,7 @@ void discover_icons_complete(
         return;
     }
     if (result == nullptr || task_data == nullptr ||
-        task_data->generation != state->discover_generation) {
+        task_data->generation != state->discover.discover_generation) {
         delete result;
         return;
     }
@@ -1889,7 +1889,7 @@ void discover_icons_complete(
             icons.emplace(record.id, record.cached_icon_path);
         }
     }
-    for (PackageRecord &record : state->discover_records) {
+    for (PackageRecord &record : state->discover.discover_records) {
         const auto found = icons.find(record.id);
         if (found != icons.end()) {
             record.cached_icon_path = found->second;
@@ -1898,12 +1898,12 @@ void discover_icons_complete(
     rebuild_discover(state);
 
     if (!result->warning.empty() &&
-        state->discover_status != nullptr) {
+        state->discover.discover_status != nullptr) {
         const std::string message =
             "Applications are available; some icons could not be verified: " +
             result->warning;
         gtk_label_set_text(
-            GTK_LABEL(state->discover_status), message.c_str());
+            GTK_LABEL(state->discover.discover_status), message.c_str());
     }
 
     delete result;
@@ -1914,12 +1914,12 @@ void start_discover_icon_hydration(
     const unsigned int generation)
 {
     if (state == nullptr || state->window == nullptr ||
-        state->discover_records.empty()) {
+        state->discover.discover_records.empty()) {
         return;
     }
 
     bool has_remote_icons = false;
-    for (const PackageRecord &record : state->discover_records) {
+    for (const PackageRecord &record : state->discover.discover_records) {
         if (!record.icon_url.empty() &&
             record.cached_icon_path.empty()) {
             has_remote_icons = true;
@@ -1930,12 +1930,12 @@ void start_discover_icon_hydration(
         return;
     }
 
-    if (state->discover_status != nullptr) {
+    if (state->discover.discover_status != nullptr) {
         const std::string message =
-            std::to_string(state->discover_records.size()) +
+            std::to_string(state->discover.discover_records.size()) +
             " applications loaded; verifying icons in the background…";
         gtk_label_set_text(
-            GTK_LABEL(state->discover_status), message.c_str());
+            GTK_LABEL(state->discover.discover_status), message.c_str());
     }
 
     GTask *task = g_task_new(
@@ -1945,7 +1945,7 @@ void start_discover_icon_hydration(
         nullptr);
     auto *task_data = new IconHydrationTaskData{};
     task_data->generation = generation;
-    task_data->records = state->discover_records;
+    task_data->records = state->discover.discover_records;
     g_task_set_task_data(
         task,
         task_data,
@@ -1973,13 +1973,13 @@ void discover_complete(
     auto *result = static_cast<DiscoverResult *>(
         g_task_propagate_pointer(G_TASK(async_result), &error));
     if (error != nullptr) {
-        if (state->discover_state != nullptr) {
+        if (state->discover.discover_state != nullptr) {
             gtk_label_set_text(
-                GTK_LABEL(state->discover_state), "Unavailable");
+                GTK_LABEL(state->discover.discover_state), "Unavailable");
         }
-        if (state->discover_status != nullptr) {
+        if (state->discover.discover_status != nullptr) {
             gtk_label_set_text(
-                GTK_LABEL(state->discover_status),
+                GTK_LABEL(state->discover.discover_status),
                 error->message);
         }
         g_clear_error(&error);
@@ -1992,48 +1992,48 @@ void discover_complete(
     auto *task_data = static_cast<DiscoverTaskData *>(
         g_task_get_task_data(G_TASK(async_result)));
     if (task_data == nullptr ||
-        task_data->generation != state->discover_generation) {
+        task_data->generation != state->discover.discover_generation) {
         delete result;
         return;
     }
 
-    state->discover_records = std::move(result->snapshot.records);
-    state->discover_search_texts = std::move(result->search_texts);
+    state->discover.discover_records = std::move(result->snapshot.records);
+    state->discover.discover_search_texts = std::move(result->search_texts);
 
-    if (state->discover_categories != nullptr) {
+    if (state->discover.discover_categories != nullptr) {
         while (g_list_model_get_n_items(
-                   G_LIST_MODEL(state->discover_categories)) > 0U) {
-            gtk_string_list_remove(state->discover_categories, 0U);
+                   G_LIST_MODEL(state->discover.discover_categories)) > 0U) {
+            gtk_string_list_remove(state->discover.discover_categories, 0U);
         }
-        gtk_string_list_append(state->discover_categories, "All");
+        gtk_string_list_append(state->discover.discover_categories, "All");
         for (const std::string &category : result->categories) {
             gtk_string_list_append(
-                state->discover_categories, category.c_str());
+                state->discover.discover_categories, category.c_str());
         }
         gtk_drop_down_set_selected(
-            GTK_DROP_DOWN(state->discover_category), 0U);
+            GTK_DROP_DOWN(state->discover.discover_category), 0U);
     }
 
-    if (state->discover_count != nullptr) {
+    if (state->discover.discover_count != nullptr) {
         const std::string count =
-            std::to_string(state->discover_records.size());
+            std::to_string(state->discover.discover_records.size());
         gtk_label_set_text(
-            GTK_LABEL(state->discover_count), count.c_str());
+            GTK_LABEL(state->discover.discover_count), count.c_str());
     }
-    if (state->discover_source != nullptr) {
+    if (state->discover.discover_source != nullptr) {
         gtk_label_set_text(
-            GTK_LABEL(state->discover_source),
+            GTK_LABEL(state->discover.discover_source),
             "Infiltrator + system");
     }
-    if (state->discover_state != nullptr) {
+    if (state->discover.discover_state != nullptr) {
         gtk_label_set_text(
-            GTK_LABEL(state->discover_state),
+            GTK_LABEL(state->discover.discover_state),
             result->snapshot.from_cache ? "Cached" : "Ready");
     }
-    if (state->discover_status != nullptr) {
+    if (state->discover.discover_status != nullptr) {
         if (!result->warning.empty()) {
             gtk_label_set_text(
-                GTK_LABEL(state->discover_status),
+                GTK_LABEL(state->discover.discover_status),
                 result->warning.c_str());
         } else if (task_data->force_refresh) {
             const std::string message =
@@ -2043,11 +2043,11 @@ void discover_complete(
                 std::to_string(result->removed) +
                 " removed.";
             gtk_label_set_text(
-                GTK_LABEL(state->discover_status),
+                GTK_LABEL(state->discover.discover_status),
                 message.c_str());
         } else {
             gtk_label_set_text(
-                GTK_LABEL(state->discover_status),
+                GTK_LABEL(state->discover.discover_status),
                 result->snapshot.from_cache
                     ? "Loaded saved software catalogue."
                     : "Software catalogue initialized.");
@@ -2072,17 +2072,17 @@ void refresh_discover(
     const bool force_refresh = false)
 {
     if (state == nullptr || state->window == nullptr ||
-        state->discover_state == nullptr) {
+        state->discover.discover_state == nullptr) {
         return;
     }
 
-    state->discover_loaded = true;
-    ++state->discover_generation;
+    state->discover.discover_loaded = true;
+    ++state->discover.discover_generation;
     gtk_label_set_text(
-        GTK_LABEL(state->discover_state), "Loading");
-    if (state->discover_status != nullptr) {
+        GTK_LABEL(state->discover.discover_state), "Loading");
+    if (state->discover.discover_status != nullptr) {
         gtk_label_set_text(
-            GTK_LABEL(state->discover_status),
+            GTK_LABEL(state->discover.discover_status),
             force_refresh
                 ? "Synchronizing software catalogue…"
                 : "Loading saved software catalogue…");
@@ -2094,7 +2094,7 @@ void refresh_discover(
         discover_complete,
         nullptr);
     auto *task_data = new DiscoverTaskData{};
-    task_data->generation = state->discover_generation;
+    task_data->generation = state->discover.discover_generation;
     task_data->force_refresh = force_refresh;
     g_task_set_task_data(
         task,
@@ -2331,7 +2331,7 @@ GtkWidget *make_discover_page(WindowState *state)
             "View",
             "New versions and system updates",
             "dashboard-updates",
-            &state->discover_updates_summary),
+            &state->discover.discover_updates_summary),
         0, 0, 1, 1);
     gtk_grid_attach(
         GTK_GRID(dashboard),
@@ -2343,7 +2343,7 @@ GtkWidget *make_discover_page(WindowState *state)
             "Check",
             "Package and repository integrity",
             "dashboard-health",
-            &state->discover_health_summary),
+            &state->discover.discover_health_summary),
         1, 0, 1, 1);
     gtk_grid_attach(
         GTK_GRID(dashboard),
@@ -2355,7 +2355,7 @@ GtkWidget *make_discover_page(WindowState *state)
             "Manage",
             "Configured software sources",
             "dashboard-repositories",
-            &state->discover_repositories_summary),
+            &state->discover.discover_repositories_summary),
         2, 0, 1, 1);
 
     gtk_box_append(GTK_BOX(page), dashboard);
@@ -2416,34 +2416,34 @@ GtkWidget *make_discover_page(WindowState *state)
         GTK_BOX(featured_panel),
         featured_header);
 
-    state->discover_featured_flow =
+    state->discover.discover_featured_flow =
         gtk_flow_box_new();
     gtk_flow_box_set_selection_mode(
         GTK_FLOW_BOX(
-            state->discover_featured_flow),
+            state->discover.discover_featured_flow),
         GTK_SELECTION_NONE);
     gtk_flow_box_set_min_children_per_line(
         GTK_FLOW_BOX(
-            state->discover_featured_flow),
+            state->discover.discover_featured_flow),
         4U);
     gtk_flow_box_set_max_children_per_line(
         GTK_FLOW_BOX(
-            state->discover_featured_flow),
+            state->discover.discover_featured_flow),
         4U);
     gtk_flow_box_set_column_spacing(
         GTK_FLOW_BOX(
-            state->discover_featured_flow),
+            state->discover.discover_featured_flow),
         10U);
     gtk_flow_box_set_homogeneous(
         GTK_FLOW_BOX(
-            state->discover_featured_flow),
+            state->discover.discover_featured_flow),
         true);
     gtk_widget_set_valign(
-        state->discover_featured_flow,
+        state->discover.discover_featured_flow,
         GTK_ALIGN_START);
     gtk_box_append(
         GTK_BOX(featured_panel),
-        state->discover_featured_flow);
+        state->discover.discover_featured_flow);
     append_curated_featured(state);
     gtk_box_append(
         GTK_BOX(left_column),
@@ -2461,12 +2461,12 @@ GtkWidget *make_discover_page(WindowState *state)
         make_label(
             "Updates Available",
             "panel-title"));
-    state->discover_update_preview =
+    state->discover.discover_update_preview =
         gtk_box_new(
             GTK_ORIENTATION_VERTICAL, 5);
     gtk_box_append(
         GTK_BOX(updates_panel),
-        state->discover_update_preview);
+        state->discover.discover_update_preview);
     rebuild_discover_update_preview(state);
 
     GtkWidget *update_all =
@@ -2529,13 +2529,13 @@ GtkWidget *make_discover_page(WindowState *state)
         make_label(
             "Keep your system healthy",
             "health-banner-title"));
-    state->discover_health_banner_state =
+    state->discover.discover_health_banner_state =
         make_label(
             "Checking package and repository health…",
             "health-banner-copy");
     gtk_box_append(
         GTK_BOX(health_copy),
-        state->discover_health_banner_state);
+        state->discover.discover_health_banner_state);
     gtk_box_append(
         GTK_BOX(health_row),
         health_copy);
@@ -2576,12 +2576,12 @@ GtkWidget *make_discover_page(WindowState *state)
         make_label(
             "Repository Status",
             "panel-title"));
-    state->discover_repository_preview =
+    state->discover.discover_repository_preview =
         gtk_box_new(
             GTK_ORIENTATION_VERTICAL, 5);
     gtk_box_append(
         GTK_BOX(repository_panel),
-        state->discover_repository_preview);
+        state->discover.discover_repository_preview);
     rebuild_discover_repository_preview(state);
     gtk_box_append(
         GTK_BOX(right_column),
@@ -2597,12 +2597,12 @@ GtkWidget *make_discover_page(WindowState *state)
         make_label(
             "Recent Activity",
             "panel-title"));
-    state->discover_activity_preview =
+    state->discover.discover_activity_preview =
         gtk_box_new(
             GTK_ORIENTATION_VERTICAL, 5);
     gtk_box_append(
         GTK_BOX(activity_panel),
-        state->discover_activity_preview);
+        state->discover.discover_activity_preview);
     rebuild_discover_activity_preview(state);
     gtk_box_append(
         GTK_BOX(right_column),
@@ -2630,30 +2630,30 @@ GtkWidget *make_discover_page(WindowState *state)
     GtkWidget *controls = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
     gtk_widget_add_css_class(controls, "discover-controls");
 
-    state->discover_search = gtk_search_entry_new();
+    state->discover.discover_search = gtk_search_entry_new();
     gtk_search_entry_set_placeholder_text(
-        GTK_SEARCH_ENTRY(state->discover_search),
+        GTK_SEARCH_ENTRY(state->discover.discover_search),
         "Search applications…");
-    gtk_widget_set_hexpand(state->discover_search, true);
+    gtk_widget_set_hexpand(state->discover.discover_search, true);
     g_signal_connect(
-        state->discover_search,
+        state->discover.discover_search,
         "search-changed",
         G_CALLBACK(discover_filter_changed),
         state);
-    gtk_box_append(GTK_BOX(controls), state->discover_search);
+    gtk_box_append(GTK_BOX(controls), state->discover.discover_search);
 
-    state->discover_categories = gtk_string_list_new(nullptr);
-    gtk_string_list_append(state->discover_categories, "All");
-    state->discover_category =
+    state->discover.discover_categories = gtk_string_list_new(nullptr);
+    gtk_string_list_append(state->discover.discover_categories, "All");
+    state->discover.discover_category =
         gtk_drop_down_new(
-            G_LIST_MODEL(state->discover_categories), nullptr);
-    gtk_widget_set_size_request(state->discover_category, 190, -1);
+            G_LIST_MODEL(state->discover.discover_categories), nullptr);
+    gtk_widget_set_size_request(state->discover.discover_category, 190, -1);
     g_signal_connect(
-        state->discover_category,
+        state->discover.discover_category,
         "notify::selected",
         G_CALLBACK(discover_category_changed),
         state);
-    gtk_box_append(GTK_BOX(controls), state->discover_category);
+    gtk_box_append(GTK_BOX(controls), state->discover.discover_category);
     gtk_box_append(GTK_BOX(page), controls);
 
     GtkWidget *shortcuts =
@@ -2722,12 +2722,12 @@ GtkWidget *make_discover_page(WindowState *state)
     gtk_box_append(
         GTK_BOX(page), catalogue_heading);
 
-    state->discover_status = make_label(
+    state->discover.discover_status = make_label(
         "Refreshing Infiltrator, system and Flatpak metadata…",
         "discover-status");
-    gtk_box_append(GTK_BOX(page), state->discover_status);
+    gtk_box_append(GTK_BOX(page), state->discover.discover_status);
 
-    state->discover_visible = gtk_string_list_new(nullptr);
+    state->discover.discover_visible = gtk_string_list_new(nullptr);
 
     GtkListItemFactory *factory =
         gtk_signal_list_item_factory_new();
@@ -2744,7 +2744,7 @@ GtkWidget *make_discover_page(WindowState *state)
     GtkSelectionModel *selection =
         GTK_SELECTION_MODEL(
             gtk_no_selection_new(
-                G_LIST_MODEL(state->discover_visible)));
+                G_LIST_MODEL(state->discover.discover_visible)));
     GtkWidget *grid =
         gtk_grid_view_new(selection, factory);
     gtk_grid_view_set_min_columns(
@@ -2945,9 +2945,9 @@ void update_nav_updates_badge(WindowState *state)
         return;
     }
 
-    if (state->updates_busy &&
-        (state->external_updates_active ||
-         !state->updates_progress_token.empty())) {
+    if (state->updates.inventory.updates_busy &&
+        (state->updates.external.external_updates_active ||
+         !state->updates.transaction.updates_progress_token.empty())) {
         gtk_label_set_text(
             GTK_LABEL(state->nav_updates_badge), "↻");
         gtk_widget_add_css_class(
@@ -2959,7 +2959,7 @@ void update_nav_updates_badge(WindowState *state)
 
     gtk_widget_remove_css_class(
         state->nav_updates_badge, "nav-badge-active");
-    const std::size_t count = state->update_records.size();
+    const std::size_t count = state->updates.inventory.update_records.size();
     if (count == 0U) {
         gtk_widget_set_visible(
             state->nav_updates_badge, false);
@@ -2984,17 +2984,17 @@ void set_update_transaction_phase(
         return;
     }
 
-    state->updates_progress_phase = std::string(phase);
-    if (state->updates_transaction_panel != nullptr) {
+    state->updates.transaction.updates_progress_phase = std::string(phase);
+    if (state->updates.transaction.updates_transaction_panel != nullptr) {
         gtk_widget_set_visible(
-            state->updates_transaction_panel, true);
+            state->updates.transaction.updates_transaction_panel, true);
     }
-    if (state->updates_transaction_phase != nullptr) {
+    if (state->updates.transaction.updates_transaction_phase != nullptr) {
         gtk_label_set_text(
-            GTK_LABEL(state->updates_transaction_phase),
+            GTK_LABEL(state->updates.transaction.updates_transaction_phase),
             update_phase_title(phase));
     }
-    if (state->updates_transaction_detail != nullptr) {
+    if (state->updates.transaction.updates_transaction_detail != nullptr) {
         std::string copy(detail);
         if (copy.empty()) {
             if (phase == "authorize") {
@@ -3027,13 +3027,13 @@ void set_update_transaction_phase(
             }
         }
         gtk_label_set_text(
-            GTK_LABEL(state->updates_transaction_detail),
+            GTK_LABEL(state->updates.transaction.updates_transaction_detail),
             copy.c_str());
     }
 
     const int active = update_phase_index(phase);
     for (int index = 0; index < 6; ++index) {
-        GtkWidget *label = state->updates_stage_labels[index];
+        GtkWidget *label = state->updates.transaction.updates_stage_labels[index];
         if (label == nullptr) continue;
         gtk_widget_remove_css_class(label, "update-stage-active");
         gtk_widget_remove_css_class(label, "update-stage-done");
@@ -3045,13 +3045,13 @@ void set_update_transaction_phase(
         }
     }
 
-    if (state->updates_progress != nullptr) {
+    if (state->updates.transaction.updates_progress != nullptr) {
         if (phase == "complete") {
             gtk_progress_bar_set_fraction(
-                GTK_PROGRESS_BAR(state->updates_progress), 1.0);
+                GTK_PROGRESS_BAR(state->updates.transaction.updates_progress), 1.0);
         } else {
             gtk_progress_bar_pulse(
-                GTK_PROGRESS_BAR(state->updates_progress));
+                GTK_PROGRESS_BAR(state->updates.transaction.updates_progress));
         }
     }
 }
@@ -3059,34 +3059,34 @@ void set_update_transaction_phase(
 void update_transaction_meta(WindowState *state)
 {
     if (state == nullptr ||
-        state->updates_transaction_meta == nullptr ||
-        state->updates_progress_started_us <= 0) {
+        state->updates.transaction.updates_transaction_meta == nullptr ||
+        state->updates.transaction.updates_progress_started_us <= 0) {
         return;
     }
 
     const gint64 elapsed_us =
         g_get_monotonic_time() -
-        state->updates_progress_started_us;
+        state->updates.transaction.updates_progress_started_us;
     const long long elapsed_seconds =
         static_cast<long long>(
             elapsed_us / G_USEC_PER_SEC);
 
     std::ostringstream meta;
-    meta << state->updates_progress_items
-         << (state->updates_progress_items == 1U
+    meta << state->updates.transaction.updates_progress_items
+         << (state->updates.transaction.updates_progress_items == 1U
                  ? " package"
                  : " packages");
-    if (state->updates_progress_download_bytes > 0U) {
+    if (state->updates.transaction.updates_progress_download_bytes > 0U) {
         meta << "  •  "
              << display_size(
-                    state->updates_progress_download_bytes)
+                    state->updates.transaction.updates_progress_download_bytes)
              << " planned download";
     }
     meta << "  •  "
          << elapsed_seconds
          << " s elapsed";
     gtk_label_set_text(
-        GTK_LABEL(state->updates_transaction_meta),
+        GTK_LABEL(state->updates.transaction.updates_transaction_meta),
         meta.str().c_str());
 }
 
@@ -3094,15 +3094,15 @@ gboolean update_progress_tick(gpointer user_data)
 {
     auto *state = static_cast<WindowState *>(user_data);
     if (state == nullptr ||
-        !state->updates_busy ||
-        state->updates_progress == nullptr) {
+        !state->updates.inventory.updates_busy ||
+        state->updates.transaction.updates_progress == nullptr) {
         if (state != nullptr) {
-            state->updates_progress_timer_id = 0U;
+            state->updates.transaction.updates_progress_timer_id = 0U;
         }
         return G_SOURCE_REMOVE;
     }
 
-    if (state->updates_post_install_refresh) {
+    if (state->updates.transaction.updates_post_install_refresh) {
         set_update_transaction_phase(
             state,
             "verify",
@@ -3111,14 +3111,14 @@ gboolean update_progress_tick(gpointer user_data)
         const auto progress =
             read_privileged_update_progress();
         if (progress.has_value() &&
-            progress->token == state->updates_progress_token) {
+            progress->token == state->updates.transaction.updates_progress_token) {
             set_update_transaction_phase(
                 state,
                 progress->phase,
                 progress->detail);
         } else {
             gtk_progress_bar_pulse(
-                GTK_PROGRESS_BAR(state->updates_progress));
+                GTK_PROGRESS_BAR(state->updates.transaction.updates_progress));
         }
     }
 
@@ -3132,33 +3132,33 @@ void start_update_progress(
     const TransactionPlan &plan)
 {
     if (state == nullptr ||
-        state->updates_progress == nullptr) {
+        state->updates.transaction.updates_progress == nullptr) {
         return;
     }
 
-    state->updates_progress_started_us =
+    state->updates.transaction.updates_progress_started_us =
         g_get_monotonic_time();
-    state->updates_progress_items =
+    state->updates.transaction.updates_progress_items =
         plan.items.size();
-    state->updates_progress_download_bytes =
+    state->updates.transaction.updates_progress_download_bytes =
         plan.download_bytes;
-    state->updates_progress_token =
+    state->updates.transaction.updates_progress_token =
         std::to_string(
             static_cast<unsigned long long>(getpid())) +
         "-" +
         std::to_string(
             static_cast<unsigned long long>(
-                state->updates_progress_started_us));
-    if (state->updates_transaction_panel != nullptr) {
+                state->updates.transaction.updates_progress_started_us));
+    if (state->updates.transaction.updates_transaction_panel != nullptr) {
         gtk_widget_set_visible(
-            state->updates_transaction_panel, true);
+            state->updates.transaction.updates_transaction_panel, true);
     }
     gtk_widget_set_visible(
-        state->updates_progress, true);
+        state->updates.transaction.updates_progress, true);
     gtk_progress_bar_set_fraction(
-        GTK_PROGRESS_BAR(state->updates_progress), 0.0);
+        GTK_PROGRESS_BAR(state->updates.transaction.updates_progress), 0.0);
     gtk_progress_bar_set_pulse_step(
-        GTK_PROGRESS_BAR(state->updates_progress), 0.06);
+        GTK_PROGRESS_BAR(state->updates.transaction.updates_progress), 0.06);
     set_update_transaction_phase(
         state,
         "authorize",
@@ -3166,8 +3166,8 @@ void start_update_progress(
     update_transaction_meta(state);
     update_nav_updates_badge(state);
 
-    if (state->updates_progress_timer_id == 0U) {
-        state->updates_progress_timer_id =
+    if (state->updates.transaction.updates_progress_timer_id == 0U) {
+        state->updates.transaction.updates_progress_timer_id =
             g_timeout_add_seconds(
                 1U, update_progress_tick, state);
     }
@@ -3179,18 +3179,18 @@ void stop_update_progress(WindowState *state)
         return;
     }
 
-    if (state->updates_progress_timer_id != 0U) {
-        g_source_remove(state->updates_progress_timer_id);
-        state->updates_progress_timer_id = 0U;
+    if (state->updates.transaction.updates_progress_timer_id != 0U) {
+        g_source_remove(state->updates.transaction.updates_progress_timer_id);
+        state->updates.transaction.updates_progress_timer_id = 0U;
     }
-    state->updates_progress_started_us = 0;
-    state->updates_progress_items = 0U;
-    state->updates_progress_download_bytes = 0U;
-    state->updates_progress_token.clear();
-    state->updates_progress_phase.clear();
-    if (state->updates_transaction_panel != nullptr) {
+    state->updates.transaction.updates_progress_started_us = 0;
+    state->updates.transaction.updates_progress_items = 0U;
+    state->updates.transaction.updates_progress_download_bytes = 0U;
+    state->updates.transaction.updates_progress_token.clear();
+    state->updates.transaction.updates_progress_phase.clear();
+    if (state->updates.transaction.updates_transaction_panel != nullptr) {
         gtk_widget_set_visible(
-            state->updates_transaction_panel, false);
+            state->updates.transaction.updates_transaction_panel, false);
     }
     update_nav_updates_badge(state);
 }
@@ -3204,13 +3204,13 @@ void finish_update_progress(
         return;
     }
 
-    if (state->updates_progress_timer_id != 0U) {
-        g_source_remove(state->updates_progress_timer_id);
-        state->updates_progress_timer_id = 0U;
+    if (state->updates.transaction.updates_progress_timer_id != 0U) {
+        g_source_remove(state->updates.transaction.updates_progress_timer_id);
+        state->updates.transaction.updates_progress_timer_id = 0U;
     }
-    if (state->updates_transaction_panel != nullptr) {
+    if (state->updates.transaction.updates_transaction_panel != nullptr) {
         gtk_widget_set_visible(
-            state->updates_transaction_panel, true);
+            state->updates.transaction.updates_transaction_panel, true);
     }
     if (success) {
         set_update_transaction_phase(
@@ -3218,35 +3218,35 @@ void finish_update_progress(
     } else {
         const int active =
             update_phase_index(
-                state->updates_progress_phase);
-        state->updates_progress_phase = "error";
-        if (state->updates_transaction_phase != nullptr) {
+                state->updates.transaction.updates_progress_phase);
+        state->updates.transaction.updates_progress_phase = "error";
+        if (state->updates.transaction.updates_transaction_phase != nullptr) {
             gtk_label_set_text(
-                GTK_LABEL(state->updates_transaction_phase),
+                GTK_LABEL(state->updates.transaction.updates_transaction_phase),
                 "Update transaction failed");
         }
-        if (state->updates_transaction_detail != nullptr) {
+        if (state->updates.transaction.updates_transaction_detail != nullptr) {
             const std::string copy(detail);
             gtk_label_set_text(
-                GTK_LABEL(state->updates_transaction_detail),
+                GTK_LABEL(state->updates.transaction.updates_transaction_detail),
                 copy.c_str());
         }
-        if (state->updates_progress != nullptr) {
+        if (state->updates.transaction.updates_progress != nullptr) {
             gtk_progress_bar_set_fraction(
-                GTK_PROGRESS_BAR(state->updates_progress), 0.0);
+                GTK_PROGRESS_BAR(state->updates.transaction.updates_progress), 0.0);
         }
         if (active >= 0 && active < 6 &&
-            state->updates_stage_labels[active] != nullptr) {
+            state->updates.transaction.updates_stage_labels[active] != nullptr) {
             gtk_widget_remove_css_class(
-                state->updates_stage_labels[active],
+                state->updates.transaction.updates_stage_labels[active],
                 "update-stage-active");
             gtk_widget_add_css_class(
-                state->updates_stage_labels[active],
+                state->updates.transaction.updates_stage_labels[active],
                 "update-stage-error");
         }
     }
     update_transaction_meta(state);
-    state->updates_progress_token.clear();
+    state->updates.transaction.updates_progress_token.clear();
     update_nav_updates_badge(state);
 }
 
@@ -3393,7 +3393,7 @@ void discover_flatpak_complete(
                 if (state->installed.loaded) {
                     refresh_installed(state);
                 }
-                if (state->updates_loaded) {
+                if (state->updates.inventory.updates_loaded) {
                     refresh_updates(state, false);
                 }
             }
@@ -3786,7 +3786,7 @@ void discover_install_process_complete(
         if (state != nullptr) {
             refresh_discover(state, true);
             if (state->installed.loaded) refresh_installed(state);
-            if (state->updates_loaded) refresh_updates(state);
+            if (state->updates.inventory.updates_loaded) refresh_updates(state);
         }
     }
 
@@ -4166,31 +4166,31 @@ std::string update_identity(const PackageRecord &package)
 
 void update_selection_controls(WindowState *state)
 {
-    if (state == nullptr || state->updates_install == nullptr) {
+    if (state == nullptr || state->updates.updates_install == nullptr) {
         return;
     }
 
-    const std::size_t selected = state->selected_update_ids.size();
+    const std::size_t selected = state->updates.inventory.selected_update_ids.size();
     if (selected == 0U) {
         gtk_button_set_label(
-            GTK_BUTTON(state->updates_install),
+            GTK_BUTTON(state->updates.updates_install),
             "Install selected updates");
-    } else if (selected == state->update_records.size()) {
+    } else if (selected == state->updates.inventory.update_records.size()) {
         gtk_button_set_label(
-            GTK_BUTTON(state->updates_install),
-            state->update_records.size() == 1U
+            GTK_BUTTON(state->updates.updates_install),
+            state->updates.inventory.update_records.size() == 1U
                 ? "Install update"
                 : "Install all updates");
     } else {
         const std::string label =
             "Install " + std::to_string(selected) + " selected";
         gtk_button_set_label(
-            GTK_BUTTON(state->updates_install), label.c_str());
+            GTK_BUTTON(state->updates.updates_install), label.c_str());
     }
 
     gtk_widget_set_sensitive(
-        state->updates_install,
-        !state->updates_busy && selected != 0U);
+        state->updates.updates_install,
+        !state->updates.inventory.updates_busy && selected != 0U);
 }
 
 void update_selection_toggled(GtkCheckButton *button, gpointer user_data)
@@ -4203,9 +4203,9 @@ void update_selection_toggled(GtkCheckButton *button, gpointer user_data)
     }
 
     if (gtk_check_button_get_active(button)) {
-        state->selected_update_ids.insert(identity);
+        state->updates.inventory.selected_update_ids.insert(identity);
     } else {
-        state->selected_update_ids.erase(identity);
+        state->updates.inventory.selected_update_ids.erase(identity);
     }
     update_selection_controls(state);
 }
@@ -4213,18 +4213,18 @@ void update_selection_toggled(GtkCheckButton *button, gpointer user_data)
 void select_security_updates(GtkButton *, gpointer user_data)
 {
     auto *state = static_cast<WindowState *>(user_data);
-    if (state == nullptr || state->updates_busy) {
+    if (state == nullptr || state->updates.inventory.updates_busy) {
         return;
     }
 
-    state->selected_update_ids.clear();
-    for (const PackageRecord &package : state->update_records) {
+    state->updates.inventory.selected_update_ids.clear();
+    for (const PackageRecord &package : state->updates.inventory.update_records) {
         if (!package.security_update) {
             continue;
         }
         const std::string identity = update_identity(package);
         if (!identity.empty()) {
-            state->selected_update_ids.insert(identity);
+            state->updates.inventory.selected_update_ids.insert(identity);
         }
     }
 
@@ -4235,19 +4235,19 @@ void select_security_updates(GtkButton *, gpointer user_data)
 void select_kernel_updates(GtkButton *, gpointer user_data)
 {
     auto *state = static_cast<WindowState *>(user_data);
-    if (state == nullptr || state->updates_busy) {
+    if (state == nullptr || state->updates.inventory.updates_busy) {
         return;
     }
 
-    state->selected_update_ids.clear();
-    for (const PackageRecord &package : state->update_records) {
+    state->updates.inventory.selected_update_ids.clear();
+    for (const PackageRecord &package : state->updates.inventory.update_records) {
         if (package.kind !=
             infiltrator::software::PackageKind::kernel) {
             continue;
         }
         const std::string identity = update_identity(package);
         if (!identity.empty()) {
-            state->selected_update_ids.insert(identity);
+            state->updates.inventory.selected_update_ids.insert(identity);
         }
     }
 
@@ -4745,7 +4745,7 @@ void ignore_update_clicked(GtkButton *button, gpointer user_data)
         return;
     }
 
-    auto &updates = context->state->update_records;
+    auto &updates = context->state->updates.inventory.update_records;
     updates.erase(
         std::remove_if(
             updates.begin(), updates.end(),
@@ -4755,11 +4755,11 @@ void ignore_update_clicked(GtkButton *button, gpointer user_data)
             }),
         updates.end());
 
-    context->state->selected_update_ids.clear();
+    context->state->updates.inventory.selected_update_ids.clear();
     for (const PackageRecord &item : updates) {
         const std::string key = update_identity(item);
         if (!key.empty()) {
-            context->state->selected_update_ids.insert(key);
+            context->state->updates.inventory.selected_update_ids.insert(key);
         }
     }
 
@@ -4868,7 +4868,7 @@ void update_details_clicked(GtkButton *button, gpointer user_data)
 
     std::string binaries;
     for (const PackageRecord &candidate :
-         state->update_records) {
+         state->updates.inventory.update_records) {
         const std::string candidate_source =
             candidate.source_package.empty()
                 ? candidate.package_name
@@ -4984,8 +4984,8 @@ GtkWidget *make_update_row(
     gtk_check_button_set_active(
         GTK_CHECK_BUTTON(selected),
         state != nullptr &&
-            state->selected_update_ids.find(identity_key) !=
-                state->selected_update_ids.end());
+            state->updates.inventory.selected_update_ids.find(identity_key) !=
+                state->updates.inventory.selected_update_ids.end());
     g_object_set_data_full(
         G_OBJECT(selected),
         "update-identity",
@@ -5260,25 +5260,25 @@ GtkWidget *make_update_group_header(
 
 void rebuild_updates(WindowState *state)
 {
-    if (state == nullptr || state->updates_list == nullptr) {
+    if (state == nullptr || state->updates.updates_list == nullptr) {
         return;
     }
 
     GtkWidget *child =
         gtk_widget_get_first_child(
-            GTK_WIDGET(state->updates_list));
+            GTK_WIDGET(state->updates.updates_list));
     while (child != nullptr) {
         GtkWidget *next =
             gtk_widget_get_next_sibling(child);
         gtk_list_box_remove(
-            state->updates_list, child);
+            state->updates.updates_list, child);
         child = next;
     }
 
     std::size_t critical_count = 0U;
     std::size_t group_counts[4] = {0U, 0U, 0U, 0U};
     for (const PackageRecord &package :
-         state->update_records) {
+         state->updates.inventory.update_records) {
         if (package.system_critical) {
             ++critical_count;
         }
@@ -5304,10 +5304,10 @@ void rebuild_updates(WindowState *state)
             make_update_group_header(
                 group, group_counts[group]));
         gtk_list_box_append(
-            state->updates_list, header_row);
+            state->updates.updates_list, header_row);
 
         for (const PackageRecord &package :
-             state->update_records) {
+             state->updates.inventory.update_records) {
             if (update_group_index(package) != group) {
                 continue;
             }
@@ -5317,23 +5317,23 @@ void rebuild_updates(WindowState *state)
                 GTK_LIST_BOX_ROW(row),
                 make_update_row(state, package));
             gtk_list_box_append(
-                state->updates_list, row);
+                state->updates.updates_list, row);
         }
     }
 
-    if (state->updates_count != nullptr) {
+    if (state->updates.updates_count != nullptr) {
         const std::string count =
             std::to_string(
-                state->update_records.size());
+                state->updates.inventory.update_records.size());
         gtk_label_set_text(
-            GTK_LABEL(state->updates_count),
+            GTK_LABEL(state->updates.updates_count),
             count.c_str());
     }
-    if (state->updates_critical != nullptr) {
+    if (state->updates.updates_critical != nullptr) {
         const std::string critical =
             std::to_string(critical_count);
         gtk_label_set_text(
-            GTK_LABEL(state->updates_critical),
+            GTK_LABEL(state->updates.updates_critical),
             critical.c_str());
     }
 }
@@ -5369,8 +5369,8 @@ GtkWidget *make_external_update_row(
     gtk_check_button_set_active(
         GTK_CHECK_BUTTON(check),
         flatpak
-            ? state->selected_flatpak_refs.count(key) != 0U
-            : state->selected_cinnamon_refs.count(key) != 0U);
+            ? state->updates.external.selected_flatpak_refs.count(key) != 0U
+            : state->updates.external.selected_cinnamon_refs.count(key) != 0U);
     g_object_set_data_full(
         G_OBJECT(check),
         "external-selection-key",
@@ -5405,8 +5405,8 @@ GtkWidget *make_external_update_row(
                         "external-selection-flatpak")) != 0;
             auto &selection =
                 is_flatpak
-                    ? window_state->selected_flatpak_refs
-                    : window_state->selected_cinnamon_refs;
+                    ? window_state->updates.external.selected_flatpak_refs
+                    : window_state->updates.external.selected_cinnamon_refs;
             if (gtk_check_button_get_active(button)) {
                 selection.insert(*selection_key);
             } else {
@@ -5415,17 +5415,17 @@ GtkWidget *make_external_update_row(
 
             GtkWidget *apply =
                 is_flatpak
-                    ? window_state->external_flatpak_apply
-                    : window_state->external_cinnamon_apply;
+                    ? window_state->updates.external.external_flatpak_apply
+                    : window_state->updates.external.external_cinnamon_apply;
             if (apply != nullptr) {
                 gtk_widget_set_sensitive(
                     apply,
                     !selection.empty() &&
-                        !window_state->updates_busy);
+                        !window_state->updates.inventory.updates_busy);
             }
         }),
         state);
-    gtk_widget_set_sensitive(check, !state->updates_busy);
+    gtk_widget_set_sensitive(check, !state->updates.inventory.updates_busy);
     gtk_box_append(GTK_BOX(row), check);
 
     const char *icon_name =
@@ -5492,19 +5492,19 @@ void rebuild_external_updates(
     WindowState *state)
 {
     if (state == nullptr ||
-        state->external_updates_list == nullptr) {
+        state->updates.external.external_updates_list == nullptr) {
         return;
     }
 
     GtkWidget *child =
         gtk_widget_get_first_child(
             GTK_WIDGET(
-                state->external_updates_list));
+                state->updates.external.external_updates_list));
     while (child != nullptr) {
         GtkWidget *next =
             gtk_widget_get_next_sibling(child);
         gtk_list_box_remove(
-            state->external_updates_list,
+            state->updates.external.external_updates_list,
             child);
         child = next;
     }
@@ -5512,7 +5512,7 @@ void rebuild_external_updates(
     std::size_t flatpak_count = 0U;
     std::size_t cinnamon_count = 0U;
     for (const ExternalUpdate &update :
-         state->external_update_records) {
+         state->updates.external.external_update_records) {
         if (update.backend == "Flatpak") {
             ++flatpak_count;
         } else if (update.backend == "Cinnamon") {
@@ -5529,13 +5529,13 @@ void rebuild_external_updates(
             GTK_LIST_BOX_ROW(row),
             make_external_update_row(state, update));
         gtk_list_box_append(
-            state->external_updates_list,
+            state->updates.external.external_updates_list,
             row);
     }
 
-    if (state->external_updates_status != nullptr) {
+    if (state->updates.external.external_updates_status != nullptr) {
         std::string status;
-        if (state->external_update_records.empty()) {
+        if (state->updates.external.external_update_records.empty()) {
             status =
                 "Flatpak and Cinnamon sources are up to date.";
         } else {
@@ -5547,23 +5547,23 @@ void rebuild_external_updates(
         }
         gtk_label_set_text(
             GTK_LABEL(
-                state->external_updates_status),
+                state->updates.external.external_updates_status),
             status.c_str());
     }
 
-    if (state->external_flatpak_apply != nullptr) {
+    if (state->updates.external.external_flatpak_apply != nullptr) {
         gtk_widget_set_sensitive(
-            state->external_flatpak_apply,
+            state->updates.external.external_flatpak_apply,
             flatpak_count > 0U &&
-                !state->selected_flatpak_refs.empty() &&
-                !state->updates_busy);
+                !state->updates.external.selected_flatpak_refs.empty() &&
+                !state->updates.inventory.updates_busy);
     }
-    if (state->external_cinnamon_apply != nullptr) {
+    if (state->updates.external.external_cinnamon_apply != nullptr) {
         gtk_widget_set_sensitive(
-            state->external_cinnamon_apply,
+            state->updates.external.external_cinnamon_apply,
             cinnamon_count > 0U &&
-                !state->selected_cinnamon_refs.empty() &&
-                !state->updates_busy);
+                !state->updates.external.selected_cinnamon_refs.empty() &&
+                !state->updates.inventory.updates_busy);
     }
 }
 
@@ -5596,12 +5596,12 @@ void publish_external_progress(GTask *task, std::string_view message)
         auto *state = static_cast<WindowState *>(g_object_get_data(
             G_OBJECT(progress_notice->window),
             "infiltrator-window-state"));
-        if (state != nullptr && state->external_updates_active) {
-            if (state->external_updates_status != nullptr)
-                gtk_label_set_text(GTK_LABEL(state->external_updates_status),
+        if (state != nullptr && state->updates.external.external_updates_active) {
+            if (state->updates.external.external_updates_status != nullptr)
+                gtk_label_set_text(GTK_LABEL(state->updates.external.external_updates_status),
                     progress_notice->message.c_str());
-            if (state->updates_status != nullptr)
-                gtk_label_set_text(GTK_LABEL(state->updates_status),
+            if (state->updates.updates_status != nullptr)
+                gtk_label_set_text(GTK_LABEL(state->updates.updates_status),
                     progress_notice->message.c_str());
         }
         g_object_unref(progress_notice->window);
@@ -5684,10 +5684,10 @@ void external_apply_complete(
         return;
     }
 
-    state->external_updates_active = false;
-    if (state->external_updates_spinner != nullptr) {
-        gtk_spinner_stop(GTK_SPINNER(state->external_updates_spinner));
-        gtk_widget_set_visible(state->external_updates_spinner, false);
+    state->updates.external.external_updates_active = false;
+    if (state->updates.external.external_updates_spinner != nullptr) {
+        gtk_spinner_stop(GTK_SPINNER(state->updates.external.external_updates_spinner));
+        gtk_widget_set_visible(state->updates.external.external_updates_spinner, false);
     }
 
     if (!result->completed.empty()) {
@@ -5717,31 +5717,31 @@ void external_apply_complete(
     }
 
     if (result->success) {
-        if (state->external_updates_status != nullptr) {
+        if (state->updates.external.external_updates_status != nullptr) {
             gtk_label_set_text(
                 GTK_LABEL(
-                    state->external_updates_status),
+                    state->updates.external.external_updates_status),
                 result->flatpak
                     ? "Flatpak updates complete. Rechecking…"
                     : "Cinnamon Spice updates complete. Rechecking…");
         }
-        state->updates_busy = false;
+        state->updates.inventory.updates_busy = false;
         update_nav_updates_badge(state);
         delete result;
         refresh_updates(state, false);
         return;
     }
 
-    state->updates_busy = false;
+    state->updates.inventory.updates_busy = false;
     update_nav_updates_badge(state);
-    if (state->external_updates_status != nullptr) {
+    if (state->updates.external.external_updates_status != nullptr) {
         const std::string message =
             result->error.empty()
                 ? "External update failed."
                 : result->error;
         gtk_label_set_text(
             GTK_LABEL(
-                state->external_updates_status),
+                state->updates.external.external_updates_status),
             message.c_str());
     }
     delete result;
@@ -5752,48 +5752,48 @@ void begin_external_apply(WindowState *state, const bool flatpak)
 {
     if (state == nullptr ||
         state->window == nullptr ||
-        state->updates_busy) {
+        state->updates.inventory.updates_busy) {
         return;
     }
 
     std::vector<ExternalUpdate> selected;
     for (const ExternalUpdate &update :
-         state->external_update_records) {
+         state->updates.external.external_update_records) {
         if (flatpak &&
             update.backend == "Flatpak" &&
-            state->selected_flatpak_refs.count(
+            state->updates.external.selected_flatpak_refs.count(
                 flatpak_selection_key(update)) != 0U) {
             selected.push_back(update);
         } else if (!flatpak &&
                    update.backend == "Cinnamon" &&
-                   state->selected_cinnamon_refs.count(
+                   state->updates.external.selected_cinnamon_refs.count(
                        cinnamon_selection_key(update)) != 0U) {
             selected.push_back(update);
         }
     }
     if (selected.empty()) return;
 
-    state->updates_busy = true;
-    state->external_updates_active = true;
+    state->updates.inventory.updates_busy = true;
+    state->updates.external.external_updates_active = true;
     update_nav_updates_badge(state);
     rebuild_external_updates(state);
-    if (state->external_updates_spinner != nullptr) {
+    if (state->updates.external.external_updates_spinner != nullptr) {
         gtk_widget_set_visible(
-            state->external_updates_spinner, true);
+            state->updates.external.external_updates_spinner, true);
         gtk_spinner_start(
-            GTK_SPINNER(state->external_updates_spinner));
+            GTK_SPINNER(state->updates.external.external_updates_spinner));
     }
-    if (state->external_flatpak_apply != nullptr) {
+    if (state->updates.external.external_flatpak_apply != nullptr) {
         gtk_widget_set_sensitive(
-            state->external_flatpak_apply, false);
+            state->updates.external.external_flatpak_apply, false);
     }
-    if (state->external_cinnamon_apply != nullptr) {
+    if (state->updates.external.external_cinnamon_apply != nullptr) {
         gtk_widget_set_sensitive(
-            state->external_cinnamon_apply, false);
+            state->updates.external.external_cinnamon_apply, false);
     }
-    if (state->external_updates_status != nullptr) {
+    if (state->updates.external.external_updates_status != nullptr) {
         gtk_label_set_text(
-            GTK_LABEL(state->external_updates_status),
+            GTK_LABEL(state->updates.external.external_updates_status),
             flatpak
                 ? "Updating selected Flatpaks…"
                 : "Updating selected Cinnamon items…");
@@ -5824,19 +5824,19 @@ void external_apply_clicked(GtkButton *button, gpointer user_data)
     auto *state = static_cast<WindowState *>(user_data);
     if (state == nullptr ||
         state->window == nullptr ||
-        state->updates_busy) {
+        state->updates.inventory.updates_busy) {
         return;
     }
     const bool flatpak =
-        button == GTK_BUTTON(state->external_flatpak_apply);
+        button == GTK_BUTTON(state->updates.external.external_flatpak_apply);
 
     std::ostringstream review;
     std::size_t count = 0U;
     for (const ExternalUpdate &update :
-         state->external_update_records) {
+         state->updates.external.external_update_records) {
         if (flatpak) {
             if (update.backend != "Flatpak" ||
-                state->selected_flatpak_refs.count(
+                state->updates.external.selected_flatpak_refs.count(
                     flatpak_selection_key(update)) == 0U) {
                 continue;
             }
@@ -5845,7 +5845,7 @@ void external_apply_clicked(GtkButton *button, gpointer user_data)
                 << " • " << update.ref;
         } else {
             if (update.backend != "Cinnamon" ||
-                state->selected_cinnamon_refs.count(
+                state->updates.external.selected_cinnamon_refs.count(
                     cinnamon_selection_key(update)) == 0U) {
                 continue;
             }
@@ -5983,7 +5983,7 @@ gboolean auto_refresh_updates_idle(gpointer user_data)
         g_object_get_data(
             G_OBJECT(window),
             "infiltrator-window-state"));
-    if (state != nullptr && !state->updates_busy) {
+    if (state != nullptr && !state->updates.inventory.updates_busy) {
         refresh_updates_internal(state, true, false);
     }
     return G_SOURCE_REMOVE;
@@ -6006,27 +6006,27 @@ void updates_complete(
         return;
     }
 
-    if (result->generation != state->updates_generation) {
+    if (result->generation != state->updates.inventory.updates_generation) {
         delete result;
         return;
     }
 
     const bool post_install =
-        state->updates_post_install_refresh;
-    state->updates_busy = false;
+        state->updates.transaction.updates_post_install_refresh;
+    state->updates.inventory.updates_busy = false;
     if (!post_install) {
         stop_update_progress(state);
     }
-    state->update_records = std::move(result->records);
-    state->update_records.erase(
+    state->updates.inventory.update_records = std::move(result->records);
+    state->updates.inventory.update_records.erase(
         std::remove_if(
-            state->update_records.begin(),
-            state->update_records.end(),
+            state->updates.inventory.update_records.begin(),
+            state->updates.inventory.update_records.end(),
             [&](const PackageRecord &package) {
                 return update_is_ignored(
                     package, state->preferences);
             }),
-        state->update_records.end());
+        state->updates.inventory.update_records.end());
 
     /*
      * Match Mint Update Manager's priority-update rule.  Software must update
@@ -6036,8 +6036,8 @@ void updates_complete(
      */
     const bool self_update =
         std::any_of(
-            state->update_records.begin(),
-            state->update_records.end(),
+            state->updates.inventory.update_records.begin(),
+            state->updates.inventory.update_records.end(),
             [](const PackageRecord &package) {
                 const std::string_view name =
                     package.package_name.empty()
@@ -6046,10 +6046,10 @@ void updates_complete(
                 return name == "infiltrator-software";
             });
     if (self_update) {
-        state->update_records.erase(
+        state->updates.inventory.update_records.erase(
             std::remove_if(
-                state->update_records.begin(),
-                state->update_records.end(),
+                state->updates.inventory.update_records.begin(),
+                state->updates.inventory.update_records.end(),
                 [](const PackageRecord &package) {
                     const std::string_view name =
                         package.package_name.empty()
@@ -6057,31 +6057,31 @@ void updates_complete(
                             : std::string_view(package.package_name);
                     return name != "infiltrator-software";
                 }),
-            state->update_records.end());
+            state->updates.inventory.update_records.end());
         result->external_refreshed = true;
         result->external_records.clear();
         result->external_error.clear();
     }
 
-    if (state->discover_updates_summary != nullptr) {
+    if (state->discover.discover_updates_summary != nullptr) {
         const std::string summary =
             std::to_string(
-                state->update_records.size());
+                state->updates.inventory.update_records.size());
         gtk_label_set_text(
-            GTK_LABEL(state->discover_updates_summary),
+            GTK_LABEL(state->discover.discover_updates_summary),
             summary.c_str());
     }
 
     rebuild_discover_update_preview(state);
     update_nav_updates_badge(state);
 
-    if (state->updates_reboot_banner != nullptr) {
+    if (state->updates.updates_reboot_banner != nullptr) {
         const bool required = reboot_required();
         gtk_widget_set_visible(
-            state->updates_reboot_banner,
+            state->updates.updates_reboot_banner,
             required);
         if (required &&
-            state->updates_reboot_detail != nullptr) {
+            state->updates.updates_reboot_detail != nullptr) {
             const auto packages =
                 reboot_required_packages();
             std::string detail =
@@ -6103,16 +6103,16 @@ void updates_complete(
                 }
             }
             gtk_label_set_text(
-                GTK_LABEL(state->updates_reboot_detail),
+                GTK_LABEL(state->updates.updates_reboot_detail),
                 detail.c_str());
         }
     }
-    state->selected_update_ids.clear();
+    state->updates.inventory.selected_update_ids.clear();
     const std::string selection_preset =
         std::exchange(
-            state->pending_update_selection,
+            state->updates.inventory.pending_update_selection,
             std::string{});
-    for (const PackageRecord &package : state->update_records) {
+    for (const PackageRecord &package : state->updates.inventory.update_records) {
         const bool include =
             selection_preset == "security"
                 ? package.security_update
@@ -6123,7 +6123,7 @@ void updates_complete(
         if (!include) continue;
         const std::string identity = update_identity(package);
         if (!identity.empty()) {
-            state->selected_update_ids.insert(identity);
+            state->updates.inventory.selected_update_ids.insert(identity);
         }
     }
     const bool external_refreshed =
@@ -6133,17 +6133,17 @@ void updates_complete(
             ? result->external_error
             : std::string{};
     if (external_refreshed) {
-        state->external_update_records =
+        state->updates.external.external_update_records =
             std::move(result->external_records);
-        state->selected_flatpak_refs.clear();
-        state->selected_cinnamon_refs.clear();
+        state->updates.external.selected_flatpak_refs.clear();
+        state->updates.external.selected_cinnamon_refs.clear();
         for (const ExternalUpdate &update :
-             state->external_update_records) {
+             state->updates.external.external_update_records) {
             if (update.backend == "Flatpak") {
-                state->selected_flatpak_refs.insert(
+                state->updates.external.selected_flatpak_refs.insert(
                     flatpak_selection_key(update));
             } else if (update.backend == "Cinnamon") {
-                state->selected_cinnamon_refs.insert(
+                state->updates.external.selected_cinnamon_refs.insert(
                     cinnamon_selection_key(update));
             }
         }
@@ -6157,11 +6157,11 @@ void updates_complete(
     delete result;
 
     if (refreshed_metadata && error.empty()) {
-        state->updates_last_metadata_refresh_us =
+        state->updates.inventory.updates_last_metadata_refresh_us =
             g_get_monotonic_time();
     }
 
-    state->updates_post_install_refresh = false;
+    state->updates.transaction.updates_post_install_refresh = false;
 
     /*
      * Present the coherent local generation immediately, then reconcile
@@ -6174,20 +6174,20 @@ void updates_complete(
         !post_install &&
         !refreshed_metadata &&
         error.empty() &&
-        state->updates_auto_refresh_pending;
+        state->updates.inventory.updates_auto_refresh_pending;
     if (schedule_auto_refresh || refreshed_metadata) {
-        state->updates_auto_refresh_pending = false;
+        state->updates.inventory.updates_auto_refresh_pending = false;
     }
 
-    if (state->updates_backend != nullptr) {
+    if (state->updates.updates_backend != nullptr) {
         gtk_label_set_text(
-            GTK_LABEL(state->updates_backend),
+            GTK_LABEL(state->updates.updates_backend),
             "Native engine");
     }
 
     rebuild_updates(state);
 
-    if (state->updates_status != nullptr) {
+    if (state->updates.updates_status != nullptr) {
         if (!error.empty()) {
             const std::string message =
                 std::string(
@@ -6198,56 +6198,56 @@ void updates_complete(
                             : "Unable to check for updates: ") +
                 one_line(error);
             gtk_label_set_text(
-                GTK_LABEL(state->updates_status), message.c_str());
+                GTK_LABEL(state->updates.updates_status), message.c_str());
         } else if (post_install) {
             const std::string message =
-                state->update_records.empty()
+                state->updates.inventory.update_records.empty()
                     ? "Installation complete. Final package state verified; the system is up to date."
                     : "Installation complete. Final package state verified; " +
-                        std::to_string(state->update_records.size()) +
-                        (state->update_records.size() == 1U
+                        std::to_string(state->updates.inventory.update_records.size()) +
+                        (state->updates.inventory.update_records.size() == 1U
                              ? " preferred update remains."
                              : " preferred updates remain.");
             gtk_label_set_text(
-                GTK_LABEL(state->updates_status), message.c_str());
+                GTK_LABEL(state->updates.updates_status), message.c_str());
         } else if (schedule_auto_refresh) {
             gtk_label_set_text(
-                GTK_LABEL(state->updates_status),
-                state->update_records.empty()
+                GTK_LABEL(state->updates.updates_status),
+                state->updates.inventory.update_records.empty()
                     ? "Cached package state has no updates; checking repositories for newer metadata…"
                     : "Cached updates loaded; checking repositories for newer metadata…");
-        } else if (state->update_records.empty()) {
+        } else if (state->updates.inventory.update_records.empty()) {
             gtk_label_set_text(
-                GTK_LABEL(state->updates_status),
+                GTK_LABEL(state->updates.updates_status),
                 "Your system is up to date.");
         } else {
             const std::string message =
-                std::to_string(state->update_records.size()) +
-                (state->update_records.size() == 1U
+                std::to_string(state->updates.inventory.update_records.size()) +
+                (state->updates.inventory.update_records.size() == 1U
                      ? " update is available."
                      : " updates are available.");
             gtk_label_set_text(
-                GTK_LABEL(state->updates_status), message.c_str());
+                GTK_LABEL(state->updates.updates_status), message.c_str());
         }
     }
 
-    if (state->updates_install != nullptr) {
+    if (state->updates.updates_install != nullptr) {
         if (!error.empty()) {
-            gtk_widget_set_sensitive(state->updates_install, false);
+            gtk_widget_set_sensitive(state->updates.updates_install, false);
         } else {
             update_selection_controls(state);
         }
     }
-    if (state->updates_refresh != nullptr) {
+    if (state->updates.updates_refresh != nullptr) {
         gtk_widget_set_sensitive(
-            state->updates_refresh, true);
+            state->updates.updates_refresh, true);
     }
 
     if (!external_error.empty() &&
-        state->external_updates_status != nullptr) {
+        state->updates.external.external_updates_status != nullptr) {
         gtk_label_set_text(
             GTK_LABEL(
-                state->external_updates_status),
+                state->updates.external.external_updates_status),
             external_error.c_str());
     }
 
@@ -6280,8 +6280,8 @@ void updates_complete(
             refresh_discover(state);
             refresh_repositories(state);
 
-            if (state->updates_restart_after_verify) {
-                state->updates_restart_after_verify = false;
+            if (state->updates.transaction.updates_restart_after_verify) {
+                state->updates.transaction.updates_restart_after_verify = false;
                 /*
                  * Replace this process with the newly installed executable.
                  * Spawning another GtkApplication first is racy: while this
@@ -6318,38 +6318,38 @@ void refresh_updates_internal(
     const bool refresh_external)
 {
     if (state == nullptr || state->window == nullptr ||
-        state->updates_list == nullptr || state->updates_busy) {
+        state->updates.updates_list == nullptr || state->updates.inventory.updates_busy) {
         return;
     }
 
     if (refresh_metadata) {
-        state->updates_auto_refresh_pending = false;
+        state->updates.inventory.updates_auto_refresh_pending = false;
     }
 
-    state->updates_loaded = true;
-    state->updates_busy = true;
-    ++state->updates_generation;
+    state->updates.inventory.updates_loaded = true;
+    state->updates.inventory.updates_busy = true;
+    ++state->updates.inventory.updates_generation;
 
-    if (state->updates_status != nullptr) {
+    if (state->updates.updates_status != nullptr) {
         gtk_label_set_text(
-            GTK_LABEL(state->updates_status),
-            state->updates_post_install_refresh
+            GTK_LABEL(state->updates.updates_status),
+            state->updates.transaction.updates_post_install_refresh
                 ? "Installation finished. Verifying installed versions and remaining updates…"
                 : refresh_metadata
                     ? "Refreshing repository metadata without administrator access…"
                     : "Checking installed versions and available updates…");
     }
-    if (state->updates_install != nullptr) {
-        gtk_widget_set_sensitive(state->updates_install, false);
+    if (state->updates.updates_install != nullptr) {
+        gtk_widget_set_sensitive(state->updates.updates_install, false);
     }
-    if (state->updates_refresh != nullptr) {
-        gtk_widget_set_sensitive(state->updates_refresh, false);
+    if (state->updates.updates_refresh != nullptr) {
+        gtk_widget_set_sensitive(state->updates.updates_refresh, false);
     }
 
     set_update_runtime_state("checking");
 
     auto *data = new UpdatesRefreshRequest{
-        state->updates_generation,
+        state->updates.inventory.updates_generation,
         refresh_metadata,
         refresh_external,
         state->preferences.show_flatpak_updates,
@@ -6423,7 +6423,7 @@ void update_process_complete(
             std::string_view::npos;
 
     if (state != nullptr) {
-        state->updates_busy = false;
+        state->updates.inventory.updates_busy = false;
 
         if (run != nullptr &&
             run->operation == "install" &&
@@ -6453,9 +6453,9 @@ void update_process_complete(
 
         if (success) {
             set_update_runtime_state({});
-            if (state->updates_status != nullptr) {
+            if (state->updates.updates_status != nullptr) {
                 gtk_label_set_text(
-                    GTK_LABEL(state->updates_status),
+                    GTK_LABEL(state->updates.updates_status),
                     run->operation == "refresh"
                         ? "Package lists refreshed. Checking updates…"
                         : no_changes_required
@@ -6463,10 +6463,10 @@ void update_process_complete(
                             : "Updates installed. Checking system state…");
             }
 
-            state->updates_post_install_refresh =
+            state->updates.transaction.updates_post_install_refresh =
                 run->operation == "install";
             if (run->operation == "install") {
-                state->updates_restart_after_verify =
+                state->updates.transaction.updates_restart_after_verify =
                     std::any_of(
                         run->plan.items.begin(),
                         run->plan.items.end(),
@@ -6512,19 +6512,19 @@ void update_process_complete(
                     "error:" + one_line(message));
             }
 
-            if (state->updates_status != nullptr) {
+            if (state->updates.updates_status != nullptr) {
                 gtk_label_set_text(
-                    GTK_LABEL(state->updates_status),
+                    GTK_LABEL(state->updates.updates_status),
                     message.c_str());
             }
             finish_update_progress(
                 state, false, message);
-            if (state->updates_install != nullptr) {
+            if (state->updates.updates_install != nullptr) {
                 update_selection_controls(state);
             }
-            if (state->updates_refresh != nullptr) {
+            if (state->updates.updates_refresh != nullptr) {
                 gtk_widget_set_sensitive(
-                    state->updates_refresh, true);
+                    state->updates.updates_refresh, true);
             }
         }
     }
@@ -6562,7 +6562,7 @@ void start_update_process(
         &error);
 
     if (process == nullptr) {
-        state->updates_busy = false;
+        state->updates.inventory.updates_busy = false;
         std::string message =
             operation == "refresh"
                 ? "Unable to start package-list refresh."
@@ -6571,19 +6571,19 @@ void start_update_process(
             message += " ";
             message += one_line(error->message);
         }
-        if (state->updates_status != nullptr) {
+        if (state->updates.updates_status != nullptr) {
             gtk_label_set_text(
-                GTK_LABEL(state->updates_status),
+                GTK_LABEL(state->updates.updates_status),
                 message.c_str());
         }
         set_update_runtime_state(
             "error:" + one_line(message));
         g_clear_error(&error);
-        if (state->updates_refresh != nullptr) {
+        if (state->updates.updates_refresh != nullptr) {
             gtk_widget_set_sensitive(
-                state->updates_refresh, true);
+                state->updates.updates_refresh, true);
         }
-        if (state->updates_install != nullptr) {
+        if (state->updates.updates_install != nullptr) {
             update_selection_controls(state);
         }
         finish_update_progress(
@@ -6612,7 +6612,7 @@ void start_update_process(
 void update_refresh_clicked(GtkButton *, gpointer user_data)
 {
     auto *state = static_cast<WindowState *>(user_data);
-    if (state == nullptr || state->updates_busy) {
+    if (state == nullptr || state->updates.inventory.updates_busy) {
         return;
     }
 
@@ -6626,45 +6626,45 @@ void update_refresh_clicked(GtkButton *, gpointer user_data)
 
 void begin_apply_updates(WindowState *state)
 {
-    if (state == nullptr || !state->pending_update_plan.has_value()) {
+    if (state == nullptr || !state->updates.transaction.pending_update_plan.has_value()) {
         return;
     }
 
     std::vector<std::string> specs;
     std::string plan_error;
     if (!exact_transaction_specs(
-            *state->pending_update_plan, specs, plan_error)) {
-        state->updates_busy = false;
-        state->pending_update_plan.reset();
-        if (state->updates_status != nullptr) {
+            *state->updates.transaction.pending_update_plan, specs, plan_error)) {
+        state->updates.inventory.updates_busy = false;
+        state->updates.transaction.pending_update_plan.reset();
+        if (state->updates.updates_status != nullptr) {
             gtk_label_set_text(
-                GTK_LABEL(state->updates_status),
+                GTK_LABEL(state->updates.updates_status),
                 plan_error.c_str());
         }
-        if (state->updates_install != nullptr) {
+        if (state->updates.updates_install != nullptr) {
             update_selection_controls(state);
         }
-        if (state->updates_refresh != nullptr) {
-            gtk_widget_set_sensitive(state->updates_refresh, true);
+        if (state->updates.updates_refresh != nullptr) {
+            gtk_widget_set_sensitive(state->updates.updates_refresh, true);
         }
         set_update_runtime_state("error:" + one_line(plan_error));
         return;
     }
 
     const TransactionPlan approved_plan =
-        *state->pending_update_plan;
+        *state->updates.transaction.pending_update_plan;
 
-    state->updates_busy = true;
-    if (state->updates_status != nullptr) {
+    state->updates.inventory.updates_busy = true;
+    if (state->updates.updates_status != nullptr) {
         gtk_label_set_text(
-            GTK_LABEL(state->updates_status),
+            GTK_LABEL(state->updates.updates_status),
             "Starting the approved update transaction; administrator authentication may be requested…");
     }
-    if (state->updates_install != nullptr) {
-        gtk_widget_set_sensitive(state->updates_install, false);
+    if (state->updates.updates_install != nullptr) {
+        gtk_widget_set_sensitive(state->updates.updates_install, false);
     }
-    if (state->updates_refresh != nullptr) {
-        gtk_widget_set_sensitive(state->updates_refresh, false);
+    if (state->updates.updates_refresh != nullptr) {
+        gtk_widget_set_sensitive(state->updates.updates_refresh, false);
     }
     set_update_runtime_state("installing");
     start_update_progress(
@@ -6675,7 +6675,7 @@ void begin_apply_updates(WindowState *state)
         "/usr/libexec/infiltrator-software-update-helper",
         "apply-plan",
         "--progress-token=" +
-            state->updates_progress_token};
+            state->updates.transaction.updates_progress_token};
     if (state->preferences.keep_configuration) {
         arguments.emplace_back(
             "--force-confold");
@@ -6687,7 +6687,7 @@ void begin_apply_updates(WindowState *state)
         specs.begin(),
         specs.end());
 
-    state->pending_update_plan.reset();
+    state->updates.transaction.pending_update_plan.reset();
     start_update_process(
         state,
         std::move(arguments),
@@ -6734,16 +6734,16 @@ void update_snapshot_complete(
         g_subprocess_get_successful(process);
     if (state != nullptr) {
         if (success) {
-            if (state->updates_status != nullptr) {
+            if (state->updates.updates_status != nullptr) {
                 gtk_label_set_text(
                     GTK_LABEL(
-                        state->updates_status),
+                        state->updates.updates_status),
                     "Pre-update snapshot created. Starting the reviewed update transaction…");
             }
             begin_apply_updates(state);
         } else {
-            state->updates_busy = false;
-            state->pending_update_plan.reset();
+            state->updates.inventory.updates_busy = false;
+            state->updates.transaction.pending_update_plan.reset();
             std::string message =
                 "The system update was not started because the requested pre-update snapshot failed.";
             if (err != nullptr &&
@@ -6757,18 +6757,18 @@ void update_snapshot_complete(
                 message += one_line(
                     error->message);
             }
-            if (state->updates_status != nullptr) {
+            if (state->updates.updates_status != nullptr) {
                 gtk_label_set_text(
                     GTK_LABEL(
-                        state->updates_status),
+                        state->updates.updates_status),
                     message.c_str());
             }
-            if (state->updates_install != nullptr) {
+            if (state->updates.updates_install != nullptr) {
                 update_selection_controls(state);
             }
-            if (state->updates_refresh != nullptr) {
+            if (state->updates.updates_refresh != nullptr) {
                 gtk_widget_set_sensitive(
-                    state->updates_refresh,
+                    state->updates.updates_refresh,
                     true);
             }
         }
@@ -6797,10 +6797,10 @@ bool create_snapshot_before_update(
         g_find_program_in_path(
             "timeshift");
     if (timeshift == nullptr) {
-        if (state->updates_status != nullptr) {
+        if (state->updates.updates_status != nullptr) {
             gtk_label_set_text(
                 GTK_LABEL(
-                    state->updates_status),
+                    state->updates.updates_status),
                 "A pre-update snapshot was requested, but Timeshift is not installed.");
         }
         return false;
@@ -6828,10 +6828,10 @@ bool create_snapshot_before_update(
                 G_SUBPROCESS_FLAGS_STDERR_PIPE),
             &error);
     if (process == nullptr) {
-        if (state->updates_status != nullptr) {
+        if (state->updates.updates_status != nullptr) {
             gtk_label_set_text(
                 GTK_LABEL(
-                    state->updates_status),
+                    state->updates.updates_status),
                 error != nullptr &&
                 error->message != nullptr
                     ? error->message
@@ -6841,10 +6841,10 @@ bool create_snapshot_before_update(
         return false;
     }
 
-    if (state->updates_status != nullptr) {
+    if (state->updates.updates_status != nullptr) {
         gtk_label_set_text(
             GTK_LABEL(
-                state->updates_status),
+                state->updates.updates_status),
             "Creating the requested pre-update system snapshot…");
     }
     auto *run =
@@ -6875,18 +6875,18 @@ void update_confirm_response(
     }
 
     if (response_id == GTK_RESPONSE_ACCEPT) {
-        if (state->pending_update_plan.has_value() &&
-            state->pending_update_plan->touches_system &&
+        if (state->updates.transaction.pending_update_plan.has_value() &&
+            state->updates.transaction.pending_update_plan->touches_system &&
             state->preferences.snapshot_before_system_updates) {
             if (!create_snapshot_before_update(state)) {
-                state->updates_busy = false;
-                state->pending_update_plan.reset();
-                if (state->updates_install != nullptr) {
+                state->updates.inventory.updates_busy = false;
+                state->updates.transaction.pending_update_plan.reset();
+                if (state->updates.updates_install != nullptr) {
                     update_selection_controls(state);
                 }
-                if (state->updates_refresh != nullptr) {
+                if (state->updates.updates_refresh != nullptr) {
                     gtk_widget_set_sensitive(
-                        state->updates_refresh,
+                        state->updates.updates_refresh,
                         true);
                 }
             }
@@ -6896,18 +6896,18 @@ void update_confirm_response(
         return;
     }
 
-    state->updates_busy = false;
-    state->pending_update_plan.reset();
-    if (state->updates_status != nullptr) {
+    state->updates.inventory.updates_busy = false;
+    state->updates.transaction.pending_update_plan.reset();
+    if (state->updates.updates_status != nullptr) {
         gtk_label_set_text(
-            GTK_LABEL(state->updates_status),
+            GTK_LABEL(state->updates.updates_status),
             "Update installation cancelled.");
     }
-    if (state->updates_install != nullptr) {
+    if (state->updates.updates_install != nullptr) {
         update_selection_controls(state);
     }
-    if (state->updates_refresh != nullptr) {
-        gtk_widget_set_sensitive(state->updates_refresh, true);
+    if (state->updates.updates_refresh != nullptr) {
+        gtk_widget_set_sensitive(state->updates.updates_refresh, true);
     }
     set_update_runtime_state({});
 }
@@ -6954,20 +6954,20 @@ void update_plan_complete(
     }
 
     if (!result->plan.has_value()) {
-        state->updates_busy = false;
-        state->pending_update_plan.reset();
+        state->updates.inventory.updates_busy = false;
+        state->updates.transaction.pending_update_plan.reset();
         std::string message =
             "Unable to plan updates: " + one_line(result->error);
-        if (state->updates_status != nullptr) {
+        if (state->updates.updates_status != nullptr) {
             gtk_label_set_text(
-                GTK_LABEL(state->updates_status),
+                GTK_LABEL(state->updates.updates_status),
                 message.c_str());
         }
-        if (state->updates_install != nullptr) {
+        if (state->updates.updates_install != nullptr) {
             update_selection_controls(state);
         }
-        if (state->updates_refresh != nullptr) {
-            gtk_widget_set_sensitive(state->updates_refresh, true);
+        if (state->updates.updates_refresh != nullptr) {
+            gtk_widget_set_sensitive(state->updates.updates_refresh, true);
         }
         set_update_runtime_state(
             "error:" + one_line(message));
@@ -6979,7 +6979,7 @@ void update_plan_complete(
         *result->plan;
     delete result;
 
-    state->pending_update_plan = plan;
+    state->updates.transaction.pending_update_plan = plan;
 
     const std::size_t requested_count =
         static_cast<std::size_t>(std::count_if(
@@ -7011,12 +7011,12 @@ void update_plan_complete(
 void updates_select_all_clicked(GtkButton *, gpointer user_data)
 {
     auto *state = static_cast<WindowState *>(user_data);
-    if (state == nullptr || state->updates_busy) return;
+    if (state == nullptr || state->updates.inventory.updates_busy) return;
 
-    state->selected_update_ids.clear();
-    for (const PackageRecord &package : state->update_records) {
+    state->updates.inventory.selected_update_ids.clear();
+    for (const PackageRecord &package : state->updates.inventory.update_records) {
         const std::string identity = update_identity(package);
-        if (!identity.empty()) state->selected_update_ids.insert(identity);
+        if (!identity.empty()) state->updates.inventory.selected_update_ids.insert(identity);
     }
     rebuild_updates(state);
     update_selection_controls(state);
@@ -7025,9 +7025,9 @@ void updates_select_all_clicked(GtkButton *, gpointer user_data)
 void updates_clear_selection_clicked(GtkButton *, gpointer user_data)
 {
     auto *state = static_cast<WindowState *>(user_data);
-    if (state == nullptr || state->updates_busy) return;
+    if (state == nullptr || state->updates.inventory.updates_busy) return;
 
-    state->selected_update_ids.clear();
+    state->updates.inventory.selected_update_ids.clear();
     rebuild_updates(state);
     update_selection_controls(state);
 }
@@ -7036,34 +7036,34 @@ void update_install_clicked(GtkButton *, gpointer user_data)
 {
     auto *state = static_cast<WindowState *>(user_data);
     if (state == nullptr || state->window == nullptr ||
-        state->updates_busy || state->update_records.empty() ||
-        state->selected_update_ids.empty()) {
+        state->updates.inventory.updates_busy || state->updates.inventory.update_records.empty() ||
+        state->updates.inventory.selected_update_ids.empty()) {
         return;
     }
 
-    state->updates_busy = true;
-    state->pending_update_plan.reset();
-    if (state->updates_status != nullptr) {
+    state->updates.inventory.updates_busy = true;
+    state->updates.transaction.pending_update_plan.reset();
+    if (state->updates.updates_status != nullptr) {
         gtk_label_set_text(
-            GTK_LABEL(state->updates_status),
+            GTK_LABEL(state->updates.updates_status),
             "Resolving the complete update transaction…");
     }
-    if (state->updates_install != nullptr) {
-        gtk_widget_set_sensitive(state->updates_install, false);
+    if (state->updates.updates_install != nullptr) {
+        gtk_widget_set_sensitive(state->updates.updates_install, false);
     }
-    if (state->updates_refresh != nullptr) {
-        gtk_widget_set_sensitive(state->updates_refresh, false);
+    if (state->updates.updates_refresh != nullptr) {
+        gtk_widget_set_sensitive(state->updates.updates_refresh, false);
     }
     set_update_runtime_state("checking");
 
     auto *data = new UpdatePlanRequest{};
     data->install_recommends =
         state->preferences.install_recommends;
-    data->package_ids.reserve(state->selected_update_ids.size());
-    for (const PackageRecord &package : state->update_records) {
+    data->package_ids.reserve(state->updates.inventory.selected_update_ids.size());
+    for (const PackageRecord &package : state->updates.inventory.update_records) {
         const std::string identity = update_identity(package);
-        if (state->selected_update_ids.find(identity) !=
-            state->selected_update_ids.end()) {
+        if (state->updates.inventory.selected_update_ids.find(identity) !=
+            state->updates.inventory.selected_update_ids.end()) {
             data->package_ids.push_back(identity);
         }
     }
@@ -7118,9 +7118,9 @@ void restart_system_clicked(
         last_error = error;
     }
 
-    if (state->updates_status != nullptr) {
+    if (state->updates.updates_status != nullptr) {
         gtk_label_set_text(
-            GTK_LABEL(state->updates_status),
+            GTK_LABEL(state->updates.updates_status),
             last_error != nullptr &&
                     last_error->message != nullptr
                 ? last_error->message
@@ -7149,19 +7149,19 @@ GtkWidget *make_updates_page(WindowState *state)
         GTK_GRID(stats),
         make_stat_card(
             "AVAILABLE", "0", "stat-operation",
-            &state->updates_count),
+            &state->updates.updates_count),
         0, 0, 1, 1);
     gtk_grid_attach(
         GTK_GRID(stats),
         make_stat_card(
             "SYSTEM-CRITICAL", "0", "stat-warning",
-            &state->updates_critical),
+            &state->updates.updates_critical),
         1, 0, 1, 1);
     gtk_grid_attach(
         GTK_GRID(stats),
         make_stat_card(
             "BACKEND", "Loading", "stat-info",
-            &state->updates_backend),
+            &state->updates.updates_backend),
         2, 0, 1, 1);
     gtk_box_append(GTK_BOX(page), stats);
 
@@ -7179,11 +7179,11 @@ GtkWidget *make_updates_page(WindowState *state)
     gtk_box_append(
         GTK_BOX(controls), updates_status_icon);
 
-    state->updates_status =
+    state->updates.updates_status =
         make_label("Checking for updates…", "card-copy");
-    gtk_label_set_wrap(GTK_LABEL(state->updates_status), true);
-    gtk_widget_set_hexpand(state->updates_status, true);
-    gtk_box_append(GTK_BOX(controls), state->updates_status);
+    gtk_label_set_wrap(GTK_LABEL(state->updates.updates_status), true);
+    gtk_widget_set_hexpand(state->updates.updates_status, true);
+    gtk_box_append(GTK_BOX(controls), state->updates.updates_status);
 
     GtkWidget *select_all =
         gtk_button_new_with_label("Select all");
@@ -7192,16 +7192,16 @@ GtkWidget *make_updates_page(WindowState *state)
         select_all, "clicked",
         G_CALLBACK(updates_select_all_clicked), state);
 
-    state->updates_security =
+    state->updates.updates_security =
         gtk_button_new_with_label("Security");
     gtk_widget_add_css_class(
-        state->updates_security,
+        state->updates.updates_security,
         "discover-details");
     gtk_widget_set_tooltip_text(
-        state->updates_security,
+        state->updates.updates_security,
         "Select only updates classified as security fixes (Ctrl+S).");
     g_signal_connect(
-        state->updates_security,
+        state->updates.updates_security,
         "clicked",
         G_CALLBACK(select_security_updates),
         state);
@@ -7227,34 +7227,34 @@ GtkWidget *make_updates_page(WindowState *state)
         clear_selection, "clicked",
         G_CALLBACK(updates_clear_selection_clicked), state);
 
-    state->updates_refresh =
+    state->updates.updates_refresh =
         gtk_button_new_with_label("Check again");
     gtk_widget_add_css_class(
-        state->updates_refresh, "discover-details");
+        state->updates.updates_refresh, "discover-details");
     g_signal_connect(
-        state->updates_refresh, "clicked",
+        state->updates.updates_refresh, "clicked",
         G_CALLBACK(update_refresh_clicked), state);
-    gtk_box_append(GTK_BOX(controls), state->updates_refresh);
+    gtk_box_append(GTK_BOX(controls), state->updates.updates_refresh);
 
-    state->updates_install =
+    state->updates.updates_install =
         gtk_button_new_with_label("Install selected updates");
     gtk_widget_add_css_class(
-        state->updates_install, "suggested-action");
-    gtk_widget_set_sensitive(state->updates_install, false);
+        state->updates.updates_install, "suggested-action");
+    gtk_widget_set_sensitive(state->updates.updates_install, false);
     g_signal_connect(
-        state->updates_install, "clicked",
+        state->updates.updates_install, "clicked",
         G_CALLBACK(update_install_clicked), state);
-    gtk_box_append(GTK_BOX(controls), state->updates_install);
+    gtk_box_append(GTK_BOX(controls), state->updates.updates_install);
 
     gtk_box_append(GTK_BOX(page), controls);
 
-    state->updates_transaction_panel =
+    state->updates.transaction.updates_transaction_panel =
         gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
     gtk_widget_add_css_class(
-        state->updates_transaction_panel,
+        state->updates.transaction.updates_transaction_panel,
         "update-transaction-panel");
     gtk_widget_set_visible(
-        state->updates_transaction_panel,
+        state->updates.transaction.updates_transaction_panel,
         false);
 
     GtkWidget *transaction_header =
@@ -7285,29 +7285,29 @@ GtkWidget *make_updates_page(WindowState *state)
         make_label(
             "Update transaction",
             "update-transaction-title"));
-    state->updates_transaction_phase =
+    state->updates.transaction.updates_transaction_phase =
         make_label(
             "Preparing updates",
             "update-transaction-phase");
     gtk_box_append(
         GTK_BOX(transaction_copy),
-        state->updates_transaction_phase);
+        state->updates.transaction.updates_transaction_phase);
     gtk_box_append(
         GTK_BOX(transaction_header),
         transaction_copy);
-    state->updates_transaction_meta =
+    state->updates.transaction.updates_transaction_meta =
         make_label(
             "",
             "update-transaction-meta",
             1.0F);
     gtk_widget_set_valign(
-        state->updates_transaction_meta,
+        state->updates.transaction.updates_transaction_meta,
         GTK_ALIGN_CENTER);
     gtk_box_append(
         GTK_BOX(transaction_header),
-        state->updates_transaction_meta);
+        state->updates.transaction.updates_transaction_meta);
     gtk_box_append(
-        GTK_BOX(state->updates_transaction_panel),
+        GTK_BOX(state->updates.transaction.updates_transaction_panel),
         transaction_header);
 
     GtkWidget *stage_strip =
@@ -7323,75 +7323,75 @@ GtkWidget *make_updates_page(WindowState *state)
         "Verify"
     };
     for (int stage = 0; stage < 6; ++stage) {
-        state->updates_stage_labels[stage] =
+        state->updates.transaction.updates_stage_labels[stage] =
             make_label(
                 stage_names[stage],
                 "update-stage",
                 0.5F);
         gtk_widget_set_hexpand(
-            state->updates_stage_labels[stage],
+            state->updates.transaction.updates_stage_labels[stage],
             true);
         gtk_box_append(
             GTK_BOX(stage_strip),
-            state->updates_stage_labels[stage]);
+            state->updates.transaction.updates_stage_labels[stage]);
     }
     gtk_box_append(
-        GTK_BOX(state->updates_transaction_panel),
+        GTK_BOX(state->updates.transaction.updates_transaction_panel),
         stage_strip);
 
-    state->updates_progress = gtk_progress_bar_new();
+    state->updates.transaction.updates_progress = gtk_progress_bar_new();
     gtk_widget_add_css_class(
-        state->updates_progress,
+        state->updates.transaction.updates_progress,
         "update-transaction-progress");
     gtk_progress_bar_set_show_text(
-        GTK_PROGRESS_BAR(state->updates_progress),
+        GTK_PROGRESS_BAR(state->updates.transaction.updates_progress),
         false);
     gtk_widget_set_tooltip_text(
-        state->updates_progress,
+        state->updates.transaction.updates_progress,
         "Live graphical state for the approved update transaction.");
     gtk_box_append(
-        GTK_BOX(state->updates_transaction_panel),
-        state->updates_progress);
+        GTK_BOX(state->updates.transaction.updates_transaction_panel),
+        state->updates.transaction.updates_progress);
 
-    state->updates_transaction_detail =
+    state->updates.transaction.updates_transaction_detail =
         make_label(
             "",
             "update-transaction-detail");
     gtk_label_set_wrap(
-        GTK_LABEL(state->updates_transaction_detail),
+        GTK_LABEL(state->updates.transaction.updates_transaction_detail),
         true);
     gtk_box_append(
-        GTK_BOX(state->updates_transaction_panel),
-        state->updates_transaction_detail);
+        GTK_BOX(state->updates.transaction.updates_transaction_panel),
+        state->updates.transaction.updates_transaction_detail);
     gtk_box_append(
         GTK_BOX(page),
-        state->updates_transaction_panel);
+        state->updates.transaction.updates_transaction_panel);
 
-    state->updates_reboot_banner =
+    state->updates.updates_reboot_banner =
         gtk_box_new(
             GTK_ORIENTATION_HORIZONTAL, 12);
     gtk_widget_add_css_class(
-        state->updates_reboot_banner,
+        state->updates.updates_reboot_banner,
         "reboot-required-banner");
     GtkWidget *reboot_icon =
         make_icon(
             "system-reboot-symbolic", 22);
     gtk_box_append(
-        GTK_BOX(state->updates_reboot_banner),
+        GTK_BOX(state->updates.updates_reboot_banner),
         reboot_icon);
-    state->updates_reboot_detail =
+    state->updates.updates_reboot_detail =
         make_label(
             "A restart is required to finish applying system updates.",
             "reboot-required-copy");
     gtk_label_set_wrap(
-        GTK_LABEL(state->updates_reboot_detail),
+        GTK_LABEL(state->updates.updates_reboot_detail),
         true);
     gtk_widget_set_hexpand(
-        state->updates_reboot_detail,
+        state->updates.updates_reboot_detail,
         true);
     gtk_box_append(
-        GTK_BOX(state->updates_reboot_banner),
-        state->updates_reboot_detail);
+        GTK_BOX(state->updates.updates_reboot_banner),
+        state->updates.updates_reboot_detail);
     GtkWidget *restart_now =
         gtk_button_new_with_label("Restart");
     gtk_widget_add_css_class(
@@ -7406,14 +7406,14 @@ GtkWidget *make_updates_page(WindowState *state)
         G_CALLBACK(restart_system_clicked),
         state);
     gtk_box_append(
-        GTK_BOX(state->updates_reboot_banner),
+        GTK_BOX(state->updates.updates_reboot_banner),
         restart_now);
     gtk_widget_set_visible(
-        state->updates_reboot_banner,
+        state->updates.updates_reboot_banner,
         reboot_required());
     gtk_box_append(
         GTK_BOX(page),
-        state->updates_reboot_banner);
+        state->updates.updates_reboot_banner);
 
     GtkWidget *card =
         gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
@@ -7452,7 +7452,7 @@ GtkWidget *make_updates_page(WindowState *state)
     gtk_box_append(
         GTK_BOX(selection_tools), select_all);
     gtk_box_append(
-        GTK_BOX(selection_tools), state->updates_security);
+        GTK_BOX(selection_tools), state->updates.updates_security);
     gtk_box_append(
         GTK_BOX(selection_tools), kernel_only);
     gtk_box_append(
@@ -7462,10 +7462,10 @@ GtkWidget *make_updates_page(WindowState *state)
     gtk_box_append(GTK_BOX(card), heading_row);
 
     GtkWidget *list = gtk_list_box_new();
-    state->updates_list = GTK_LIST_BOX(list);
+    state->updates.updates_list = GTK_LIST_BOX(list);
     gtk_widget_add_css_class(list, "package-list");
     gtk_list_box_set_selection_mode(
-        state->updates_list, GTK_SELECTION_NONE);
+        state->updates.updates_list, GTK_SELECTION_NONE);
 
     GtkWidget *scroll = gtk_scrolled_window_new();
     gtk_widget_set_vexpand(scroll, true);
@@ -7505,58 +7505,58 @@ GtkWidget *make_updates_page(WindowState *state)
         make_label(
             "Flatpak & Cinnamon updates",
             "card-title"));
-    state->external_updates_status =
+    state->updates.external.external_updates_status =
         make_label(
             "Checking Flatpak and Cinnamon sources…",
             "card-copy");
     gtk_box_append(
         GTK_BOX(external_copy),
-        state->external_updates_status);
+        state->updates.external.external_updates_status);
     gtk_box_append(
         GTK_BOX(external_heading),
         external_copy);
 
-    state->external_updates_spinner = gtk_spinner_new();
-    gtk_widget_set_size_request(state->external_updates_spinner, 24, 24);
-    gtk_widget_set_visible(state->external_updates_spinner, false);
+    state->updates.external.external_updates_spinner = gtk_spinner_new();
+    gtk_widget_set_size_request(state->updates.external.external_updates_spinner, 24, 24);
+    gtk_widget_set_visible(state->updates.external.external_updates_spinner, false);
     gtk_box_append(GTK_BOX(external_heading),
-        state->external_updates_spinner);
+        state->updates.external.external_updates_spinner);
 
-    state->external_flatpak_apply =
+    state->updates.external.external_flatpak_apply =
         gtk_button_new_with_label(
             "Update selected Flatpaks");
     gtk_widget_add_css_class(
-        state->external_flatpak_apply,
+        state->updates.external.external_flatpak_apply,
         "discover-details");
     gtk_widget_set_sensitive(
-        state->external_flatpak_apply,
+        state->updates.external.external_flatpak_apply,
         false);
     g_signal_connect(
-        state->external_flatpak_apply,
+        state->updates.external.external_flatpak_apply,
         "clicked",
         G_CALLBACK(external_apply_clicked),
         state);
     gtk_box_append(
         GTK_BOX(external_heading),
-        state->external_flatpak_apply);
+        state->updates.external.external_flatpak_apply);
 
-    state->external_cinnamon_apply =
+    state->updates.external.external_cinnamon_apply =
         gtk_button_new_with_label(
             "Update selected Cinnamon");
     gtk_widget_add_css_class(
-        state->external_cinnamon_apply,
+        state->updates.external.external_cinnamon_apply,
         "discover-details");
     gtk_widget_set_sensitive(
-        state->external_cinnamon_apply,
+        state->updates.external.external_cinnamon_apply,
         false);
     g_signal_connect(
-        state->external_cinnamon_apply,
+        state->updates.external.external_cinnamon_apply,
         "clicked",
         G_CALLBACK(external_apply_clicked),
         state);
     gtk_box_append(
         GTK_BOX(external_heading),
-        state->external_cinnamon_apply);
+        state->updates.external.external_cinnamon_apply);
 
     gtk_box_append(
         GTK_BOX(external_card),
@@ -7564,12 +7564,12 @@ GtkWidget *make_updates_page(WindowState *state)
 
     GtkWidget *external_list =
         gtk_list_box_new();
-    state->external_updates_list =
+    state->updates.external.external_updates_list =
         GTK_LIST_BOX(external_list);
     gtk_widget_add_css_class(
         external_list, "package-list");
     gtk_list_box_set_selection_mode(
-        state->external_updates_list,
+        state->updates.external.external_updates_list,
         GTK_SELECTION_NONE);
     gtk_box_append(
         GTK_BOX(external_card),

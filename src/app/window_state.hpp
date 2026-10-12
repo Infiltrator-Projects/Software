@@ -47,12 +47,5 @@ struct WindowState final : ShellState {
 
 } // namespace infiltrator::software::app
 
-/*
- * Only the quarantined legacy page provider receives source-compatibility
- * spellings. Ordinary page/view translation units always use explicit owners.
- */
-#ifdef INFILTRATOR_SOFTWARE_LEGACY_PAGE_IMPL
-#include "app/legacy_page_aliases.hpp"
-#endif
 
 #endif
