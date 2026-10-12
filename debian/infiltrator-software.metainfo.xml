@@ -34,6 +34,11 @@
   <url type="homepage">https://github.com/Infiltrator-Projects/Software</url>
 
   <releases>
+    <release version="0.3.81" date="2026-10-12">
+      <description>
+        <p>Reduces application-layer brittleness by separating page lifecycle policy from shell coordination, centralising cross-page invalidation through typed events, and enforcing neutral Discover/Updates boundaries in source contracts.</p>
+      </description>
+    </release>
     <release version="0.3.80" date="2026-10-12">
       <description>
         <p>Deletes the retired System and Repair compatibility headers and reduces the quarantined legacy state-rewriting bridge to the still-unmigrated Discover and Updates surfaces.</p>

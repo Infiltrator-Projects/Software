@@ -1,3 +1,18 @@
+infiltrator-software (0.3.81) unstable; urgency=high
+
+  * Reduce application-layer brittleness by separating shell coordination from
+    page lifecycle policy and routing cross-page changes through typed events.
+  * Move shared Discover/Updates presentation and transaction-history helpers
+    behind neutral support APIs instead of duplicating or reaching across views.
+  * Prevent Discover and Updates from consuming each other's view APIs and use
+    public controller surfaces rather than backing page storage.
+  * Strengthen source contracts so future changes cannot silently restore the
+    cross-page coupling removed by this refactor.
+  * Preserve build, tests, authorization/source contracts, engine smoke,
+    graphical launch, AppStream validation and Debian-package verification.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Mon, 12 Oct 2026 20:42:22 +1100
+
 infiltrator-software (0.3.80) unstable; urgency=high
 
   * Remove the retired System and Repair compatibility shims from the remaining
