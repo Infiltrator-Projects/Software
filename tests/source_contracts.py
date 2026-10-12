@@ -161,6 +161,12 @@ assert "int main(" not in legacy_page_impl
 assert "void activate(" not in legacy_page_impl
 assert "GtkWidget *make_header_bar(" not in legacy_page_impl
 assert "void global_search_changed(" not in legacy_page_impl
+assert "make_transaction_confirmation_dialog" not in legacy_page_impl
+assert "make_transaction_review_dialog(" in legacy_page_impl
+assert "void refresh_installed(WindowState *state)" not in legacy_page_impl
+assert "void refresh_history(WindowState *state)" not in legacy_page_impl
+assert "void select_page(WindowState *state" not in legacy_page_impl
+assert "select_app_page(state, static_cast<AppPage>(index))" in legacy_page_impl
 assert "state->system_" not in system_view
 assert "state->repair_" not in repair_view
 assert "discover_health_summary" not in repair_view
