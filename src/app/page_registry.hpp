@@ -13,6 +13,12 @@ namespace infiltrator::software::app {
 
 struct WindowState;
 
+enum class AppStateChange {
+    kernel,
+    repository,
+    repair
+};
+
 struct PageDescriptor {
     AppPage page;
     const char *name;
@@ -22,6 +28,7 @@ struct PageDescriptor {
     GtkWidget *(*construct)(WindowState *state);
     void (*refresh_if_needed)(WindowState *state);
     void (*selection_changed)(WindowState *state, bool selected);
+    void (*invalidate)(WindowState *state, AppStateChange change);
 };
 
 constexpr std::size_t kAppPageCount = 7U;

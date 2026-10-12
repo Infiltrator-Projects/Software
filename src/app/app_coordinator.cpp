@@ -160,29 +160,99 @@ void updates_selection_changed(WindowState *state, const bool selected)
 
 void no_selection_hook(WindowState *, bool) {}
 
+void invalidate_discover(WindowState *state, const AppStateChange change)
+{
+    if (state != nullptr && change == AppStateChange::repository) {
+        refresh_discover(state, true);
+    }
+}
+
+void invalidate_installed(WindowState *state, const AppStateChange change)
+{
+    if (state == nullptr ||
+        (change != AppStateChange::kernel &&
+         change != AppStateChange::repair) ||
+        !installed_controller_loaded(state->installed)) {
+        return;
+    }
+    refresh_installed_controller(&state->installed);
+}
+
+void invalidate_updates(WindowState *state, const AppStateChange change)
+{
+    if (state == nullptr || !updates_controller_loaded(state->updates)) {
+        return;
+    }
+    refresh_updates(
+        state,
+        change == AppStateChange::repository);
+}
+
+void invalidate_system(WindowState *state, const AppStateChange change)
+{
+    if (state != nullptr &&
+        change == AppStateChange::kernel &&
+        system_page_loaded(state->system)) {
+        refresh_system(state, false);
+    }
+}
+
+void invalidate_repositories(WindowState *state, const AppStateChange change)
+{
+    if (state != nullptr && change == AppStateChange::repository) {
+        infiltrator::software::refresh_repository_controller(
+            &state->repositories);
+    }
+}
+
+void invalidate_history(WindowState *state, const AppStateChange change)
+{
+    if (state != nullptr &&
+        change == AppStateChange::kernel &&
+        history_controller_loaded(state->history)) {
+        refresh_history_controller(&state->history);
+    }
+}
+
+void invalidate_repair(WindowState *state, const AppStateChange change)
+{
+    if (state != nullptr && change == AppStateChange::repair) {
+        refresh_repair(state, false);
+    }
+}
+
 const std::array<PageDescriptor, kAppPageCount> kPages{{
     {AppPage::discover, "discover", "Discover", "Browse and explore",
      "go-home-symbolic", construct_discover,
-     refresh_discover_if_needed, no_selection_hook},
+     refresh_discover_if_needed, no_selection_hook, invalidate_discover},
     {AppPage::installed, "installed", "Installed", "Manage your software",
      "view-grid-symbolic", construct_installed,
-     refresh_installed_if_needed, no_selection_hook},
+     refresh_installed_if_needed, no_selection_hook, invalidate_installed},
     {AppPage::updates, "updates", "Updates", "Available updates",
      "view-refresh-symbolic", construct_updates,
-     refresh_updates_if_needed, updates_selection_changed},
+     refresh_updates_if_needed, updates_selection_changed, invalidate_updates},
     {AppPage::system, "system", "System", "System information",
      "computer-symbolic", construct_system,
-     refresh_system_if_needed, no_selection_hook},
+     refresh_system_if_needed, no_selection_hook, invalidate_system},
     {AppPage::repositories, "repositories", "Repositories", "Manage sources",
      "drive-multidisk-symbolic", construct_repositories,
-     refresh_repositories_if_needed, no_selection_hook},
+     refresh_repositories_if_needed, no_selection_hook,
+     invalidate_repositories},
     {AppPage::history, "history", "History", "View recent activity",
      "document-open-recent-symbolic", construct_history,
-     refresh_history_if_needed, no_selection_hook},
+     refresh_history_if_needed, no_selection_hook, invalidate_history},
     {AppPage::repair, "repair", "Repair", "Diagnose and fix issues",
      "applications-engineering-symbolic", construct_repair,
-     refresh_repair_if_needed, no_selection_hook},
+     refresh_repair_if_needed, no_selection_hook, invalidate_repair},
 }};
+
+void invalidate_pages(WindowState *state, const AppStateChange change)
+{
+    if (state == nullptr) return;
+    for (const PageDescriptor &descriptor : kPages) {
+        descriptor.invalidate(state, change);
+    }
+}
 
 } // namespace
 
@@ -204,34 +274,26 @@ const PageDescriptor *page_descriptor(const AppPage page) noexcept
     return page_descriptor(static_cast<int>(page));
 }
 
-void notify_kernel_state_changed(WindowState *state)
+void destroy_page_state(WindowState *state)
 {
     if (state == nullptr) return;
 
-    if (system_page_loaded(state->system)) {
-        refresh_system(state, false);
+    destroy_discover_page(state);
+    destroy_updates_page(state);
+    if (state->installed.strings != nullptr) {
+        g_object_unref(state->installed.strings);
+        state->installed.strings = nullptr;
     }
-    if (updates_controller_loaded(state->updates)) {
-        refresh_updates(state, false);
-    }
-    if (installed_controller_loaded(state->installed)) {
-        refresh_installed_controller(&state->installed);
-    }
-    if (history_controller_loaded(state->history)) {
-        refresh_history_controller(&state->history);
-    }
+}
+
+void notify_kernel_state_changed(WindowState *state)
+{
+    invalidate_pages(state, AppStateChange::kernel);
 }
 
 void notify_repository_state_changed(WindowState *state)
 {
-    if (state == nullptr) return;
-
-    infiltrator::software::refresh_repository_controller(
-        &state->repositories);
-    refresh_discover(state, true);
-    if (updates_controller_loaded(state->updates)) {
-        refresh_updates(state, true);
-    }
+    invalidate_pages(state, AppStateChange::repository);
 }
 
 void notify_repository_snapshot_changed(WindowState *state)
@@ -260,15 +322,28 @@ void notify_repair_health_changed(
 
 void notify_repair_state_changed(WindowState *state)
 {
-    if (state == nullptr) return;
+    invalidate_pages(state, AppStateChange::repair);
+}
 
-    refresh_repair(state, false);
-    if (updates_controller_loaded(state->updates)) {
-        refresh_updates(state, false);
-    }
-    if (installed_controller_loaded(state->installed)) {
-        refresh_installed_controller(&state->installed);
-    }
+void set_app_search_query(
+    WindowState *state,
+    const std::string_view query)
+{
+    set_discover_search_query(state, query);
+}
+
+void show_security_updates(WindowState *state)
+{
+    if (state == nullptr) return;
+    select_update_preset(state, UpdateSelectionPreset::security);
+    select_app_page(state, AppPage::updates);
+}
+
+void show_kernel_updates(WindowState *state)
+{
+    if (state == nullptr) return;
+    select_update_preset(state, UpdateSelectionPreset::kernel);
+    select_app_page(state, AppPage::updates);
 }
 
 void select_app_page(WindowState *state, const AppPage page)

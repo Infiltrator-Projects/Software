@@ -204,6 +204,25 @@ assert "installed_controller_loaded(" in app_coordinator
 assert "history_controller_loaded(" in app_coordinator
 assert "repository_record_count(" in app_coordinator
 assert "set_discover_repository_summary(" in app_coordinator
+assert "invalidate_pages(state, AppStateChange::kernel)" in app_coordinator
+assert "invalidate_pages(state, AppStateChange::repository)" in app_coordinator
+assert "invalidate_pages(state, AppStateChange::repair)" in app_coordinator
+
+# The executable shell owns only shell concerns. Search, update presets and page
+# teardown must cross the coordinator/registry boundary instead of reaching into
+# Discover or Updates implementation headers and functions directly.
+for forbidden_shell_page_header in (
+    '"app/discover_view.hpp"',
+    '"app/updates_view.hpp"',
+    '"app/updates_controller.hpp"',
+):
+    assert forbidden_shell_page_header not in main_cpp
+assert "set_discover_search_query(" not in main_cpp
+assert "select_update_preset(" not in main_cpp
+assert "destroy_discover_page(" not in main_cpp
+assert "destroy_updates_page(" not in main_cpp
+assert "set_app_search_query(state, query)" in main_cpp
+assert "destroy_page_state(state)" in main_cpp
 
 # Discover may consume public controller views, but it must not reach into
 # another page/controller's backing vectors or lifecycle flags directly.
@@ -228,7 +247,6 @@ assert "history_history_controller_loaded" not in discover_view_cpp
 # Native update reconciliation, external update discovery and update planning
 # belong to the Updates controller. The Updates view owns GTK task lifetime
 # and presentation while reconciliation and planning remain controller-owned.
-assert '"app/updates_controller.hpp"' in main_cpp
 assert "src/app/updates_controller.cpp" in cmake
 assert "refresh_updates_data" in updates_controller
 assert "plan_updates" in updates_controller

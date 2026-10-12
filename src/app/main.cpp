@@ -1,9 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "app/app_coordinator.hpp"
-#include "app/discover_view.hpp"
 #include "app/navigation_controller.hpp"
-#include "app/updates_controller.hpp"
-#include "app/updates_view.hpp"
+#include "app/page_registry.hpp"
 #include "app/ui_components.hpp"
 #include "app/window_state.hpp"
 #include "core/update_policy.hpp"
@@ -122,7 +120,7 @@ void shell_global_search_changed(GtkSearchEntry *entry, gpointer user_data)
 
     const char *entry_text = gtk_editable_get_text(GTK_EDITABLE(entry));
     const std::string query = entry_text == nullptr ? "" : entry_text;
-    set_discover_search_query(state, query);
+    set_app_search_query(state, query);
 
     if (!query.empty()) {
         const char *visible =
@@ -262,12 +260,7 @@ void shell_destroy_window_state(gpointer data)
     auto *state = static_cast<WindowState *>(data);
     if (state == nullptr) return;
 
-    destroy_discover_page(state);
-    destroy_updates_page(state);
-    if (state->installed.strings != nullptr) {
-        g_object_unref(state->installed.strings);
-        state->installed.strings = nullptr;
-    }
+    destroy_page_state(state);
     delete state;
 }
 
@@ -304,11 +297,11 @@ gboolean shell_window_key_pressed(
     const bool security = keyval == GDK_KEY_s || keyval == GDK_KEY_S;
     if (!kernel && !security) return FALSE;
 
-    select_update_preset(
-        state,
-        kernel ? UpdateSelectionPreset::kernel
-               : UpdateSelectionPreset::security);
-    select_app_page(state, AppPage::updates);
+    if (kernel) {
+        show_kernel_updates(state);
+    } else {
+        show_security_updates(state);
+    }
     return TRUE;
 }
 
