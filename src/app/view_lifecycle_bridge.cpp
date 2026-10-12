@@ -33,6 +33,28 @@ void set_discover_search_query(
     state->search_syncing = false;
 }
 
+void set_discover_health_state(
+    WindowState *state,
+    const bool healthy)
+{
+    if (state == nullptr) {
+        return;
+    }
+
+    if (state->discover.discover_health_summary != nullptr) {
+        gtk_label_set_text(
+            GTK_LABEL(state->discover.discover_health_summary),
+            healthy ? "Good" : "Attention");
+    }
+    if (state->discover.discover_health_banner_state != nullptr) {
+        gtk_label_set_text(
+            GTK_LABEL(state->discover.discover_health_banner_state),
+            healthy
+                ? "No package-state issues detected."
+                : "Repair attention is required.");
+    }
+}
+
 void destroy_discover_page(WindowState *state)
 {
     if (state == nullptr) return;

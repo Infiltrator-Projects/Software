@@ -251,6 +251,13 @@ void notify_history_state_changed(WindowState *state)
     rebuild_discover_activity_preview(state);
 }
 
+void notify_repair_health_changed(
+    WindowState *state,
+    const bool healthy)
+{
+    set_discover_health_state(state, healthy);
+}
+
 void notify_repair_state_changed(WindowState *state)
 {
     if (state == nullptr) return;
