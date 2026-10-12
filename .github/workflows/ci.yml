@@ -86,6 +86,36 @@ jobs:
             }
           done
 
+      - name: Build deterministic source bundle from clean checkout
+        if: steps.identity.outputs.release == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.identity.outputs.version }}"
+          out="$GITHUB_WORKSPACE/dist/release"
+          root="$RUNNER_TEMP/software-source/Software-${VERSION}"
+
+          rm -rf "$GITHUB_WORKSPACE/dist" "$RUNNER_TEMP/software-source"
+          mkdir -p "$out" "$root"
+
+          # This runs before configure/build/package/smoke tests so generated
+          # files cannot leak into the source release. Only VCS metadata and the
+          # output directory need excluding.
+          rsync -a \
+            --exclude='.git' \
+            --exclude='dist' \
+            ./ "$root/"
+
+          epoch="$(git show -s --format=%ct "$GITHUB_SHA")"
+          find "$root" -exec touch -h -d "@$epoch" {} +
+          tar --sort=name \
+              --mtime="@$epoch" \
+              --owner=0 --group=0 --numeric-owner \
+              -C "$(dirname "$root")" \
+              -cf - "$(basename "$root")" \
+            | gzip -n > "$out/software_${VERSION}_source.tar.gz"
+          cp LICENSE "$out/LICENSE.txt"
+
       - name: Configure
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 
@@ -158,38 +188,16 @@ jobs:
           package="../infiltrator-software_${{ steps.identity.outputs.version }}_amd64.deb"
           bash tests/verify_debian_package.sh "$package"
 
-      - name: Prepare release assets
+      - name: Complete verified release bundle
         if: steps.identity.outputs.release == 'true'
         shell: bash
         run: |
           set -euo pipefail
           VERSION="${{ steps.identity.outputs.version }}"
-          RELEASE_SHA="$GITHUB_SHA"
           out="$GITHUB_WORKSPACE/dist/release"
-          root="$RUNNER_TEMP/software-source/Software-${VERSION}"
-
-          rm -rf "$GITHUB_WORKSPACE/dist" "$RUNNER_TEMP/software-source"
-          mkdir -p "$out" "$root"
 
           cp "../infiltrator-software_${VERSION}_amd64.deb" \
              "$out/software_${VERSION}_amd64.deb"
-          cp LICENSE "$out/LICENSE.txt"
-
-          rsync -a \
-            --exclude='.git' \
-            --exclude='build-*' \
-            --exclude='build' \
-            --exclude='dist' \
-            ./ "$root/"
-          epoch="$(git show -s --format=%ct "$RELEASE_SHA")"
-          find "$root" -exec touch -h -d "@$epoch" {} +
-          tar --sort=name \
-              --mtime="@$epoch" \
-              --owner=0 --group=0 --numeric-owner \
-              -C "$(dirname "$root")" \
-              -cf - "$(basename "$root")" \
-            | gzip -n > "$out/software_${VERSION}_source.tar.gz"
-
           (
             cd "$out"
             sha256sum \
