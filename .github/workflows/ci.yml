@@ -1,24 +1,29 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-name: Verify
+name: Verify and release
 
 on:
   push:
     branches: [main]
+  pull_request:
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  # Use the hosted runner until the local runner's checkout can find Git.
-  # The local runner currently fails before any source or tests are read.
-  group: verify-${{ github.repository }}-${{ github.ref_name }}-${{ startsWith(github.event.head_commit.message, 'Release ') && 'release' || 'development' }}
+  # Development/PR runs may supersede each other. A release commit gets its own
+  # SHA-scoped group so a later main push cannot cancel a release in flight.
+  group: verify-${{ github.repository }}-${{ startsWith(github.event.head_commit.message, 'Release ') && github.sha || github.ref }}
   cancel-in-progress: true
 
 jobs:
   linux:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    outputs:
+      version: ${{ steps.identity.outputs.version }}
+      release: ${{ steps.identity.outputs.release }}
+
     steps:
       - name: Check out source and Common
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -27,12 +32,16 @@ jobs:
           submodules: recursive
 
       - name: Verify source identity
+        id: identity
         shell: bash
         run: |
           set -euo pipefail
           version="$(tr -d '[:space:]' < VERSION)"
           [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
           grep -Fq "**Current source version:** $version" README.md
+          changelog_version="$(sed -n '1s/^[^(]*(\([^)]*\)).*/\1/p' debian/changelog)"
+          test "$version" = "$changelog_version"
+
           common_version="$(sed -n 's/.*INFILTRATR_COMMON_EXPECTED_VERSION "\([^"]*\)".*/\1/p' CMakeLists.txt)"
           common_commit="$(sed -n 's/.*INFILTRATR_COMMON_EXPECTED_COMMIT "\([^"]*\)".*/\1/p' CMakeLists.txt)"
           test -n "$common_version"
@@ -40,20 +49,31 @@ jobs:
           test "$(tr -d '[:space:]' < src/infiltratr-common/VERSION)" = "$common_version"
           test "$(git -C src/infiltratr-common rev-parse HEAD)" = "$common_commit"
 
+          release=false
+          subject="$(git log -1 --format=%s HEAD)"
+          if [[ "$GITHUB_EVENT_NAME" == "push" &&
+                "$GITHUB_REF" == "refs/heads/main" &&
+                "$subject" == "Release $version"* ]]; then
+            release=true
+          fi
+
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "release=$release" >> "$GITHUB_OUTPUT"
+
       - name: Install build dependencies
         if: runner.environment == 'github-hosted'
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends appstream build-essential cmake debhelper dpkg-dev dbus-daemon gdb git gpgv libappstream-dev libcurl4-openssl-dev libgtk-3-dev libgtk-4-dev libglib2.0-dev libjson-glib-dev liblzma-dev libsqlite3-dev libxapp-dev pkg-config xvfb zlib1g-dev
+          sudo apt-get install -y --no-install-recommends appstream build-essential cmake debhelper dpkg-dev dbus-daemon gdb git gpgv libappstream-dev libcurl4-openssl-dev libgtk-3-dev libgtk-4-dev libglib2.0-dev libjson-glib-dev liblzma-dev libsqlite3-dev libxapp-dev pkg-config rsync xvfb zlib1g-dev
 
       - name: Verify self-hosted build dependencies
         if: runner.environment == 'self-hosted'
         shell: bash
         run: |
           set -euo pipefail
-          for command_name in appstreamcli cmake ctest dpkg-buildpackage dpkg-deb dbus-run-session gdb git gpgv pkg-config python3 xvfb-run; do
+          for command_name in appstreamcli cmake ctest dpkg-buildpackage dpkg-deb dbus-run-session gdb git gpgv pkg-config python3 rsync xvfb-run; do
             command -v "$command_name" >/dev/null 2>&1 || {
               echo "Self-hosted runner is missing $command_name." >&2
               exit 1
@@ -66,24 +86,58 @@ jobs:
             }
           done
 
-      - name: Configure
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+      - name: Build deterministic source bundle from clean checkout
+        if: steps.identity.outputs.release == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.identity.outputs.version }}"
+          out="$GITHUB_WORKSPACE/dist/release"
+          root="$RUNNER_TEMP/software-source/Software-${VERSION}"
 
-      - name: Build
-        run: cmake --build build --parallel 2
+          rm -rf "$GITHUB_WORKSPACE/dist" "$RUNNER_TEMP/software-source"
+          mkdir -p "$out" "$root"
 
-      - name: Test
-        run: ctest --test-dir build --output-on-failure
+          # Run before build/package/smoke tests so generated files cannot leak
+          # into the source release. Only VCS metadata and output are excluded.
+          rsync -a --exclude='.git' --exclude='dist' ./ "$root/"
+
+          epoch="$(git show -s --format=%ct "$GITHUB_SHA")"
+          find "$root" -exec touch -h -d "@$epoch" {} +
+          tar --sort=name \
+              --mtime="@$epoch" \
+              --owner=0 --group=0 --numeric-owner \
+              -C "$(dirname "$root")" \
+              -cf - "$(basename "$root")" \
+            | gzip -n > "$out/software_${VERSION}_source.tar.gz"
+          cp LICENSE "$out/LICENSE.txt"
 
       - name: Verify update authorization and source contracts
         run: python3 tests/source_contracts.py
+
+      - name: Build and test Debian package
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x debian/rules
+          # debian/rules owns the canonical release configuration and runs CTest.
+          # CI therefore compiles exactly once and tests the same build that is
+          # subsequently packaged and released.
+          dpkg-buildpackage -us -uc -b
+
+      - name: Verify Debian package contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          package="../infiltrator-software_${{ steps.identity.outputs.version }}_amd64.deb"
+          bash tests/verify_debian_package.sh "$package"
 
       - name: Engine service smoke test
         shell: bash
         run: |
           set -uo pipefail
           set +e
-          timeout 3s dbus-run-session -- ./build/infiltrator-software-engine >engine.out 2>engine.err
+          timeout 3s dbus-run-session -- ./build-deb/infiltrator-software-engine >engine.out 2>engine.err
           status=$?
           set -e
           cat engine.out || true
@@ -98,7 +152,7 @@ jobs:
         run: |
           set -uo pipefail
           set +e
-          timeout 20s xvfb-run -a ./build/infiltrator-software >launch.out 2>launch.err
+          timeout 20s xvfb-run -a ./build-deb/infiltrator-software >launch.out 2>launch.err
           status=$?
           set -e
           echo "launch exit status: $status"
@@ -118,71 +172,190 @@ jobs:
             -ex "set pagination off" \
             -ex run \
             -ex "thread apply all bt full" \
-            --args ./build/infiltrator-software || true
+            --args ./build-deb/infiltrator-software || true
           exit "$status"
 
       - name: Validate AppStream metadata
         run: appstreamcli validate debian/infiltrator-software.metainfo.xml
 
-      - name: Verify Debian package
+      - name: Complete verified release bundle
+        if: steps.identity.outputs.release == 'true'
         shell: bash
         run: |
           set -euo pipefail
-          chmod +x debian/rules
-          dpkg-buildpackage -us -uc -b
-          package="../infiltrator-software_$(tr -d '[:space:]' < VERSION)_amd64.deb"
-          test -f "$package"
-          test "$(dpkg-deb -f "$package" Package)" = "infiltrator-software"
-          dpkg-deb -f "$package" Depends | grep -Eq '(^|, )pkexec([, ]|$)'
-          dpkg-deb -f "$package" Depends | grep -Eq '(^|, )gpgv([, ]|$)'
-          dpkg-deb -f "$package" Depends | grep -Eq '(^|, )gettext([, ]|$)'
-          dpkg-deb -f "$package" Depends | grep -Eq 'libxapp'
-          dpkg-deb -f "$package" Provides | grep -Eq '(^|, )mintupdate([, ]|$)'
-          if dpkg-deb -f "$package" Conflicts 2>/dev/null | grep -Eq '(^|, )mintupdate([, ]|$)'; then
-            echo "::error::Bootstrap release must not Conflict with mintupdate or Software 0.3.49 cannot self-update."
+          VERSION="${{ steps.identity.outputs.version }}"
+          out="$GITHUB_WORKSPACE/dist/release"
+
+          cp "../infiltrator-software_${VERSION}_amd64.deb" \
+             "$out/software_${VERSION}_amd64.deb"
+          (
+            cd "$out"
+            sha256sum \
+              "software_${VERSION}_amd64.deb" \
+              "software_${VERSION}_source.tar.gz" \
+              LICENSE.txt > SHA256SUMS.txt
+          )
+
+      - name: Upload verified release bundle
+        if: steps.identity.outputs.release == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: software-release-${{ steps.identity.outputs.version }}
+          path: dist/release/
+          if-no-files-found: error
+          retention-days: 7
+
+  publish-release:
+    needs: linux
+    if: needs.linux.outputs.release == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: write
+    concurrency:
+      group: publish-release-${{ github.repository }}
+      cancel-in-progress: false
+
+    steps:
+      - name: Check out exact verified release commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Download verified release bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: software-release-${{ needs.linux.outputs.version }}
+          path: release
+
+      - name: Verify release identity and bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${{ needs.linux.outputs.version }}"
+          EXPECTED_SHA="$GITHUB_SHA"
+
+          git fetch origin --tags
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          test "$(tr -d '[:space:]' < VERSION)" = "$VERSION"
+
+          subject="$(git log -1 --format=%s HEAD)"
+          [[ "$subject" == "Release $VERSION"* ]] || {
+            echo "::error::Release commit subject must begin with Release $VERSION."
             exit 1
+          }
+
+          (
+            cd release
+            sha256sum -c SHA256SUMS.txt
+          )
+
+          test -f "release/software_${VERSION}_amd64.deb"
+          test -f "release/software_${VERSION}_source.tar.gz"
+          test -f release/LICENSE.txt
+          test -f release/SHA256SUMS.txt
+          test "$(dpkg-deb -f "release/software_${VERSION}_amd64.deb" Version)" = "$VERSION"
+
+      - name: Publish immutable GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${{ needs.linux.outputs.version }}"
+          EXPECTED_SHA="$GITHUB_SHA"
+          TAG="v${VERSION}"
+          EXPECTED_ASSETS="$(printf '%s\n' \
+            "LICENSE.txt" \
+            "SHA256SUMS.txt" \
+            "software_${VERSION}_amd64.deb" \
+            "software_${VERSION}_source.tar.gz" | sort)"
+
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            tag_sha="$(git rev-list -n 1 "$TAG" 2>/dev/null || true)"
+            [[ "$tag_sha" == "$EXPECTED_SHA" ]] || {
+              echo "::error::Existing release $TAG points to $tag_sha, expected $EXPECTED_SHA."
+              exit 1
+            }
+            actual_assets="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" \
+              --json assets --jq '.assets[].name' | sort)"
+            [[ "$actual_assets" == "$EXPECTED_ASSETS" ]] || {
+              echo "::error::Existing release $TAG has an unexpected asset set."
+              exit 1
+            }
+            echo "Release $TAG already exists with the expected immutable asset set."
+            exit 0
           fi
-          dpkg-deb -f "$package" Replaces | grep -Eq '(^|, )mintupdate([, ]|$)'
-          dpkg-deb -f "$package" Recommends | grep -Eq '(^|, )flatpak([, ]|$)'
-          dpkg-deb --fsys-tarfile "$package" | tar -tf - > package-files.txt
-          grep -qx './usr/bin/infiltrator-software' package-files.txt
-          grep -qx './usr/bin/infiltrator-software-tray' package-files.txt
-          grep -qx './usr/bin/infiltrator-software-session-updater' package-files.txt
-          grep -qx './usr/bin/infiltrator-software-cli' package-files.txt
-          grep -qx './usr/bin/infiltrator-software-release-upgrade' package-files.txt
-          grep -qx './usr/libexec/infiltrator-software-auto-updater' package-files.txt
-          grep -qx './usr/lib/systemd/system/infiltrator-software-auto-update.service' package-files.txt
-          grep -qx './usr/lib/systemd/system/infiltrator-software-auto-update.timer' package-files.txt
-          grep -qx './etc/xdg/autostart/infiltrator-software-session-updater.desktop' package-files.txt
-          ./build/infiltrator-software-cli --version | grep -qx "$(tr -d '[:space:]' < VERSION)"
-          ./build/infiltrator-software-cli --help | grep -Fq 'upgrade'
-          grep -qx './usr/libexec/infiltrator-software-helper' package-files.txt
-          grep -qx './usr/libexec/infiltrator-software-update-helper' package-files.txt
-          grep -qx './usr/libexec/infiltrator-software-engine' package-files.txt
-          grep -qx './usr/share/dbus-1/services/net.ssmith.infiltrator.software.Engine.service' package-files.txt
-          grep -qx './usr/share/dbus-1/interfaces/net.ssmith.infiltrator.software.Engine.xml' package-files.txt
-          grep -qx './usr/share/polkit-1/actions/net.ssmith.infiltrator.software.policy' package-files.txt
-          grep -qx './usr/share/polkit-1/actions/net.ssmith.infiltrator.software.updates.policy' package-files.txt
-          grep -qx './etc/xdg/autostart/infiltrator-software-tray.desktop' package-files.txt
-          grep -qx './usr/share/icons/hicolor/scalable/status/infiltrator-software-up-to-date-symbolic.svg' package-files.txt
-          grep -qx './usr/share/icons/hicolor/scalable/status/infiltrator-software-updates-available-symbolic.svg' package-files.txt
-          grep -qx './usr/share/icons/hicolor/scalable/status/infiltrator-software-checking-symbolic.svg' package-files.txt
-          grep -qx './usr/share/icons/hicolor/scalable/status/infiltrator-software-installing-symbolic.svg' package-files.txt
-          grep -qx './usr/share/icons/hicolor/scalable/status/infiltrator-software-error-symbolic.svg' package-files.txt
-          grep -qx './usr/share/applications/net.ssmith.infiltrator.software.desktop' package-files.txt
-          grep -qx 'StartupWMClass=net.ssmith.infiltrator.software' debian/net.ssmith.infiltrator.software.desktop
-          grep -qx 'Icon=net.ssmith.infiltrator.software' debian/net.ssmith.infiltrator.software.desktop
-          grep -Fq 'gtk_window_set_icon_name(GTK_WINDOW(window), "net.ssmith.infiltrator.software")' src/app/*.cpp
-          grep -Fq 'gtk_about_dialog_set_logo_icon_name(' src/app/*.cpp
-          grep -qx './usr/share/icons/hicolor/scalable/apps/net.ssmith.infiltrator.software.svg' package-files.txt
-          grep -qx './usr/share/icons/hicolor/scalable/apps/infiltrator-software.svg' package-files.txt
-          grep -qx './usr/share/app-install/icons/infiltrator-software.svg' package-files.txt
-          grep -qx './usr/share/metainfo/infiltrator-software.metainfo.xml' package-files.txt
-          grep -qx './usr/share/fonts/truetype/infiltrator-software/mb_corpo_a_cond_regular.ttf' package-files.txt
-          grep -qx './usr/share/fonts/truetype/infiltrator-software/mb_corpo_s_bold.ttf' package-files.txt
-          grep -qx './usr/share/fonts/truetype/infiltrator-software/mb_corpo_s_regular.ttf' package-files.txt
-          if grep -Eq '^\./usr/include/infiltratr/|^\./usr/lib/.*/libinfiltratr|/cmake/InfiltratrCommon/' package-files.txt; then
-            echo "::error::Software package leaked Common development/runtime payloads."
-            cat package-files.txt
-            exit 1
+
+          gh release create "$TAG" \
+            "release/software_${VERSION}_amd64.deb" \
+            "release/software_${VERSION}_source.tar.gz" \
+            "release/LICENSE.txt" \
+            "release/SHA256SUMS.txt" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$EXPECTED_SHA" \
+            --title "Software ${VERSION}" \
+            --generate-notes \
+            --latest
+
+  apt-publication:
+    needs: [linux, publish-release]
+    if: needs.linux.outputs.release == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+
+    steps:
+      - name: Trigger and verify central APT publication
+        env:
+          DISPATCH_TOKEN: ${{ secrets.APT_REPOSITORY_DISPATCH_TOKEN }}
+          VERSION: ${{ needs.linux.outputs.version }}
+          RELEASE_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          catalogue='https://infiltrator-projects.github.io/Infiltrator-Repository/catalogue/apps.json'
+
+          published() {
+            curl -fsS --retry 2 --retry-delay 1 \
+              "${catalogue}?release=${RELEASE_SHA}&attempt=${1}" \
+              | jq -e --arg id software --arg version "$VERSION" \
+                  '.[] | select(.id == $id and .version == $version)' >/dev/null
+          }
+
+          if published 0; then
+            echo "APT repository already advertises Software $VERSION."
+            exit 0
           fi
+
+          if [[ -n "${DISPATCH_TOKEN:-}" ]]; then
+            payload="$(jq -nc \
+              --arg repository "$GITHUB_REPOSITORY" \
+              --arg sha "$RELEASE_SHA" \
+              '{event_type:"application-release",client_payload:{repository:$repository,sha:$sha}}')"
+            if curl --fail-with-body --silent --show-error \
+              --request POST \
+              --header "Authorization: Bearer $DISPATCH_TOKEN" \
+              --header "Accept: application/vnd.github+json" \
+              --header "X-GitHub-Api-Version: 2022-11-28" \
+              --data "$payload" \
+              https://api.github.com/repos/Infiltrator-Projects/Infiltrator-Repository/dispatches; then
+              echo "Central APT publication dispatch accepted."
+            else
+              echo "::warning::APT dispatch failed; scheduled repository recovery will be used."
+            fi
+          else
+            echo "::warning::APT dispatch token unavailable; scheduled repository recovery will be used."
+          fi
+
+          for attempt in $(seq 1 120); do
+            if published "$attempt"; then
+              echo "APT repository advertises Software $VERSION."
+              exit 0
+            fi
+            sleep 10
+          done
+
+          echo "::error::Central APT repository did not advertise Software $VERSION within 20 minutes."
+          exit 1
