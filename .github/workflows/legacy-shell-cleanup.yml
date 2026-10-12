@@ -72,7 +72,8 @@ jobs:
               discover_operations +
               namespace_close
           )
-          # The public header owns the API default; definitions must not repeat it.
+          # Public headers own API defaults; definitions and copied forward
+          # declarations in the implementation must not repeat them.
           discover_source = discover_source.replace(
               'const bool force_refresh = false)',
               'const bool force_refresh)',
@@ -89,6 +90,11 @@ jobs:
               updates_shared +
               updates_primary +
               namespace_close
+          )
+          updates_source = updates_source.replace(
+              'void refresh_updates(WindowState *state, bool refresh_metadata = false);',
+              'void refresh_updates(WindowState *state, bool refresh_metadata);',
+              1,
           )
 
           for name, text in (
