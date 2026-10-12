@@ -20,7 +20,6 @@ void refresh_updates_internal(
     WindowState *state,
     bool refresh_metadata,
     bool refresh_external);
-void set_updates_page_selected(WindowState *state, bool selected);
 void select_update_preset(WindowState *state, UpdateSelectionPreset preset);
 void destroy_updates_page(WindowState *state);
 
