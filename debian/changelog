@@ -1,3 +1,18 @@
+infiltrator-software (0.3.79) unstable; urgency=high
+
+  * Remove obsolete System and Repair legacy-alias compile definitions now that
+    both views use explicit owner-qualified page state.
+  * Confine compatibility rewriting to the quarantined legacy page provider,
+    leaving ordinary view translation units free of migration macros.
+  * Strengthen architecture contracts so CI rejects restored page alias flags,
+    old owner spellings or direct Repair-to-Discover health widget access.
+  * Correct the source-contract description of the remaining GTK lifecycle debt
+    so it points at the legacy provider rather than the current application shell.
+  * Preserve the full build, test, source-contract, engine smoke, graphical
+    launch, AppStream and Debian-package verification gates for the cleanup.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Mon, 12 Oct 2026 12:05:00 +1100
+
 infiltrator-software (0.3.78) unstable; urgency=high
 
   * Remove Repair view dependence on legacy state-rewriting macros and use the
