@@ -1,3 +1,15 @@
+infiltrator-software (0.3.87) unstable; urgency=high
+
+  * Replace the release-metadata regression test's assert-only checks with
+    explicit failures so Release builds cannot silently compile the test away.
+  * Remove stale architecture wording for the retired GUI APT backend and make
+    the architecture document refer to the build-pinned Common revision rather
+    than duplicating a dependency version that can drift.
+  * Preserve the native engine boundaries, deterministic build/release path,
+    main-only repository policy and complete verification/publishing gates.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Tue, 13 Oct 2026 09:55:00 +1100
+
 infiltrator-software (0.3.86) unstable; urgency=high
 
   * Collapse GitHub release and central APT publication into one serialized job,
@@ -12,7 +24,7 @@ infiltrator-software (0.3.86) unstable; urgency=high
 infiltrator-software (0.3.85) unstable; urgency=high
 
   * Check out the exact verified release commit in the central APT publication
-    job before invoking the repository-owned release tool.
+    job before invoking the repository-owned APT publication tool.
   * Preserve the simplified reusable release-policy boundary while repairing the
     live orchestration fault exposed by the 0.3.84 publication run.
   * Retain build-once, exact tag/package/asset verification and main-only release
@@ -126,7 +138,7 @@ infiltrator-software (0.3.77) unstable; urgency=high
   * Stop injecting System compatibility aliases from WindowState, reducing the
     active compatibility bridge to Repair and the quarantined legacy provider.
   * Preserve the full build, contract, engine smoke, graphical launch, AppStream
-    and Debian-package verification gates for the coupling reduction.
+    and Debian-package verification gates for the decoupling change.
 
  -- Shannon Smith <infiltratr@yandex.com>  Mon, 12 Oct 2026 10:30:00 +1100
 

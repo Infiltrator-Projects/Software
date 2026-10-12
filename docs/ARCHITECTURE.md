@@ -4,7 +4,7 @@
 
 Infiltrator Software is one graphical product with separated internal responsibilities. The historic split between a software catalogue and an update manager is not reproduced as a product boundary.
 
-This document defines the target architecture beginning with the 0.4 line. The 0.3 implementation still contains an APT-backed compatibility layer; that implementation is transitional.
+This document defines the target architecture beginning with the 0.4 line. The 0.3 implementation still contains a constrained APT-backed compatibility boundary for final system mutation; ordinary inventory, refresh and planning are native.
 
 ## Architectural rule
 
@@ -92,7 +92,7 @@ of the host provider for only those packages. Everything not yet migrated keeps
 the existing host policy, so the transition does not accidentally replace the
 working base system.
 
-The 0.3 backends/apt implementation remains legacy migration code until the native engine reaches parity and is deleted.
+The remaining APT command use is confined to the constrained privileged compatibility executor and recovery paths while the final package-mutation layer is replaced. It is not a second inventory, reconciliation or planning backend.
 
 See [Package Engine](PACKAGE_ENGINE.md).
 
@@ -154,7 +154,7 @@ Partial state is visibly partial and is never silently represented as complete a
 
 ## Common
 
-Common 1.19.24 remains the project-family foundation for mechanisms that are genuinely product-neutral: appearance, semantic colours, typography roles, structural metrics and durable generic utilities.
+The Common revision pinned by the build remains the project-family foundation for mechanisms that are genuinely product-neutral: appearance, semantic colours, typography roles, structural metrics and durable generic utilities.
 
 Package formats, dependency resolution, repository semantics and transaction policy remain in Software rather than being pushed into Common merely for reuse.
 

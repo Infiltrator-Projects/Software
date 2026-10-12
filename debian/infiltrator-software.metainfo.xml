@@ -25,9 +25,9 @@
   <url type="homepage">https://github.com/Infiltrator-Projects/Software</url>
 
   <releases>
-    <release version="0.3.86" date="2026-10-13">
+    <release version="0.3.87" date="2026-10-13">
       <description>
-        <p>Reduces release orchestration coupling by publishing GitHub and central APT sequentially in one serialized job, while anchoring the release tool to its own repository root and preserving deterministic verification.</p>
+        <p>Hardens release-metadata regression checks against Release-mode assertion removal and removes stale architecture dependency/version wording that could drift from the build contract.</p>
       </description>
     </release>
   </releases>
