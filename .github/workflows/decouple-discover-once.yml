@@ -124,8 +124,6 @@ jobs:
                   "history_controller_loaded(state->history)",
               "state->updates.inventory.updates_loaded":
                   "updates_controller_loaded(state->updates)",
-              "history_state->history.loaded":
-                  "history_controller_loaded(history_state->history)",
           }
           observed = {}
           for old, new in replacements.items():
