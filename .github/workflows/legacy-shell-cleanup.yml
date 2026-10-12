@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-name: One-shot legacy alias cleanup
+name: One-shot legacy bridge cleanup
 
 on:
   push:
@@ -21,90 +21,107 @@ jobs:
           fetch-depth: 0
           submodules: recursive
 
-      - name: Replace legacy state aliases with explicit ownership
+      - name: Remove duplicate review and controller bridges
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
-          import re
 
-          alias_path = Path('src/app/legacy_page_aliases.hpp')
-          legacy_path = Path('src/app/legacy_page_impl.cpp')
-          aliases = alias_path.read_text()
-          legacy = legacy_path.read_text()
+          path = Path('src/app/legacy_page_impl.cpp')
+          source = path.read_text()
 
-          mapping = {}
-          for line in aliases.splitlines():
-              match = re.fullmatch(r'#define\s+([A-Za-z_][A-Za-z0-9_]*)\s+(.+)', line)
-              if match:
-                  mapping[match.group(1)] = match.group(2).strip()
-          if len(mapping) < 40:
-              raise SystemExit(f'Unexpectedly small legacy alias map: {len(mapping)}')
+          include_anchor = '#include "app/history_controller.hpp"\n'
+          added = (
+              '#include "app/app_coordinator.hpp"\n'
+              '#include "app/transaction_review.hpp"\n'
+          )
+          if added not in source:
+              if include_anchor not in source:
+                  raise SystemExit('Expected include anchor not found.')
+              source = source.replace(include_anchor, added + include_anchor, 1)
 
-          names = sorted(mapping, key=len, reverse=True)
-          pointer_pattern = re.compile(r'->(' + '|'.join(map(re.escape, names)) + r')\b')
-          matches = pointer_pattern.findall(legacy)
-          if not matches:
-              raise SystemExit('No legacy pointer aliases were found to migrate.')
+          # transaction_review.cpp already owns the exact reviewed-transaction
+          # dialog. Remove the older private duplicate and use the shared API.
+          review_start = source.find('\nconst char *transaction_action_label(')
+          review_end = source.find('\nvoid discover_details_clicked(', review_start)
+          if review_start < 0 or review_end < 0:
+              raise SystemExit('Duplicate transaction-review helper block not found.')
+          source = source[:review_start] + '\n' + source[review_end:]
+          source = source.replace(
+              'make_transaction_confirmation_dialog(',
+              'make_transaction_review_dialog(',
+          )
+          if 'make_transaction_confirmation_dialog' in source:
+              raise SystemExit('Duplicate transaction-review call survived cleanup.')
 
-          legacy = pointer_pattern.sub(
-              lambda match: '->' + mapping[match.group(1)],
-              legacy,
+          # Installed and History already have controllers; do not retain local
+          # WindowState forwarding functions in this transitional provider.
+          installed_start = source.find('\nvoid refresh_installed(WindowState *state)\n')
+          installed_end = source.find('\nstruct UpdateProcessRun {', installed_start)
+          if installed_start < 0 or installed_end < 0:
+              raise SystemExit('Installed forwarding bridge not found.')
+          source = source[:installed_start] + '\n' + source[installed_end:]
+          source = source.replace(
+              'refresh_installed(state);',
+              'refresh_installed_controller(&state->installed);',
           )
 
-          remaining_pointer_aliases = [
-              name for name in names
-              if re.search(r'->' + re.escape(name) + r'\b', legacy)
-          ]
-          if remaining_pointer_aliases:
-              raise SystemExit(
-                  'Legacy pointer aliases remain: ' + ', '.join(remaining_pointer_aliases)
-              )
+          history_start = source.rfind('\nvoid refresh_history(WindowState *state)\n')
+          select_start = source.find('\nvoid select_page(WindowState *state, const int index)\n', history_start)
+          if history_start < 0 or select_start < 0:
+              raise SystemExit('History/select forwarding bridges not found.')
+          source = source[:history_start] + '\n' + source[select_start:]
+          source = source.replace(
+              'refresh_history(state);',
+              'refresh_history_controller(&state->history);',
+          )
 
-          # If a compatibility token is still used in code in another form, do
-          # not delete the shim and hope for the best. The subsequent compile is
-          # authoritative, but flag obvious bare uses here as well.
-          legacy_path.write_text(legacy)
+          # Navigation is coordinated centrally now. Keep dashboard navigation
+          # on that public boundary and remove the final local index bridge.
+          source = source.replace(
+              'select_page(state, index);',
+              'select_app_page(state, static_cast<AppPage>(index));',
+          )
+          select_start = source.find('\nvoid select_page(WindowState *state, const int index)\n')
+          namespace_close = source.rfind('\n} // namespace infiltrator::software::app\n')
+          if select_start < 0 or namespace_close < 0 or select_start > namespace_close:
+              raise SystemExit('Select-page forwarding bridge not found.')
+          source = source[:select_start] + source[namespace_close:]
 
-          window_path = Path('src/app/window_state.hpp')
-          window = window_path.read_text()
-          old_window = '''\n/*\n * Only the quarantined legacy page provider receives source-compatibility\n * spellings. Ordinary page/view translation units always use explicit owners.\n */\n#ifdef INFILTRATOR_SOFTWARE_LEGACY_PAGE_IMPL\n#include "app/legacy_page_aliases.hpp"\n#endif\n'''
-          if old_window not in window:
-              raise SystemExit('Expected legacy alias injection block not found in WindowState.')
-          window_path.write_text(window.replace(old_window, '\n', 1))
+          for declaration in (
+              'void refresh_installed(WindowState *state);\n',
+              'void refresh_history(WindowState *state);\n',
+              'void select_page(WindowState *state, int index);\n',
+          ):
+              source = source.replace(declaration, '', 1)
 
-          cmake_path = Path('CMakeLists.txt')
-          cmake = cmake_path.read_text()
-          old_cmake = '''\n# Compatibility rewriting is confined to the quarantined legacy page provider.\n# Only the temporary Discover/Updates state aliases remain; the duplicate\n# application entry point and shell have been removed.\nset_source_files_properties(src/app/legacy_page_impl.cpp PROPERTIES\n    COMPILE_DEFINITIONS\n        "INFILTRATOR_SOFTWARE_LEGACY_PAGE_IMPL=1")\n'''
-          if old_cmake not in cmake:
-              raise SystemExit('Expected legacy source compile-definition block not found.')
-          cmake_path.write_text(cmake.replace(old_cmake, '\n', 1))
+          for forbidden in (
+              'void refresh_installed(WindowState *state)',
+              'void refresh_history(WindowState *state)',
+              'void select_page(WindowState *state',
+              'make_transaction_confirmation_dialog',
+          ):
+              if forbidden in source:
+                  raise SystemExit(f'Retired bridge survived cleanup: {forbidden}')
+
+          path.write_text(source)
 
           contracts_path = Path('tests/source_contracts.py')
           contracts = contracts_path.read_text()
-          contracts = contracts.replace(
-              '# never a subtype of a page/controller. Compatibility rewriting is permitted\n# only for the quarantined legacy page provider and must only shrink.\n',
-              '# never a subtype of a page/controller. Compatibility state rewriting is\n# forbidden: page implementations must name their owning state explicitly.\n',
-              1,
-          )
-          old_contracts = '''assert "do not add new aliases" in window_state\nassert "INFILTRATOR_SOFTWARE_LEGACY_PAGE_IMPL" in window_state\nassert "INFILTRATOR_SOFTWARE_REPAIR_VIEW_LEGACY_ALIASES" not in window_state\nassert "INFILTRATOR_SOFTWARE_SYSTEM_VIEW_LEGACY_ALIASES" not in cmake\nassert "INFILTRATOR_SOFTWARE_REPAIR_VIEW_LEGACY_ALIASES" not in cmake\nassert "INFILTRATOR_SOFTWARE_LEGACY_PAGE_IMPL=1" in cmake\nassert "main=infiltrator_software_legacy_page_impl_main" not in cmake\n'''
-          new_contracts = '''assert "do not add new aliases" in window_state\nassert "INFILTRATOR_SOFTWARE_LEGACY_PAGE_IMPL" not in window_state\nassert "INFILTRATOR_SOFTWARE_LEGACY_PAGE_IMPL" not in cmake\nassert "INFILTRATOR_SOFTWARE_REPAIR_VIEW_LEGACY_ALIASES" not in window_state\nassert "INFILTRATOR_SOFTWARE_SYSTEM_VIEW_LEGACY_ALIASES" not in cmake\nassert "INFILTRATOR_SOFTWARE_REPAIR_VIEW_LEGACY_ALIASES" not in cmake\nassert "main=infiltrator_software_legacy_page_impl_main" not in cmake\nassert not Path("src/app/legacy_page_aliases.hpp").exists()\n'''
-          if old_contracts not in contracts:
-              raise SystemExit('Expected legacy compatibility source-contract block not found.')
-          contracts_path.write_text(contracts.replace(old_contracts, new_contracts, 1))
-
-          alias_path.unlink()
-          print(f'Migrated {len(matches)} explicit legacy state member accesses across {len(set(matches))} aliases.')
+          anchor = 'assert "void global_search_changed(" not in legacy_page_impl\n'
+          addition = '''assert "make_transaction_confirmation_dialog" not in legacy_page_impl\nassert "make_transaction_review_dialog(" in legacy_page_impl\nassert "void refresh_installed(WindowState *state)" not in legacy_page_impl\nassert "void refresh_history(WindowState *state)" not in legacy_page_impl\nassert "void select_page(WindowState *state" not in legacy_page_impl\nassert "select_app_page(state, static_cast<AppPage>(index))" in legacy_page_impl\n'''
+          if anchor not in contracts:
+              raise SystemExit('Source-contract insertion anchor not found.')
+          contracts_path.write_text(contracts.replace(anchor, anchor + addition, 1))
           PY
 
           git diff --check
-          ! test -e src/app/legacy_page_aliases.hpp
-          ! grep -R -Fq 'INFILTRATOR_SOFTWARE_LEGACY_PAGE_IMPL' src/app CMakeLists.txt
-          ! grep -Fq 'state->discover_status' src/app/legacy_page_impl.cpp
-          ! grep -Fq 'state->updates_list' src/app/legacy_page_impl.cpp
-          grep -Fq 'state->discover.discover_status' src/app/legacy_page_impl.cpp
-          grep -Fq 'state->updates.updates_list' src/app/legacy_page_impl.cpp
+          ! grep -Fq 'make_transaction_confirmation_dialog' src/app/legacy_page_impl.cpp
+          ! grep -Fq 'void refresh_installed(WindowState *state)' src/app/legacy_page_impl.cpp
+          ! grep -Fq 'void refresh_history(WindowState *state)' src/app/legacy_page_impl.cpp
+          ! grep -Fq 'void select_page(WindowState *state' src/app/legacy_page_impl.cpp
+          grep -Fq 'make_transaction_review_dialog(' src/app/legacy_page_impl.cpp
 
       - name: Install build dependencies
         env:
@@ -143,7 +160,7 @@ jobs:
           set -euo pipefail
           git config user.name "Shannon Smith"
           git config user.email "infiltratr@yandex.com"
-          git add src/app/legacy_page_impl.cpp src/app/window_state.hpp src/app/legacy_page_aliases.hpp CMakeLists.txt tests/source_contracts.py
+          git add src/app/legacy_page_impl.cpp tests/source_contracts.py
           git diff --cached --check
-          git commit -m "Remove legacy page state alias layer"
+          git commit -m "Remove transitional page bridges"
           git push origin HEAD:main
