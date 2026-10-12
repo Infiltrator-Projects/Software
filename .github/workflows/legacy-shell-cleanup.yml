@@ -72,6 +72,11 @@ jobs:
               discover_operations +
               namespace_close
           )
+          # The public header owns the API default; definitions must not repeat it.
+          discover_source = discover_source.replace(
+              'const bool force_refresh = false)',
+              'const bool force_refresh)',
+          )
 
           updates_preamble = preamble.replace(
               '// SPDX-License-Identifier: GPL-3.0-or-later\n',
