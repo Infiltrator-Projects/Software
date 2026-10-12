@@ -4,6 +4,8 @@
 
 #include "app/app_page.hpp"
 
+#include <string_view>
+
 namespace infiltrator::software::app {
 
 struct WindowState;
@@ -19,6 +21,11 @@ void notify_repository_snapshot_changed(WindowState *state);
 void notify_history_state_changed(WindowState *state);
 void notify_repair_health_changed(WindowState *state, bool healthy);
 void notify_repair_state_changed(WindowState *state);
+
+/* Shell intents are translated here so the shell never reaches into pages. */
+void set_app_search_query(WindowState *state, std::string_view query);
+void show_security_updates(WindowState *state);
+void show_kernel_updates(WindowState *state);
 void select_app_page(WindowState *state, AppPage page);
 
 } // namespace infiltrator::software::app
