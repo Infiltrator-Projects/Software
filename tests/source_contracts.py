@@ -38,7 +38,9 @@ history = text("src/core/transaction_history.cpp")
 installed_controller = text("src/app/installed_controller.cpp")
 installed_inventory = text("src/app/installed_inventory.cpp")
 main_cpp = text("src/app/main.cpp")
-legacy_page_impl = text("src/app/legacy_page_impl.cpp")
+discover_view_cpp = text("src/app/discover_view.cpp")
+updates_view_cpp = text("src/app/updates_view.cpp")
+page_views = discover_view_cpp + "\n" + updates_view_cpp
 app_coordinator = text("src/app/app_coordinator.cpp")
 discover_state = text("src/app/discover_state.hpp")
 updates_controller = text("src/app/updates_controller.cpp")
@@ -155,18 +157,22 @@ assert "INFILTRATOR_SOFTWARE_LEGACY_PAGE_IMPL" not in cmake
 assert "INFILTRATOR_SOFTWARE_REPAIR_VIEW_LEGACY_ALIASES" not in window_state
 assert "INFILTRATOR_SOFTWARE_SYSTEM_VIEW_LEGACY_ALIASES" not in cmake
 assert "INFILTRATOR_SOFTWARE_REPAIR_VIEW_LEGACY_ALIASES" not in cmake
-assert "main=infiltrator_software_legacy_page_impl_main" not in cmake
+assert "main=infiltrator_software_page_views_main" not in cmake
 assert not Path("src/app/legacy_page_aliases.hpp").exists()
-assert "int main(" not in legacy_page_impl
-assert "void activate(" not in legacy_page_impl
-assert "GtkWidget *make_header_bar(" not in legacy_page_impl
-assert "void global_search_changed(" not in legacy_page_impl
-assert "make_transaction_confirmation_dialog" not in legacy_page_impl
-assert "make_transaction_review_dialog(" in legacy_page_impl
-assert "void refresh_installed(WindowState *state)" not in legacy_page_impl
-assert "void refresh_history(WindowState *state)" not in legacy_page_impl
-assert "void select_page(WindowState *state" not in legacy_page_impl
-assert "select_app_page(state, static_cast<AppPage>(index))" in legacy_page_impl
+assert not Path("src/app/legacy_page_impl.cpp").exists()
+assert "src/app/discover_view.cpp" in cmake
+assert "src/app/updates_view.cpp" in cmake
+assert "src/app/legacy_page_impl.cpp" not in cmake
+assert "int main(" not in page_views
+assert "void activate(" not in page_views
+assert "GtkWidget *make_header_bar(" not in page_views
+assert "void global_search_changed(" not in page_views
+assert "make_transaction_confirmation_dialog" not in page_views
+assert "make_transaction_review_dialog(" in page_views
+assert "void refresh_installed(WindowState *state)" not in page_views
+assert "void refresh_history(WindowState *state)" not in page_views
+assert "void select_page(WindowState *state" not in page_views
+assert "select_app_page(state, static_cast<AppPage>(index))" in page_views
 assert "state->system_" not in system_view
 assert "state->repair_" not in repair_view
 assert "discover_health_summary" not in repair_view
@@ -200,8 +206,8 @@ assert "repository_record_count(" in app_coordinator
 assert "set_discover_repository_summary(" in app_coordinator
 
 # Native update reconciliation, external update discovery and update planning
-# belong to the Updates controller. The quarantined legacy page provider still
-# owns GTK task lifetime/presentation until that lifecycle is extracted.
+# belong to the Updates controller. The Updates view owns GTK task lifetime
+# and presentation while reconciliation and planning remain controller-owned.
 assert '"app/updates_controller.hpp"' in main_cpp
 assert "src/app/updates_controller.cpp" in cmake
 assert "refresh_updates_data" in updates_controller
@@ -212,7 +218,7 @@ assert "discover_cinnamon_updates(" in updates_controller
 assert "engine.list_updates(" not in main_cpp
 assert "discover_flatpak_updates(" not in main_cpp
 assert "discover_cinnamon_updates(" not in main_cpp
-assert "refresh_updates_data" in legacy_page_impl
+assert "refresh_updates_data" in updates_view_cpp
 
 # External ecosystems remain explicit and preserve Flatpak installation scope.
 assert "discover_flatpak_updates" in app

@@ -269,7 +269,8 @@ endif()
 
 add_executable(infiltrator-software
     src/app/main.cpp
-    src/app/legacy_page_impl.cpp
+    src/app/discover_view.cpp
+    src/app/updates_view.cpp
     src/app/view_lifecycle_bridge.cpp
     src/app/app_coordinator.cpp
     src/app/navigation_controller.cpp
