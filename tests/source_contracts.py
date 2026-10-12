@@ -205,6 +205,25 @@ assert "history_controller_loaded(" in app_coordinator
 assert "repository_record_count(" in app_coordinator
 assert "set_discover_repository_summary(" in app_coordinator
 
+# Discover may consume public controller views, but it must not reach into
+# another page/controller's backing vectors or lifecycle flags directly.
+for forbidden_discover_reachthrough in (
+    "state->updates.inventory.update_records",
+    "state->repositories.records",
+    "state->history.records",
+    "state->installed.loaded",
+    "state->history.loaded",
+    "state->updates.inventory.updates_loaded",
+    "history_state->history.loaded",
+):
+    assert forbidden_discover_reachthrough not in discover_view_cpp
+assert "updates_controller_records(state->updates)" in discover_view_cpp
+assert "repository_controller_records(state->repositories)" in discover_view_cpp
+assert "history_controller_records(state->history)" in discover_view_cpp
+assert "installed_controller_loaded(state->installed)" in discover_view_cpp
+assert "updates_controller_loaded(state->updates)" in discover_view_cpp
+assert "history_controller_loaded(" in discover_view_cpp
+
 # Native update reconciliation, external update discovery and update planning
 # belong to the Updates controller. The Updates view owns GTK task lifetime
 # and presentation while reconciliation and planning remain controller-owned.

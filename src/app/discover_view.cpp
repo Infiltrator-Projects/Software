@@ -910,7 +910,7 @@ void rebuild_discover_update_preview(
 
     const std::size_t limit =
         std::min<std::size_t>(
-            state->updates.inventory.update_records.size(), 2U);
+            updates_controller_records(state->updates).size(), 2U);
     if (limit == 0U) {
         gtk_box_append(
             GTK_BOX(
@@ -927,7 +927,7 @@ void rebuild_discover_update_preview(
          index < limit;
          ++index) {
         const PackageRecord &record =
-            state->updates.inventory.update_records[index];
+            updates_controller_records(state->updates)[index];
         std::string version =
             record.installed_version;
         if (!version.empty() &&
@@ -962,7 +962,7 @@ void rebuild_discover_repository_preview(
     clear_box_children(
         state->discover.discover_repository_preview);
 
-    if (state->repositories.records.empty()) {
+    if (repository_controller_records(state->repositories).empty()) {
         gtk_box_append(
             GTK_BOX(
                 state->discover.discover_repository_preview),
@@ -976,13 +976,13 @@ void rebuild_discover_repository_preview(
 
     const std::size_t limit =
         std::min<std::size_t>(
-            state->repositories.records.size(),
+            repository_controller_records(state->repositories).size(),
             3U);
     for (std::size_t index = 0U;
          index < limit;
          ++index) {
         const SourceRecord &source =
-            state->repositories.records[index];
+            repository_controller_records(state->repositories)[index];
         gtk_box_append(
             GTK_BOX(
                 state->discover.discover_repository_preview),
@@ -1014,7 +1014,7 @@ void rebuild_discover_activity_preview(
     clear_box_children(
         state->discover.discover_activity_preview);
 
-    if (state->history.records.empty()) {
+    if (history_controller_records(state->history).empty()) {
         gtk_box_append(
             GTK_BOX(
                 state->discover.discover_activity_preview),
@@ -1029,15 +1029,15 @@ void rebuild_discover_activity_preview(
     std::size_t index = 0U;
     std::size_t shown = 0U;
     while (index <
-               state->history.records.size() &&
+               history_controller_records(state->history).size() &&
            shown < 4U) {
         const TransactionHistoryItem &head =
-            state->history.records[index];
+            history_controller_records(state->history)[index];
         std::size_t end = index + 1U;
         while (
             end <
-                state->history.records.size() &&
-            state->history.records[end]
+                history_controller_records(state->history).size() &&
+            history_controller_records(state->history)[end]
                     .transaction_id ==
                 head.transaction_id) {
             ++end;
@@ -2808,14 +2808,14 @@ void discover_flatpak_complete(
         if (state != nullptr) {
             if (success) {
                 refresh_discover(state, true);
-                if (state->installed.loaded) {
+                if (installed_controller_loaded(state->installed)) {
                     refresh_installed_controller(&state->installed);
                 }
-                if (state->updates.inventory.updates_loaded) {
+                if (updates_controller_loaded(state->updates)) {
                     refresh_updates(state, false);
                 }
             }
-            if (state->history.loaded) {
+            if (history_controller_loaded(state->history)) {
                 refresh_history_controller(&state->history);
             }
         }
@@ -3142,7 +3142,7 @@ void discover_install_process_complete(
                     G_OBJECT(operation->main_window),
                     "infiltrator-window-state"));
             if (history_state != nullptr &&
-                history_state->history.loaded) {
+                history_history_controller_loaded(state->history)) {
                 refresh_history_controller(&history_state->history);
             }
         }
@@ -3203,8 +3203,8 @@ void discover_install_process_complete(
                 "infiltrator-window-state"));
         if (state != nullptr) {
             refresh_discover(state, true);
-            if (state->installed.loaded) refresh_installed_controller(&state->installed);
-            if (state->updates.inventory.updates_loaded) refresh_updates(state);
+            if (installed_controller_loaded(state->installed)) refresh_installed_controller(&state->installed);
+            if (updates_controller_loaded(state->updates)) refresh_updates(state);
         }
     }
 
@@ -3238,7 +3238,7 @@ void start_discover_install_operation(
                     G_OBJECT(operation->main_window),
                     "infiltrator-window-state"));
             if (history_state != nullptr &&
-                history_state->history.loaded) {
+                history_history_controller_loaded(state->history)) {
                 refresh_history_controller(&history_state->history);
             }
         }
@@ -3295,7 +3295,7 @@ void start_discover_install_operation(
                     G_OBJECT(operation->main_window),
                     "infiltrator-window-state"));
             if (history_state != nullptr &&
-                history_state->history.loaded) {
+                history_history_controller_loaded(state->history)) {
                 refresh_history_controller(&history_state->history);
             }
         }

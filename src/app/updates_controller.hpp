@@ -81,6 +81,12 @@ inline bool updates_controller_loaded(
     return controller.inventory.updates_loaded;
 }
 
+inline const std::vector<PackageRecord> &updates_controller_records(
+    const UpdatesController &controller) noexcept
+{
+    return controller.inventory.update_records;
+}
+
 [[nodiscard]] bool updates_controller_busy(
     const UpdatesController &controller) noexcept;
 

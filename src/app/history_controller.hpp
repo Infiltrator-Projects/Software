@@ -30,6 +30,12 @@ inline bool history_controller_loaded(
     return controller.loaded;
 }
 
+inline const std::vector<TransactionHistoryItem> &history_controller_records(
+    const HistoryController &controller) noexcept
+{
+    return controller.records;
+}
+
 GtkWidget *create_history_controller_page(
     HistoryController *controller,
     GtkWindow *window,

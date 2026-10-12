@@ -38,6 +38,12 @@ inline std::size_t repository_record_count(
     return controller.records.size();
 }
 
+inline const std::vector<SourceRecord> &repository_controller_records(
+    const RepositoryController &controller) noexcept
+{
+    return controller.records;
+}
+
 void configure_repository_controller(
     RepositoryController *controller,
     GtkWindow *window,
