@@ -37,6 +37,17 @@ public:
     bool refresh_installed(std::string &error);
     bool refresh(std::string &error);
 
+    /*
+     * Repository refresh executes in a worker-owned core in the D-Bus
+     * service. The live service core remains the presentation/planning
+     * authority, so the completion boundary explicitly transfers the outcome
+     * instead of letting a failed worker disappear with its local state.
+     * A retained generation remains readable after failure, but it is not
+     * healthy enough to authorize a new plan until a full refresh succeeds.
+     */
+    void record_refresh_failure(std::string_view error);
+    void record_refresh_success() noexcept;
+
     [[nodiscard]] EngineServiceStatus status() const;
     [[nodiscard]] std::vector<PackageRecord> installed() const;
     [[nodiscard]] std::vector<PackageRecord> updates() const;
@@ -56,6 +67,7 @@ private:
     std::vector<PackageRecord> updates_;
     bool healthy_{false};
     std::string detail_;
+    std::string refresh_error_;
 };
 
 [[nodiscard]] std::string default_package_state_path();
