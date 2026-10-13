@@ -1,3 +1,16 @@
+infiltrator-software (0.3.94) unstable; urgency=high
+
+  * Reconcile maintained architecture, package-engine, state and performance
+    documentation with the implemented engine-only Installed-state ownership;
+    remove obsolete claims of a direct GUI dpkg-status fallback.
+  * Remove the package-state schema number from maintained design prose so the
+    implementation remains the single version authority while documentation
+    describes the durable persisted fields and migration invariants.
+  * Add a focused documentation contract to verification so ownership/failure
+    semantics and schema-version authority cannot silently drift again.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Tue, 13 Oct 2026 21:45:00 +1100
+
 infiltrator-software (0.3.93) unstable; urgency=high
 
   * Restore deliberate coexistence with Linux Mint Update Manager by removing
