@@ -6,7 +6,7 @@
 
 Infiltrator Software is the software-management application for the Infiltrator project family. It presents software discovery, installation, removal, updates, system components, repositories, release channels, history and repair as one coherent graphical product.
 
-**Current source version:** 0.3.92<br>
+**Current source version:** 0.3.93<br>
 **Language:** C++17 application/core with native GTK4 Linux shell; C11 Common foundation  
 **Shared foundation:** Common 1.19.38<br>
 **Current package compatibility:** Debian repositories and .deb packages; Flatpak and AppStream catalogue integration  
@@ -32,9 +32,9 @@ The UI is package-system-neutral. Debian repositories, .deb packages, AppStream 
 
 The native Infiltrator package engine reads Debian repository metadata directly, applies host compatibility policy including APT preferences and phased-update eligibility when selecting candidates, maintains its own derived package-state database, resolves updates and transactions itself, and uses a constrained privileged executor for final package writes. The privileged compatibility executor still uses the host's low-level Debian package-management boundary for mutation while that final execution layer is being replaced; dpkg remains the .deb payload installer.
 
-## Linux Mint Update Manager replacement status
+## Linux Mint Update Manager parity and coexistence
 
-Software 0.3.52 completed the source-level replacement gate against `linuxmint/mintupdate` commit `a6a9f5767905b8fc94923d0b4ca0538a93309a90` (7.1.5 line). The native C++ Cinnamon backend discovers and updates applets, desklets, extensions, themes and Nemo actions, supports exact per-item selection, reports transfer/item activity, records external updates in Software history, and includes Flatpak/Cinnamon/Nemo state in the tray. The native Debian resolver models a package that both `Conflicts` with and `Replaces` an installed package as an explicit reviewed removal rather than a fatal conflict. Software 0.3.52 temporarily omitted the `mintupdate` conflict only so older Software 0.3.49 installations could bootstrap to that corrected planner. Current packages `Provide`, `Replace` and `Conflict` with `mintupdate`: installation therefore removes the superseded Mint Update Manager through the reviewed replacement transaction while continuing to satisfy Mint meta-package dependencies. `docs/MINTUPDATE_PARITY.md` is the audited capability matrix.
+Software 0.3.52 completed the source-level capability-parity audit against `linuxmint/mintupdate` commit `a6a9f5767905b8fc94923d0b4ca0538a93309a90` (7.1.5 line). The native C++ Cinnamon backend discovers and updates applets, desklets, extensions, themes and Nemo actions, supports exact per-item selection, reports transfer/item activity, records external updates in Software history, and includes Flatpak/Cinnamon/Nemo state in the tray. The native Debian resolver can model packages that genuinely `Conflict` with and `Replace` installed packages as explicit reviewed removals, but Infiltrator Software itself is not a Debian package replacement for Linux Mint Update Manager. From Software 0.3.93 onward the package deliberately does not `Provide`, `Replace` or `Conflict` with `mintupdate`, so both applications can remain installed side by side. `docs/MINTUPDATE_PARITY.md` is the audited capability matrix.
 
 A real distribution point-release upgrade remains an installed-host qualification exercise because CI cannot safely perform a destructive upgrade of the user's machine; that is a validation limitation, not a missing release-upgrade code path.
 
@@ -174,6 +174,6 @@ Copyright © 1993-2026 Shannon Smith.
 Infiltrator Software is licensed under the GNU General Public License version 3 or, at your option, any later version (GPL-3.0-or-later).
 
 
-## Update Manager replacement parity
+## Update Manager capability parity
 
-See `docs/MINTUPDATE_PARITY.md` for the Linux Mint Update Manager replacement audit and removal gate.
+See `docs/MINTUPDATE_PARITY.md` for the Linux Mint Update Manager capability audit. Package coexistence is intentional; Software does not claim the `mintupdate` package identity.
