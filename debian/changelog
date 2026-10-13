@@ -19,6 +19,10 @@ infiltrator-software (0.3.92) unstable; urgency=high
   * Cancel superseded verification runs by Git ref and contract-test the
     build-once publication path so an older same-version main commit cannot race
     the current state into a release.
+  * Retire the 0.3.52 bootstrap-only Mint Update exception: current packages
+    now Provide, Replace and Conflict with mintupdate so the corrected reviewed
+    removal planner completes the replacement instead of preserving stale
+    coexistence machinery.
 
  -- Shannon Smith <infiltratr@yandex.com>  Tue, 13 Oct 2026 14:30:00 +1000
 
