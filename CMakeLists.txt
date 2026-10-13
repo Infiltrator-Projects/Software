@@ -244,6 +244,11 @@ add_library(software-source-format STATIC
 target_include_directories(software-source-format PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/src")
 
+# Native reconciliation consumes the same deb822 syntax authority as source
+# inventory/mutation. Trust-sensitive fields must not be reparsed by a second
+# engine-local implementation.
+target_link_libraries(software-engine PRIVATE software-source-format)
+
 add_library(software-source-inventory STATIC
     src/sources/source_inventory.cpp)
 target_include_directories(software-source-inventory PUBLIC
