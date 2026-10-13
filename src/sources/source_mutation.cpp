@@ -305,11 +305,21 @@ bool set_apt_deb822_entry_enabled(
             block.find("\r\n") != std::string_view::npos
                 ? std::string_view{"\r\n"}
                 : std::string_view{"\n"};
-        if (!replacement.empty() &&
-            replacement.back() != '\n') {
+        const bool had_trailing_line_break =
+            !replacement.empty() && replacement.back() == '\n';
+        if (!had_trailing_line_break) {
             replacement.append(line_break);
         }
         replacement += enabled ? "Enabled: yes" : "Enabled: no";
+        if (had_trailing_line_break) {
+            /*
+             * The parser leaves stanza-separator whitespace outside this
+             * block. Re-emit the consumed final data-line terminator after
+             * the inserted field so the following blank separator remains
+             * blank instead of being collapsed into a single newline.
+             */
+            replacement.append(line_break);
+        }
     }
 
     updated.assign(content);
