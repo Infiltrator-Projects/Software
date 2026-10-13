@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "sources/source_mutation.hpp"
 
+#include "core/text.hpp"
+
 #include <cctype>
 #include <sstream>
 #include <string>
@@ -10,6 +12,9 @@
 
 namespace infiltrator::software {
 namespace {
+
+using text::trim;
+using text::split_words;
 
 std::string_view without_cr(std::string_view value)
 {
@@ -39,32 +44,6 @@ StanzaBoundary next_stanza_boundary(
         return {lf, lf + 2U};
     }
     return {content.size(), content.size()};
-}
-
-std::string trim(std::string_view value)
-{
-    std::size_t first = 0U;
-    while (first < value.size() &&
-           std::isspace(static_cast<unsigned char>(value[first])) != 0) {
-        ++first;
-    }
-    std::size_t last = value.size();
-    while (last > first &&
-           std::isspace(static_cast<unsigned char>(value[last - 1U])) != 0) {
-        --last;
-    }
-    return std::string(value.substr(first, last - first));
-}
-
-std::vector<std::string> split_words(const std::string_view value)
-{
-    std::istringstream input{std::string(value)};
-    std::vector<std::string> result;
-    std::string word;
-    while (input >> word) {
-        result.emplace_back(std::move(word));
-    }
-    return result;
 }
 
 std::size_t indentation_end(std::string_view line)

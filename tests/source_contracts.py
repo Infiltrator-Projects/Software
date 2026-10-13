@@ -52,10 +52,15 @@ phased = text("src/engine/debian_phased_updates.cpp")
 preferences = text("src/engine/debian_preferences.cpp")
 reconcile = text("src/engine/debian_reconcile.cpp")
 repository = text("src/engine/debian_repository.cpp")
+debian_control = text("src/engine/debian_control.cpp")
+debian_installed_state = text("src/engine/debian_installed_state.cpp")
+debian_package_index = text("src/engine/debian_package_index.cpp")
 state_store = text("src/engine/package_state_store.cpp")
 exact_spec = text("src/core/exact_transaction_spec.cpp")
 history = text("src/core/transaction_history.cpp")
 installed_controller = text("src/app/installed_controller.cpp")
+installed_controller_hpp = text("src/app/installed_controller.hpp")
+process_support_cpp = text("src/app/process_support.cpp")
 installed_inventory = text("src/app/installed_inventory.cpp")
 main_cpp = text("src/app/main.cpp")
 discover_view_cpp = text("src/app/discover_view.cpp")
@@ -146,6 +151,19 @@ assert "struct SourceRecord" in model
 assert '"sources/source_inventory.hpp"' not in repository_controller_hpp
 assert '"core/model.hpp"' in repository_controller_hpp
 assert '"core/model.hpp"' in source_inventory_hpp
+# GUI code consumes core/client/controller APIs, never engine implementation
+# headers. This keeps engine internals replaceable without UI rebuild coupling.
+assert not re.search(r'^\s*#\s*include\s+"engine/', app, re.MULTILINE)
+
+# Debian control syntax has one parser. Installed-state and repository-index
+# readers supply record consumers rather than maintaining subtly different
+# continuation/field rules.
+assert "src/engine/debian_control.cpp" in cmake
+assert "parse_debian_control_records" in debian_control
+assert "parse_debian_control_records" in debian_installed_state
+assert "parse_debian_control_records" in debian_package_index
+assert "Malformed Debian control line without a field separator." not in debian_installed_state
+assert "Malformed Debian control line without a field separator." not in debian_package_index
 
 # Page state is owned by named members. Verify durable ownership/dependency
 # boundaries rather than exact formatting or call spellings.
@@ -162,6 +180,7 @@ window_state_bases = window_state.split("struct WindowState final", 1)[1].split(
 for page_base in ("DiscoverPageState", "UpdatesController", "SystemPageState", "RepairPageState"):
     assert page_base not in window_state_bases
 assert "do not add new aliases" in window_state
+assert app.count('"infiltrator-window-state"') == 1
 assert not Path("src/app/legacy_page_aliases.hpp").exists()
 assert not Path("src/app/legacy_page_impl.cpp").exists()
 for path in (
@@ -226,6 +245,20 @@ for call in (
     assert call not in main_cpp
 assert "set_app_search_query" in main_cpp
 assert "destroy_page_state" in main_cpp
+# Controller-owned resources are destroyed through the controller API; the
+# page registry must not know that Installed currently uses GtkStringList.
+assert "destroy_installed_controller" in installed_controller_hpp
+assert "destroy_installed_controller" in installed_controller
+assert "destroy_installed_controller(&state->installed)" in page_registry_cpp
+assert "state->installed.strings" not in page_registry_cpp
+
+# GUI subprocess creation has one argv/GError ownership boundary. Individual
+# views declare commands and keep operation-specific policy/progress only.
+assert "g_subprocess_newv(" in process_support_cpp
+for path in Path("src/app").glob("*.cpp"):
+    if path.name != "process_support.cpp":
+        assert "g_subprocess_newv(" not in path.read_text()
+assert "start_subprocess(" in app
 
 # Discover consumes public controller surfaces instead of backing storage.
 for forbidden in (
@@ -369,6 +402,14 @@ assert "system_transaction_history_path()" in auto_updater
 assert "system_transaction_history_path()" in maintenance
 assert "system_on_battery()" in session_updater
 assert "system_on_battery()" in auto_updater
+for preferences_consumer in (auto_updater, maintenance, cli, helper):
+    assert "kSystemSoftwarePreferencesPath" in preferences_consumer
+product_sources = "\n".join(
+    path.read_text() for path in Path("src").rglob("*.[ch]pp")
+    if "src/infiltratr-common/" not in path.as_posix()
+)
+assert product_sources.count(
+    '"/etc/infiltrator-software/automatic-updates.conf"') == 1
 assert '"systemd-inhibit"' in auto_updater
 
 # Repository/source mutation remains narrow and authenticated.

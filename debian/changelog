@@ -1,3 +1,19 @@
+infiltrator-software (0.3.91) unstable; urgency=high
+
+  * Consolidate Debian control parsing and common ASCII text handling so package
+    state, repository metadata and policy/configuration readers cannot drift.
+  * Tighten GUI ownership boundaries, centralise subprocess startup, remove dead
+    view dependencies and prevent graphical code from including engine internals.
+  * Make canonical font assets reusable in verified offline builds and avoid
+    release-tag network access during verification-only CI runs.
+  * Declare the remaining apt-get executor dependency explicitly, remove the
+    duplicate hand-written systemd postinst logic and make package verification
+    architecture-neutral for cross-builds.
+  * Collapse the single-use installed-state CMake target and add regression
+    contracts for the new parser, text utilities and ownership boundaries.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Tue, 13 Oct 2026 13:14:00 +1100
+
 infiltrator-software (0.3.90) unstable; urgency=high
 
   * Build release source archives from tracked Git objects plus the exact Common

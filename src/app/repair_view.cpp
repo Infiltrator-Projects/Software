@@ -8,6 +8,8 @@
 #include "app/ui_components.hpp"
 #include "app/window_state.hpp"
 
+#include "app/process_support.hpp"
+
 #include <gio/gio.h>
 #include <gtk/gtk.h>
 
@@ -168,7 +170,7 @@ void repair_complete(
         static_cast<WindowState *>(
             g_object_get_data(
                 G_OBJECT(window),
-                "infiltrator-window-state"));
+                kWindowStateDataKey));
     auto *result =
         static_cast<RepairResult *>(
             g_task_propagate_pointer(
@@ -447,7 +449,7 @@ void repair_configure_complete(
             : static_cast<WindowState *>(
                   g_object_get_data(
                       G_OBJECT(run->window),
-                      "infiltrator-window-state"));
+                      kWindowStateDataKey));
 
     if (state != nullptr) {
         state->repair.repair_busy = false;
@@ -513,35 +515,29 @@ void repair_configure_clicked(
         return;
     }
 
-    static const gchar *argv[] = {
+    const std::vector<std::string> arguments{
         "pkexec",
         "/usr/libexec/infiltrator-software-update-helper",
-        "repair-configure",
-        nullptr
-    };
-
-    GError *error = nullptr;
-    GSubprocess *process =
-        g_subprocess_newv(
-            argv,
-            static_cast<GSubprocessFlags>(
-                G_SUBPROCESS_FLAGS_STDOUT_PIPE |
-                G_SUBPROCESS_FLAGS_STDERR_PIPE),
-            &error);
+        "repair-configure"};
+    std::string start_error;
+    GSubprocess *process = start_subprocess(
+        arguments,
+        static_cast<GSubprocessFlags>(
+            G_SUBPROCESS_FLAGS_STDOUT_PIPE |
+            G_SUBPROCESS_FLAGS_STDERR_PIPE),
+        start_error);
     if (process == nullptr) {
         if (state->repair.repair_status != nullptr) {
             std::string message =
                 "Unable to start package configuration repair.";
-            if (error != nullptr &&
-                error->message != nullptr) {
+            if (!start_error.empty()) {
                 message += " ";
-                message += single_line(error->message);
+                message += single_line(start_error);
             }
             gtk_label_set_text(
                 GTK_LABEL(state->repair.repair_status),
                 message.c_str());
         }
-        g_clear_error(&error);
         return;
     }
 

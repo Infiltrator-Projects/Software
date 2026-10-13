@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "engine/debian_source_configuration.hpp"
 
+#include "core/text.hpp"
+
 #include <algorithm>
 #include <charconv>
 #include <cctype>
@@ -18,34 +20,9 @@
 namespace infiltrator::software {
 namespace {
 
-std::string trim(const std::string_view value)
-{
-    std::size_t first = 0U;
-    while (first < value.size() &&
-           std::isspace(static_cast<unsigned char>(value[first])) != 0) ++first;
-    std::size_t last = value.size();
-    while (last > first &&
-           std::isspace(static_cast<unsigned char>(value[last - 1U])) != 0) --last;
-    return std::string(value.substr(first, last - first));
-}
-
-std::string lower_ascii(std::string value)
-{
-    for (char &character : value) {
-        character = static_cast<char>(
-            std::tolower(static_cast<unsigned char>(character)));
-    }
-    return value;
-}
-
-std::vector<std::string> split_words(const std::string_view value)
-{
-    std::istringstream input{std::string(value)};
-    std::vector<std::string> result;
-    std::string word;
-    while (input >> word) result.emplace_back(std::move(word));
-    return result;
-}
+using text::trim;
+using text::lower_ascii;
+using text::split_words;
 
 std::vector<std::string> split_commas(const std::string_view value)
 {

@@ -16,6 +16,8 @@
 
 namespace infiltrator::software::app {
 
+inline constexpr char kWindowStateDataKey[] = "infiltrator-window-state";
+
 struct ShellState {
     GtkWindow *window{};
     GtkStack *stack{};

@@ -3,30 +3,18 @@
 #include "app/page_support.hpp"
 #include "app/app_coordinator.hpp"
 #include "app/transaction_review.hpp"
-#include "app/history_controller.hpp"
-#include "app/history_view.hpp"
-#include "app/installed_controller.hpp"
-#include "app/installed_inventory.hpp"
-#include "app/repository_controller.hpp"
-#include "app/repository_view.hpp"
 #include "app/ui_components.hpp"
 #include "app/updates_controller.hpp"
 #include "app/window_state.hpp"
-#include "catalogue/repository_catalogue.hpp"
-#include "catalogue/catalogue_snapshot_store.hpp"
-#include "catalogue/system_catalogue.hpp"
-#include "client/engine_client.hpp"
 #include "core/model.hpp"
 #include "core/exact_transaction_spec.hpp"
-#include "core/transaction_history.hpp"
-#include "core/update_freshness.hpp"
 #include "core/update_policy.hpp"
 #include "external/external_updates.hpp"
-#include "sources/source_inventory.hpp"
+
+#include "app/process_support.hpp"
 
 #include <gtk/gtk.h>
 #include <curl/curl.h>
-#include <infiltratr/core.h>
 
 #include <algorithm>
 #include <cerrno>
@@ -52,23 +40,10 @@
 
 namespace infiltrator::software::app {
 
-using infiltrator::software::CatalogueSnapshot;
-using infiltrator::software::CatalogueSnapshotStore;
-using infiltrator::software::EngineClient;
 using infiltrator::software::PackageRecord;
-using infiltrator::software::KernelRecord;
-using infiltrator::software::RepositoryCatalogue;
-using infiltrator::software::SourceInventory;
-using infiltrator::software::SourceKind;
-using infiltrator::software::SourceRecord;
-using infiltrator::software::SystemCatalogue;
 using infiltrator::software::TransactionAction;
-using infiltrator::software::TransactionHistoryItem;
-using infiltrator::software::TransactionHistoryStore;
 using infiltrator::software::TransactionPlan;
 using infiltrator::software::TransactionItem;
-using infiltrator::software::SoftwarePreferences;
-using infiltrator::software::load_software_preferences;
 using infiltrator::software::save_software_preferences;
 using infiltrator::software::update_is_ignored;
 using infiltrator::software::reboot_required;
@@ -76,25 +51,7 @@ using infiltrator::software::reboot_required_packages;
 using infiltrator::software::ExternalUpdate;
 using infiltrator::software::ExternalUpdateKind;
 using infiltrator::software::external_update_kind_name;
-using infiltrator::software::discover_flatpak_updates;
-using infiltrator::software::discover_cinnamon_updates;
-using infiltrator::software::apply_flatpak_updates;
-using infiltrator::software::set_flatpak_application_installed;
-using infiltrator::software::apply_cinnamon_updates;
 using infiltrator::software::apply_cinnamon_updates_selected;
-using infiltrator::software::source_kind_name;
-using infiltrator::software::update_metadata_refresh_due;
-using infiltrator::software::HistoryController;
-using infiltrator::software::create_history_controller_page;
-using infiltrator::software::history_timestamp;
-using infiltrator::software::refresh_history_controller;
-using infiltrator::software::read_installed_packages;
-using infiltrator::software::InstalledController;
-using infiltrator::software::create_installed_page;
-using infiltrator::software::refresh_installed_controller;
-using infiltrator::software::RepositoryController;
-using infiltrator::software::configure_repository_controller;
-using infiltrator::software::refresh_repository_controller;
 using infiltrator::software::make_icon;
 using infiltrator::software::make_label;
 using infiltrator::software::make_page_intro;
@@ -1994,7 +1951,7 @@ void publish_external_progress(GTask *task, std::string_view message)
             static_cast<ExternalProgressNotice *>(data);
         auto *state = static_cast<WindowState *>(g_object_get_data(
             G_OBJECT(progress_notice->window),
-            "infiltrator-window-state"));
+            kWindowStateDataKey));
         if (state != nullptr && state->updates.external.external_updates_active) {
             if (state->updates.external.external_updates_status != nullptr)
                 gtk_label_set_text(GTK_LABEL(state->updates.external.external_updates_status),
@@ -2070,7 +2027,7 @@ void external_apply_complete(
             : static_cast<WindowState *>(
                   g_object_get_data(
                       G_OBJECT(window),
-                      "infiltrator-window-state"));
+                      kWindowStateDataKey));
     auto *result =
         static_cast<ExternalApplyResult *>(
             g_task_propagate_pointer(
@@ -2331,7 +2288,7 @@ void external_apply_clicked(GtkButton *button, gpointer user_data)
                 static_cast<WindowState *>(
                     g_object_get_data(
                         G_OBJECT(response_window),
-                        "infiltrator-window-state"));
+                        kWindowStateDataKey));
             if (response == GTK_RESPONSE_ACCEPT &&
                 window_state != nullptr) {
                 begin_external_apply(
@@ -2381,7 +2338,7 @@ gboolean auto_refresh_updates_idle(gpointer user_data)
     auto *state = static_cast<WindowState *>(
         g_object_get_data(
             G_OBJECT(window),
-            "infiltrator-window-state"));
+            kWindowStateDataKey));
     if (state != nullptr && !state->updates.inventory.updates_busy) {
         refresh_updates_internal(state, true, false);
     }
@@ -2396,7 +2353,7 @@ void updates_complete(
     auto *window = GTK_WINDOW(source_object);
     auto *state = static_cast<WindowState *>(
         g_object_get_data(
-            G_OBJECT(window), "infiltrator-window-state"));
+            G_OBJECT(window), kWindowStateDataKey));
     auto *result = static_cast<UpdatesRefreshResult *>(
         g_task_propagate_pointer(G_TASK(async_result), nullptr));
 
@@ -2799,7 +2756,7 @@ void update_process_complete(
             : static_cast<WindowState *>(
                   g_object_get_data(
                       G_OBJECT(run->window),
-                      "infiltrator-window-state"));
+                      kWindowStateDataKey));
 
     const bool success =
         communicated && g_subprocess_get_successful(process);
@@ -2932,20 +2889,13 @@ void start_update_process(
         return;
     }
 
-    std::vector<const gchar *> argv;
-    argv.reserve(arguments.size() + 1U);
-    for (const std::string &argument : arguments) {
-        argv.push_back(argument.c_str());
-    }
-    argv.push_back(nullptr);
-
-    GError *error = nullptr;
-    GSubprocess *process = g_subprocess_newv(
-        argv.data(),
+    std::string start_error;
+    GSubprocess *process = start_subprocess(
+        arguments,
         static_cast<GSubprocessFlags>(
             G_SUBPROCESS_FLAGS_STDOUT_PIPE |
             G_SUBPROCESS_FLAGS_STDERR_PIPE),
-        &error);
+        start_error);
 
     if (process == nullptr) {
         state->updates.inventory.updates_busy = false;
@@ -2953,9 +2903,9 @@ void start_update_process(
             operation == "refresh"
                 ? "Unable to start package-list refresh."
                 : "Unable to start update installation.";
-        if (error != nullptr && error->message != nullptr) {
+        if (!start_error.empty()) {
             message += " ";
-            message += one_line(error->message);
+            message += one_line(start_error);
         }
         if (state->updates.updates_status != nullptr) {
             gtk_label_set_text(
@@ -2964,7 +2914,6 @@ void start_update_process(
         }
         set_update_runtime_state(
             "error:" + one_line(message));
-        g_clear_error(&error);
         if (state->updates.updates_refresh != nullptr) {
             gtk_widget_set_sensitive(
                 state->updates.updates_refresh, true);
@@ -3111,7 +3060,7 @@ void update_snapshot_complete(
             : static_cast<WindowState *>(
                   g_object_get_data(
                       G_OBJECT(run->window),
-                      "infiltrator-window-state"));
+                      kWindowStateDataKey));
 
     const bool success =
         communicated &&
@@ -3192,36 +3141,30 @@ bool create_snapshot_before_update(
     g_free(
         const_cast<char *>(timeshift));
 
-    const gchar *argv[] = {
+    const std::vector<std::string> arguments{
         "pkexec",
         "timeshift",
         "--create",
         "--comments",
         "Infiltrator Software system update",
         "--tags",
-        "D",
-        nullptr
-    };
-
-    GError *error = nullptr;
-    GSubprocess *process =
-        g_subprocess_newv(
-            argv,
-            static_cast<GSubprocessFlags>(
-                G_SUBPROCESS_FLAGS_STDOUT_PIPE |
-                G_SUBPROCESS_FLAGS_STDERR_PIPE),
-            &error);
+        "D"};
+    std::string start_error;
+    GSubprocess *process = start_subprocess(
+        arguments,
+        static_cast<GSubprocessFlags>(
+            G_SUBPROCESS_FLAGS_STDOUT_PIPE |
+            G_SUBPROCESS_FLAGS_STDERR_PIPE),
+        start_error);
     if (process == nullptr) {
         if (state->updates.updates_status != nullptr) {
             gtk_label_set_text(
                 GTK_LABEL(
                     state->updates.updates_status),
-                error != nullptr &&
-                error->message != nullptr
-                    ? error->message
-                    : "Unable to start the snapshot tool.");
+                start_error.empty()
+                    ? "Unable to start the snapshot tool."
+                    : start_error.c_str());
         }
-        g_clear_error(&error);
         return false;
     }
 
@@ -3328,7 +3271,7 @@ void update_plan_complete(
     auto *window = GTK_WINDOW(source_object);
     auto *state = static_cast<WindowState *>(
         g_object_get_data(
-            G_OBJECT(window), "infiltrator-window-state"));
+            G_OBJECT(window), kWindowStateDataKey));
     auto *result = static_cast<UpdatePlanResult *>(
         g_task_propagate_pointer(G_TASK(async_result), nullptr));
 

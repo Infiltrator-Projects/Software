@@ -31,6 +31,9 @@ GtkWidget *create_installed_page(
 void refresh_installed_controller(
     InstalledController *controller);
 
+void destroy_installed_controller(
+    InstalledController *controller) noexcept;
+
 } // namespace infiltrator::software
 
 #endif

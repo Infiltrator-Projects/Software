@@ -21,6 +21,8 @@ add_software_test(software-release-metadata-test release_metadata_test.cpp)
 target_include_directories(software-release-metadata-test PRIVATE
     "${PROJECT_SOURCE_DIR}/src")
 
+add_software_test(software-text-test text_test.cpp)
+target_include_directories(software-text-test PRIVATE "${PROJECT_SOURCE_DIR}/src")
 add_software_test(software-model-test model_test.cpp software-core)
 add_software_test(software-exact-transaction-spec-test
     exact_transaction_spec_test.cpp software-core)
@@ -34,6 +36,8 @@ add_software_test(software-update-policy-test
     update_policy_test.cpp software-core)
 add_software_test(software-update-tracker-test
     update_tracker_test.cpp software-core)
+add_software_test(software-debian-control-test
+    debian_control_test.cpp software-engine)
 add_software_test(software-debian-installed-test
     debian_installed_state_test.cpp software-engine)
 add_software_test(software-debian-index-test

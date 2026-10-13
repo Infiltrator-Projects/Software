@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "sources/source_inventory.hpp"
 
+#include "core/text.hpp"
+
 #include <algorithm>
 #include <cctype>
 #include <cstdlib>
@@ -16,6 +18,10 @@
 
 namespace infiltrator::software {
 namespace {
+
+using text::lower_ascii;
+using text::trim;
+using text::split_words;
 
 
 struct StanzaBoundary {
@@ -37,43 +43,6 @@ StanzaBoundary next_stanza_boundary(
         return {lf, lf + 2U};
     }
     return {content.size(), content.size()};
-}
-
-std::string lower_ascii(std::string value)
-{
-    for (char &character : value) {
-        character = static_cast<char>(
-            std::tolower(static_cast<unsigned char>(character)));
-    }
-    return value;
-}
-
-std::string trim(std::string_view value)
-{
-    std::size_t first = 0U;
-    while (first < value.size() &&
-           std::isspace(static_cast<unsigned char>(value[first])) != 0) {
-        ++first;
-    }
-
-    std::size_t last = value.size();
-    while (last > first &&
-           std::isspace(static_cast<unsigned char>(value[last - 1U])) != 0) {
-        --last;
-    }
-
-    return std::string(value.substr(first, last - first));
-}
-
-std::vector<std::string> split_words(std::string_view value)
-{
-    std::istringstream input{std::string(value)};
-    std::vector<std::string> words;
-    std::string word;
-    while (input >> word) {
-        words.push_back(std::move(word));
-    }
-    return words;
 }
 
 std::string read_text_file(const std::filesystem::path &path)

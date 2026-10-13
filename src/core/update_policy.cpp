@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "core/update_policy.hpp"
 
+#include "core/text.hpp"
+
 #include <algorithm>
 #include <charconv>
-#include <cctype>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -18,33 +19,13 @@
 namespace infiltrator::software {
 namespace {
 
-std::string trim(const std::string_view value)
-{
-    std::size_t first = 0U;
-    while (first < value.size() &&
-           std::isspace(
-               static_cast<unsigned char>(value[first])) != 0) {
-        ++first;
-    }
-    std::size_t last = value.size();
-    while (last > first &&
-           std::isspace(
-               static_cast<unsigned char>(value[last - 1U])) != 0) {
-        --last;
-    }
-    return std::string(value.substr(first, last - first));
-}
+using text::lower_ascii;
+using text::trim;
 
 bool parse_bool(const std::string_view value, const bool fallback)
 {
-    std::string lower;
-    lower.reserve(value.size());
-    for (const char raw : value) {
-        const unsigned char ch =
-            static_cast<unsigned char>(raw);
-        lower.push_back(
-            static_cast<char>(std::tolower(ch)));
-    }
+    const std::string lower =
+        lower_ascii(std::string(value));
     if (lower == "1" || lower == "true" ||
         lower == "yes" || lower == "on") {
         return true;

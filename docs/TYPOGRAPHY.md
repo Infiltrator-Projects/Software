@@ -9,3 +9,5 @@ Software uses the canonical Infiltrator Common MB Corpo typography roles and pac
 Software must not request a 700-weight `MB Corpo A Title Cond WEB` face. No such bundled face exists; bold UI text must use the real MB Corpo S bold face rather than synthetic condensed bold rendering.
 
 The source contract in `tests/source_contracts.py` enforces this mapping, while Common remains authoritative for family names, weights and immutable font-asset identity.
+
+The default CMake configure downloads the immutable Common-declared archive and verifies both the archive and individual face hashes. Offline or hermetic builders can instead pass `-DSOFTWARE_FONT_ARCHIVE_PATH=/path/to/archive.tar.xz`; the supplied archive must match the same canonical SHA-256 identity, so offline reuse does not weaken asset verification.

@@ -317,7 +317,7 @@ void shell_activate(GtkApplication *application, gpointer)
     if (existing != nullptr) {
         auto *state = static_cast<WindowState *>(
             g_object_get_data(
-                G_OBJECT(existing), "infiltrator-window-state"));
+                G_OBJECT(existing), kWindowStateDataKey));
         if (open_updates && state != nullptr) {
             select_app_page(state, AppPage::updates);
         }
@@ -365,7 +365,7 @@ void shell_activate(GtkApplication *application, gpointer)
 
     g_object_set_data_full(
         G_OBJECT(window),
-        "infiltrator-window-state",
+        kWindowStateDataKey,
         state,
         shell_destroy_window_state);
 
@@ -407,7 +407,7 @@ void shell_activate(GtkApplication *application, gpointer)
             auto *idle_window = GTK_WINDOW(data);
             auto *idle_state = static_cast<WindowState *>(
                 g_object_get_data(
-                    G_OBJECT(idle_window), "infiltrator-window-state"));
+                    G_OBJECT(idle_window), kWindowStateDataKey));
             if (idle_state != nullptr) {
                 refresh_selected_page(idle_state);
             }

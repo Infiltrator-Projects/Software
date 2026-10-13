@@ -3,6 +3,8 @@
 
 #include "engine/debian_version.hpp"
 
+#include "core/text.hpp"
+
 #include <algorithm>
 #include <cctype>
 #include <cstddef>
@@ -17,23 +19,7 @@
 namespace infiltrator::software {
 namespace {
 
-std::string trim(const std::string_view value)
-{
-    std::size_t first = 0U;
-    while (first < value.size() &&
-           std::isspace(
-               static_cast<unsigned char>(value[first])) != 0) {
-        ++first;
-    }
-
-    std::size_t last = value.size();
-    while (last > first &&
-           std::isspace(
-               static_cast<unsigned char>(value[last - 1U])) != 0) {
-        --last;
-    }
-    return std::string(value.substr(first, last - first));
-}
+using text::trim;
 
 std::vector<std::string_view> split_top_level(
     const std::string_view value,

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "apt_plan_guard.hpp"
 #include "core/exact_transaction_spec.hpp"
+#include "core/update_policy.hpp"
 #include "engine/debian_reconcile.hpp"
 #include "engine/engine_service_core.hpp"
 #include "engine/package_state_store.hpp"
@@ -100,10 +101,10 @@ bool valid_automation_setting(const std::string_view key, const std::string_view
 
 int configure_automation(const int argc, char **argv)
 {
-    static constexpr const char *kDirectory =
-        "/etc/infiltrator-software";
-    static constexpr const char *kPath =
-        "/etc/infiltrator-software/automatic-updates.conf";
+    const std::filesystem::path configuration_path{
+        kSystemSoftwarePreferencesPath};
+    const std::filesystem::path configuration_directory =
+        configuration_path.parent_path();
 
     std::vector<std::string> values;
     for (int index = 2; index < argc; ++index) {
@@ -120,9 +121,13 @@ int configure_automation(const int argc, char **argv)
     }
 
     std::error_code ec;
-    std::filesystem::create_directories(kDirectory, ec);
+    std::filesystem::create_directories(configuration_directory, ec);
     if (ec) {
-        std::fprintf(stderr, "Unable to create %s: %s\n", kDirectory, ec.message().c_str());
+        std::fprintf(
+            stderr,
+            "Unable to create %s: %s\n",
+            configuration_directory.c_str(),
+            ec.message().c_str());
         return 1;
     }
 
@@ -134,8 +139,8 @@ int configure_automation(const int argc, char **argv)
     }
 
     std::string pattern =
-        std::string(kDirectory) +
-        "/.automatic-updates.conf-XXXXXX";
+        (configuration_directory /
+         ".automatic-updates.conf-XXXXXX").string();
     std::vector<char> writable(
         pattern.begin(),
         pattern.end());
@@ -168,7 +173,7 @@ int configure_automation(const int argc, char **argv)
         return 1;
     }
 
-    if (rename(temporary.c_str(), kPath) != 0) {
+    if (rename(temporary.c_str(), configuration_path.c_str()) != 0) {
         const int saved_errno = errno;
         std::filesystem::remove(temporary, ec);
         std::fprintf(
@@ -177,7 +182,7 @@ int configure_automation(const int argc, char **argv)
             std::strerror(saved_errno));
         return 1;
     }
-    if (!sync_directory(kDirectory)) {
+    if (!sync_directory(configuration_directory.c_str())) {
         std::fprintf(
             stderr,
             "Automatic-update configuration was renamed, but the directory "

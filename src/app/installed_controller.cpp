@@ -385,4 +385,25 @@ GtkWidget *create_installed_page(
     return page;
 }
 
+void destroy_installed_controller(
+    InstalledController *controller) noexcept
+{
+    if (controller == nullptr) {
+        return;
+    }
+
+    ++controller->generation;
+    controller->busy = false;
+    controller->loaded = false;
+    if (controller->strings != nullptr) {
+        g_object_unref(controller->strings);
+        controller->strings = nullptr;
+    }
+    controller->window = nullptr;
+    controller->status = nullptr;
+    controller->count = nullptr;
+    controller->backend = nullptr;
+    controller->backend_state = nullptr;
+}
+
 } // namespace infiltrator::software

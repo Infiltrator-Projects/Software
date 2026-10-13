@@ -83,8 +83,7 @@ bool parse_options(int argc, char **argv, int start, Options &options, std::stri
 void append_system_ignores(
     SoftwarePreferences &preferences)
 {
-    std::ifstream input(
-        "/etc/infiltrator-software/automatic-updates.conf");
+    std::ifstream input(kSystemSoftwarePreferencesPath);
     std::string line;
     while (std::getline(input, line)) {
         static constexpr std::string_view prefix{

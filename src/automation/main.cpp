@@ -23,8 +23,6 @@
 namespace {
 using namespace infiltrator::software;
 
-constexpr const char *kPreferences =
-    "/etc/infiltrator-software/automatic-updates.conf";
 constexpr const char *kSuccessStamp =
     "/var/lib/infiltrator/software/automatic-updates.last";
 constexpr const char *kAttemptStamp =
@@ -243,9 +241,9 @@ int main()
         g_printerr("infiltrator-software-auto-updater must run as root.\n");
         return 1;
     }
-    if (!std::filesystem::exists(kPreferences)) return 0;
+    if (!std::filesystem::exists(kSystemSoftwarePreferencesPath)) return 0;
 
-    (void)setenv("INFILTRATOR_SOFTWARE_PREFERENCES_PATH",kPreferences,1);
+    (void)setenv("INFILTRATOR_SOFTWARE_PREFERENCES_PATH",kSystemSoftwarePreferencesPath,1);
     (void)setenv("INFILTRATOR_SOFTWARE_STATE_DB",
         "/var/lib/infiltrator/software/automatic-packages.db",1);
     (void)setenv("INFILTRATOR_SOFTWARE_REPOSITORY_CACHE",

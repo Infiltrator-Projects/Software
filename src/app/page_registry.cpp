@@ -207,10 +207,7 @@ void destroy_page_state(WindowState *state)
     if (state == nullptr) return;
     destroy_discover_page(state);
     destroy_updates_page(state);
-    if (state->installed.strings != nullptr) {
-        g_object_unref(state->installed.strings);
-        state->installed.strings = nullptr;
-    }
+    destroy_installed_controller(&state->installed);
 }
 void invalidate_pages(WindowState *state, const AppStateChange change)
 {

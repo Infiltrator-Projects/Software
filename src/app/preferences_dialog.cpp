@@ -5,6 +5,8 @@
 #include "app/window_state.hpp"
 #include "core/update_policy.hpp"
 
+#include "app/process_support.hpp"
+
 #include <infiltratr/core.h>
 
 #include <algorithm>
@@ -192,7 +194,7 @@ void preferences_automation_sync_complete(
             : static_cast<WindowState *>(
                   g_object_get_data(
                       G_OBJECT(operation->main_window),
-                      "infiltrator-window-state"));
+                      kWindowStateDataKey));
 
     if (success) {
         if (state != nullptr) {
@@ -269,28 +271,17 @@ bool start_preferences_automation_sync(
 
     std::vector<std::string> arguments =
         automation_preferences_arguments(next);
-    std::vector<const gchar *> argv;
-    argv.reserve(arguments.size() + 1U);
-    for (const std::string &argument : arguments) {
-        argv.push_back(argument.c_str());
-    }
-    argv.push_back(nullptr);
-
-    GError *gerror = nullptr;
-    GSubprocess *process =
-        g_subprocess_newv(
-            argv.data(),
-            static_cast<GSubprocessFlags>(
-                G_SUBPROCESS_FLAGS_STDOUT_PIPE |
-                G_SUBPROCESS_FLAGS_STDERR_PIPE),
-            &gerror);
+    GSubprocess *process = start_subprocess(
+        arguments,
+        static_cast<GSubprocessFlags>(
+            G_SUBPROCESS_FLAGS_STDOUT_PIPE |
+            G_SUBPROCESS_FLAGS_STDERR_PIPE),
+        error);
     if (process == nullptr) {
-        error =
-            gerror != nullptr &&
-            gerror->message != nullptr
-                ? gerror->message
-                : "Unable to start the automatic-update configuration helper.";
-        g_clear_error(&gerror);
+        if (error.empty()) {
+            error =
+                "Unable to start the automatic-update configuration helper.";
+        }
         return false;
     }
 

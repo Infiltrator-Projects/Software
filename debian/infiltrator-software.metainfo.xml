@@ -25,6 +25,11 @@
   <url type="homepage">https://github.com/Infiltrator-Projects/Software</url>
 
   <releases>
+    <release version="0.3.91" date="2026-10-13">
+      <description>
+        <p>Reduces maintenance brittleness with shared Debian parsing, narrower GUI ownership, verified offline build assets and simpler packaging/release boundaries.</p>
+      </description>
+    </release>
     <release version="0.3.90" date="2026-10-13">
       <description>
         <p>Reduces build and release brittleness with tracked-source archives, package-derived architecture identity and narrower build dependency propagation.</p>

@@ -2,6 +2,8 @@
 #include "external/external_updates.hpp"
 #include "external/cinnamon_spices.hpp"
 
+#include "core/text.hpp"
+
 #include <gio/gio.h>
 
 #include <algorithm>
@@ -17,28 +19,12 @@
 namespace infiltrator::software {
 namespace {
 
+using text::trim;
+
 bool flatpak_installation_absent(
     std::string_view error) noexcept;
 bool valid_flatpak_component(
     std::string_view value);
-
-std::string trim(const std::string_view value)
-{
-    std::size_t first = 0U;
-    while (first < value.size() &&
-           std::isspace(
-               static_cast<unsigned char>(value[first])) != 0) {
-        ++first;
-    }
-    std::size_t last = value.size();
-    while (last > first &&
-           std::isspace(
-               static_cast<unsigned char>(
-                   value[last - 1U])) != 0) {
-        --last;
-    }
-    return std::string(value.substr(first, last - first));
-}
 
 std::vector<std::string_view> split(
     const std::string_view value,

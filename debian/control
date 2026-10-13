@@ -9,7 +9,7 @@ Homepage: https://github.com/Infiltrator-Projects/Software
 
 Package: infiltrator-software
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, gettext, gpgv, pkexec
+Depends: ${shlibs:Depends}, ${misc:Depends}, apt, gettext, gpgv, pkexec
 Provides: mintupdate
 Replaces: mintupdate
 Recommends: flatpak, timeshift

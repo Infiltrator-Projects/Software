@@ -20,8 +20,6 @@ namespace {
 
 using namespace infiltrator::software;
 
-constexpr const char *kPreferences =
-    "/etc/infiltrator-software/automatic-updates.conf";
 
 bool run_capture(
     std::vector<std::string> arguments,
@@ -277,13 +275,13 @@ int main()
             "infiltrator-software-maintenance must run as root.\n");
         return 1;
     }
-    if (!std::filesystem::exists(kPreferences)) {
+    if (!std::filesystem::exists(kSystemSoftwarePreferencesPath)) {
         return 0;
     }
 
     (void)setenv(
         "INFILTRATOR_SOFTWARE_PREFERENCES_PATH",
-        kPreferences,
+        kSystemSoftwarePreferencesPath,
         1);
     (void)setenv(
         "INFILTRATOR_SOFTWARE_STATE_DB",

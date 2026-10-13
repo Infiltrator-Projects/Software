@@ -4,7 +4,8 @@
 #include "client/engine_client.hpp"
 #include "core/exact_transaction_spec.hpp"
 #include "core/transaction_history.hpp"
-#include "engine/kernel_inventory.hpp"
+
+#include "app/process_support.hpp"
 
 #include <gio/gio.h>
 
@@ -1129,29 +1130,19 @@ void start_apply(
         specs.begin(),
         specs.end());
 
-    std::vector<const gchar *> argv;
-    argv.reserve(arguments.size() + 1U);
-    for (const std::string &argument : arguments) {
-        argv.push_back(argument.c_str());
-    }
-    argv.push_back(nullptr);
-
-    GError *error = nullptr;
-    GSubprocess *process =
-        g_subprocess_newv(
-            argv.data(),
-            static_cast<GSubprocessFlags>(
-                G_SUBPROCESS_FLAGS_STDOUT_PIPE |
-                G_SUBPROCESS_FLAGS_STDERR_PIPE),
-            &error);
+    std::string start_error;
+    GSubprocess *process = app::start_subprocess(
+        arguments,
+        static_cast<GSubprocessFlags>(
+            G_SUBPROCESS_FLAGS_STDOUT_PIPE |
+            G_SUBPROCESS_FLAGS_STDERR_PIPE),
+        start_error);
     if (process == nullptr) {
         set_status(
             context,
-            error != nullptr &&
-                    error->message != nullptr
-                ? error->message
-                : "Unable to start kernel transaction.");
-        g_clear_error(&error);
+            start_error.empty()
+                ? "Unable to start kernel transaction."
+                : start_error.c_str());
         return;
     }
 

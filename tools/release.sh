@@ -114,7 +114,6 @@ identity() {
     assert_head "$expected_sha"
     assert_common_pin
 
-    git fetch --force --tags origin
     release=false
     case "${event_name}:${ref}" in
         push:refs/heads/main|workflow_dispatch:refs/heads/main|workflow_dispatch:refs/tags/v${version})
@@ -126,6 +125,9 @@ identity() {
     esac
 
     if [[ "$release" == true ]]; then
+        # Pull tag state only for publication/recovery. Pull requests and other
+        # verification-only runs do not need an extra network dependency.
+        git fetch --force --tags origin
         existing_tag_sha="$(tag_sha "$version")"
         if [[ -n "$existing_tag_sha" && "$existing_tag_sha" != "$expected_sha" ]]; then
             die "Version ${version} is already tagged at ${existing_tag_sha}; current commit is ${expected_sha}."

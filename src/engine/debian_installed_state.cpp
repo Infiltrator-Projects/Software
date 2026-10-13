@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "engine/debian_installed_state.hpp"
 
+#include "engine/debian_control.hpp"
+
 #include <algorithm>
 #include <charconv>
-#include <cctype>
 #include <cstdint>
 #include <fstream>
 #include <limits>
-#include <map>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -19,35 +19,6 @@ namespace infiltrator::software {
 namespace {
 
 constexpr const char *kDpkgStatusPath = "/var/lib/dpkg/status";
-
-std::string trim(const std::string_view value)
-{
-    std::size_t first = 0U;
-    while (first < value.size() &&
-           std::isspace(
-               static_cast<unsigned char>(value[first])) != 0) {
-        ++first;
-    }
-
-    std::size_t last = value.size();
-    while (last > first &&
-           std::isspace(
-               static_cast<unsigned char>(value[last - 1U])) != 0) {
-        --last;
-    }
-
-    return std::string(value.substr(first, last - first));
-}
-
-std::string field_key(std::string value)
-{
-    std::transform(
-        value.begin(), value.end(), value.begin(),
-        [](const unsigned char character) {
-            return static_cast<char>(std::tolower(character));
-        });
-    return value;
-}
 
 std::uint64_t kib_to_bytes(const std::string_view text)
 {
@@ -83,7 +54,7 @@ bool installed_status(
     return true;
 }
 
-using Fields = std::map<std::string, std::string>;
+using Fields = DebianControlFields;
 
 void append_package(
     const Fields &fields,
@@ -208,65 +179,14 @@ std::vector<PackageRecord> DebianInstalledState::parse(
 {
     error.clear();
     std::vector<PackageRecord> packages;
-    Fields fields;
-    std::string current_key;
-
-    auto flush = [&]() {
-        if (!fields.empty()) {
-            append_package(fields, packages);
-        }
-        fields.clear();
-        current_key.clear();
-    };
-
-    std::size_t start = 0U;
-    while (start <= content.size()) {
-        const std::size_t newline = content.find('\n', start);
-        const std::size_t end =
-            newline == std::string_view::npos ? content.size() : newline;
-
-        std::string_view line = content.substr(start, end - start);
-        if (!line.empty() && line.back() == '\r') {
-            line.remove_suffix(1U);
-        }
-
-        if (line.find_first_not_of(" \t") == std::string_view::npos) {
-            flush();
-        } else if (
-            (line.front() == ' ' || line.front() == '\t') &&
-            !current_key.empty()) {
-            fields[current_key] += "\n";
-            fields[current_key] += trim(line);
-        } else {
-            const std::size_t colon = line.find(':');
-            if (colon == std::string_view::npos) {
-                error = "Malformed Debian control line without a field separator.";
-                return {};
-            } else {
-                current_key =
-                    field_key(trim(line.substr(0U, colon)));
-                if (current_key.empty()) {
-                    error = "Debian control field name is empty.";
-                    return {};
-                }
-                const auto inserted = fields.emplace(
-                    current_key, trim(line.substr(colon + 1U)));
-                if (!inserted.second) {
-                    error =
-                        "Duplicate Debian control field: " +
-                        current_key;
-                    return {};
-                }
-            }
-        }
-
-        if (newline == std::string_view::npos) {
-            break;
-        }
-        start = newline + 1U;
+    if (!parse_debian_control_records(
+            content,
+            [&](const DebianControlFields &fields) {
+                append_package(fields, packages);
+            },
+            error)) {
+        return {};
     }
-
-    flush();
 
     std::sort(
         packages.begin(), packages.end(),

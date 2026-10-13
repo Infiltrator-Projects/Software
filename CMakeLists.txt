@@ -86,20 +86,50 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
         -Wall -Wextra -Wpedantic -Wshadow -Wconversion -Wsign-conversion)
 endif()
 
-set(SOFTWARE_FONT_ARCHIVE
-    "${CMAKE_CURRENT_BINARY_DIR}/software-mb-corpo-fonts.tar.xz")
-file(DOWNLOAD
-    "${INFILTRATR_MB_CORPO_ARCHIVE_URL}"
-    "${SOFTWARE_FONT_ARCHIVE}"
-    EXPECTED_HASH "SHA256=${INFILTRATR_MB_CORPO_ARCHIVE_SHA256}"
-    TLS_VERIFY ON
-    STATUS SOFTWARE_FONT_DOWNLOAD_STATUS)
-list(GET SOFTWARE_FONT_DOWNLOAD_STATUS 0 SOFTWARE_FONT_DOWNLOAD_CODE)
-if(NOT SOFTWARE_FONT_DOWNLOAD_CODE EQUAL 0)
-    list(GET SOFTWARE_FONT_DOWNLOAD_STATUS 1 SOFTWARE_FONT_DOWNLOAD_MESSAGE)
-    message(FATAL_ERROR
-        "Unable to obtain canonical Software font archive: "
-        "${SOFTWARE_FONT_DOWNLOAD_MESSAGE}")
+set(SOFTWARE_FONT_ARCHIVE_PATH "" CACHE FILEPATH
+    "Optional pre-downloaded canonical MB Corpo archive for offline builds")
+if(SOFTWARE_FONT_ARCHIVE_PATH)
+    if(NOT EXISTS "${SOFTWARE_FONT_ARCHIVE_PATH}")
+        message(FATAL_ERROR
+            "SOFTWARE_FONT_ARCHIVE_PATH does not exist: "
+            "${SOFTWARE_FONT_ARCHIVE_PATH}")
+    endif()
+    set(SOFTWARE_FONT_ARCHIVE "${SOFTWARE_FONT_ARCHIVE_PATH}")
+    file(SHA256 "${SOFTWARE_FONT_ARCHIVE}" SOFTWARE_FONT_ARCHIVE_SHA256)
+    if(NOT SOFTWARE_FONT_ARCHIVE_SHA256
+       STREQUAL INFILTRATR_MB_CORPO_ARCHIVE_SHA256)
+        message(FATAL_ERROR
+            "SOFTWARE_FONT_ARCHIVE_PATH does not match the canonical archive hash")
+    endif()
+else()
+    set(SOFTWARE_FONT_ARCHIVE
+        "${CMAKE_CURRENT_BINARY_DIR}/software-mb-corpo-fonts.tar.xz")
+    set(SOFTWARE_FONT_ARCHIVE_READY OFF)
+    if(EXISTS "${SOFTWARE_FONT_ARCHIVE}")
+        file(SHA256
+            "${SOFTWARE_FONT_ARCHIVE}"
+            SOFTWARE_FONT_ARCHIVE_SHA256)
+        if(SOFTWARE_FONT_ARCHIVE_SHA256
+           STREQUAL INFILTRATR_MB_CORPO_ARCHIVE_SHA256)
+            set(SOFTWARE_FONT_ARCHIVE_READY ON)
+        endif()
+    endif()
+    if(NOT SOFTWARE_FONT_ARCHIVE_READY)
+        file(DOWNLOAD
+            "${INFILTRATR_MB_CORPO_ARCHIVE_URL}"
+            "${SOFTWARE_FONT_ARCHIVE}"
+            EXPECTED_HASH "SHA256=${INFILTRATR_MB_CORPO_ARCHIVE_SHA256}"
+            TLS_VERIFY ON
+            STATUS SOFTWARE_FONT_DOWNLOAD_STATUS)
+        list(GET SOFTWARE_FONT_DOWNLOAD_STATUS 0 SOFTWARE_FONT_DOWNLOAD_CODE)
+        if(NOT SOFTWARE_FONT_DOWNLOAD_CODE EQUAL 0)
+            list(GET SOFTWARE_FONT_DOWNLOAD_STATUS 1 SOFTWARE_FONT_DOWNLOAD_MESSAGE)
+            message(FATAL_ERROR
+                "Unable to obtain canonical Software font archive: "
+                "${SOFTWARE_FONT_DOWNLOAD_MESSAGE}. For an offline build, set "
+                "SOFTWARE_FONT_ARCHIVE_PATH to the verified canonical archive.")
+        endif()
+    endif()
 endif()
 
 set(SOFTWARE_FONT_DIR "${CMAKE_CURRENT_BINARY_DIR}/software-fonts")
@@ -151,13 +181,9 @@ add_library(software-core STATIC
     src/core/update_tracker.cpp)
 target_include_directories(software-core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
 
-add_library(software-installed-state STATIC
-    src/engine/debian_installed_state.cpp)
-target_include_directories(software-installed-state PUBLIC
-    "${CMAKE_CURRENT_SOURCE_DIR}/src")
-target_link_libraries(software-installed-state PUBLIC software-core)
-
 add_library(software-engine STATIC
+    src/engine/debian_control.cpp
+    src/engine/debian_installed_state.cpp
     src/engine/debian_package_index.cpp
     src/engine/debian_version.cpp
     src/engine/debian_candidate.cpp
@@ -176,7 +202,7 @@ target_include_directories(software-engine PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_link_libraries(software-engine
     PUBLIC software-core
-    PRIVATE software-installed-state InfiltratrCommon::Common
+    PRIVATE InfiltratrCommon::Common
             PkgConfig::CURL PkgConfig::GLIB PkgConfig::ZLIB PkgConfig::LZMA
             PkgConfig::SQLITE3)
 
@@ -286,6 +312,7 @@ add_executable(infiltrator-software
     src/app/discover_view.cpp
     src/app/updates_view.cpp
     src/app/page_support.cpp
+    src/app/process_support.cpp
     src/app/view_lifecycle_bridge.cpp
     src/app/app_coordinator.cpp
     src/app/page_registry.cpp

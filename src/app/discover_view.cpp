@@ -5,10 +5,8 @@
 #include "app/transaction_review.hpp"
 #include "app/history_controller.hpp"
 #include "app/history_view.hpp"
-#include "app/installed_controller.hpp"
 #include "app/installed_inventory.hpp"
 #include "app/repository_controller.hpp"
-#include "app/repository_view.hpp"
 #include "app/ui_components.hpp"
 #include "app/updates_controller.hpp"
 #include "app/window_state.hpp"
@@ -19,14 +17,11 @@
 #include "core/model.hpp"
 #include "core/exact_transaction_spec.hpp"
 #include "core/transaction_history.hpp"
-#include "core/update_freshness.hpp"
-#include "core/update_policy.hpp"
 #include "external/external_updates.hpp"
-#include "sources/source_inventory.hpp"
+
+#include "app/process_support.hpp"
 
 #include <gtk/gtk.h>
-#include <curl/curl.h>
-#include <infiltratr/core.h>
 
 #include <algorithm>
 #include <cerrno>
@@ -56,49 +51,19 @@ using infiltrator::software::CatalogueSnapshot;
 using infiltrator::software::CatalogueSnapshotStore;
 using infiltrator::software::EngineClient;
 using infiltrator::software::PackageRecord;
-using infiltrator::software::KernelRecord;
 using infiltrator::software::RepositoryCatalogue;
-using infiltrator::software::SourceInventory;
 using infiltrator::software::SourceKind;
 using infiltrator::software::SourceRecord;
 using infiltrator::software::SystemCatalogue;
 using infiltrator::software::TransactionAction;
 using infiltrator::software::TransactionHistoryItem;
-using infiltrator::software::TransactionHistoryStore;
 using infiltrator::software::TransactionPlan;
 using infiltrator::software::TransactionItem;
-using infiltrator::software::SoftwarePreferences;
-using infiltrator::software::load_software_preferences;
-using infiltrator::software::save_software_preferences;
-using infiltrator::software::update_is_ignored;
-using infiltrator::software::reboot_required;
-using infiltrator::software::reboot_required_packages;
-using infiltrator::software::ExternalUpdate;
-using infiltrator::software::ExternalUpdateKind;
-using infiltrator::software::external_update_kind_name;
-using infiltrator::software::discover_flatpak_updates;
-using infiltrator::software::discover_cinnamon_updates;
-using infiltrator::software::apply_flatpak_updates;
 using infiltrator::software::set_flatpak_application_installed;
-using infiltrator::software::apply_cinnamon_updates;
-using infiltrator::software::apply_cinnamon_updates_selected;
-using infiltrator::software::source_kind_name;
-using infiltrator::software::update_metadata_refresh_due;
-using infiltrator::software::HistoryController;
-using infiltrator::software::create_history_controller_page;
 using infiltrator::software::history_timestamp;
-using infiltrator::software::refresh_history_controller;
 using infiltrator::software::read_installed_packages;
-using infiltrator::software::InstalledController;
-using infiltrator::software::create_installed_page;
-using infiltrator::software::refresh_installed_controller;
-using infiltrator::software::RepositoryController;
-using infiltrator::software::configure_repository_controller;
-using infiltrator::software::refresh_repository_controller;
 using infiltrator::software::make_icon;
 using infiltrator::software::make_label;
-using infiltrator::software::make_page_intro;
-using infiltrator::software::make_stat_card;
 
 void discover_install_clicked(GtkButton *button, gpointer user_data);
 
@@ -1577,7 +1542,7 @@ void discover_installed_complete(
     auto *window = GTK_WINDOW(source_object);
     auto *state = static_cast<WindowState *>(
         g_object_get_data(
-            G_OBJECT(window), "infiltrator-window-state"));
+            G_OBJECT(window), kWindowStateDataKey));
     auto *task_data =
         static_cast<DiscoverInstalledTaskData *>(
             g_task_get_task_data(G_TASK(async_result)));
@@ -1696,7 +1661,7 @@ void discover_icons_complete(
     auto *window = GTK_WINDOW(source_object);
     auto *state = static_cast<WindowState *>(
         g_object_get_data(
-            G_OBJECT(window), "infiltrator-window-state"));
+            G_OBJECT(window), kWindowStateDataKey));
     if (state == nullptr) {
         return;
     }
@@ -1799,7 +1764,7 @@ void discover_complete(
     auto *window = GTK_WINDOW(source_object);
     auto *state = static_cast<WindowState *>(
         g_object_get_data(
-            G_OBJECT(window), "infiltrator-window-state"));
+            G_OBJECT(window), kWindowStateDataKey));
     if (state == nullptr) {
         return;
     }
@@ -2764,7 +2729,7 @@ void discover_flatpak_complete(
         auto *state = static_cast<WindowState *>(
             g_object_get_data(
                 G_OBJECT(operation->main_window),
-                "infiltrator-window-state"));
+                kWindowStateDataKey));
         if (state != nullptr) {
             if (success) {
                 notify_catalogue_transaction_completed(state);
@@ -3094,7 +3059,7 @@ void discover_install_process_complete(
             auto *history_state = static_cast<WindowState *>(
                 g_object_get_data(
                     G_OBJECT(operation->main_window),
-                    "infiltrator-window-state"));
+                    kWindowStateDataKey));
             if (history_state != nullptr &&
                 history_controller_loaded(history_state->history)) {
                 notify_transaction_history_changed(history_state);
@@ -3154,7 +3119,7 @@ void discover_install_process_complete(
         auto *state = static_cast<WindowState *>(
             g_object_get_data(
                 G_OBJECT(operation->main_window),
-                "infiltrator-window-state"));
+                kWindowStateDataKey));
         if (state != nullptr) {
             notify_catalogue_transaction_completed(state);
         }
@@ -3188,7 +3153,7 @@ void start_discover_install_operation(
             auto *history_state = static_cast<WindowState *>(
                 g_object_get_data(
                     G_OBJECT(operation->main_window),
-                    "infiltrator-window-state"));
+                    kWindowStateDataKey));
             if (history_state != nullptr &&
                 history_controller_loaded(history_state->history)) {
                 notify_transaction_history_changed(history_state);
@@ -3205,20 +3170,13 @@ void start_discover_install_operation(
     arguments.reserve(specs.size() + 3U);
     arguments.insert(arguments.end(), specs.begin(), specs.end());
 
-    std::vector<const gchar *> argv;
-    argv.reserve(arguments.size() + 1U);
-    for (const std::string &argument : arguments) {
-        argv.push_back(argument.c_str());
-    }
-    argv.push_back(nullptr);
-
-    GError *error = nullptr;
-    GSubprocess *process = g_subprocess_newv(
-        argv.data(),
+    std::string start_error;
+    GSubprocess *process = start_subprocess(
+        arguments,
         static_cast<GSubprocessFlags>(
             G_SUBPROCESS_FLAGS_STDOUT_PIPE |
             G_SUBPROCESS_FLAGS_STDERR_PIPE),
-        &error);
+        start_error);
 
     if (process == nullptr) {
         std::string message =
@@ -3227,9 +3185,9 @@ void start_discover_install_operation(
                 : operation->action == TransactionAction::upgrade
                     ? "Unable to start package update."
                     : "Unable to start package installation.";
-        if (error != nullptr && error->message != nullptr) {
+        if (!start_error.empty()) {
             message += " ";
-            message += error->message;
+            message += start_error;
         }
         if (operation->status != nullptr) {
             gtk_label_set_text(
@@ -3245,13 +3203,12 @@ void start_discover_install_operation(
             auto *history_state = static_cast<WindowState *>(
                 g_object_get_data(
                     G_OBJECT(operation->main_window),
-                    "infiltrator-window-state"));
+                    kWindowStateDataKey));
             if (history_state != nullptr &&
                 history_controller_loaded(history_state->history)) {
                 notify_transaction_history_changed(history_state);
             }
         }
-        g_clear_error(&error);
         destroy_discover_install_operation(operation);
         return;
     }
@@ -3321,7 +3278,7 @@ void discover_plan_complete(
         state = static_cast<WindowState *>(
             g_object_get_data(
                 G_OBJECT(task_data->main_window),
-                "infiltrator-window-state"));
+                kWindowStateDataKey));
     }
 
     if (result == nullptr || !result->plan.has_value() ||

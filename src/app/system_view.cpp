@@ -10,6 +10,8 @@
 #include "app/window_state.hpp"
 #include "core/model.hpp"
 
+#include "app/process_support.hpp"
+
 #include <gio/gio.h>
 #include <gtk/gtk.h>
 
@@ -263,7 +265,7 @@ void system_complete(
     auto *state = static_cast<WindowState *>(
         g_object_get_data(
             G_OBJECT(window),
-            "infiltrator-window-state"));
+            kWindowStateDataKey));
     auto *result = static_cast<SystemResult *>(
         g_task_propagate_pointer(
             G_TASK(async_result), nullptr));
@@ -692,34 +694,23 @@ void release_upgrade_confirm_response(
         apply->specs.begin(),
         apply->specs.end());
 
-    std::vector<const gchar *> argv;
-    argv.reserve(arguments.size() + 1U);
-    for (const std::string &argument :
-         arguments) {
-        argv.push_back(argument.c_str());
-    }
-    argv.push_back(nullptr);
-
-    GError *error = nullptr;
-    GSubprocess *process =
-        g_subprocess_newv(
-            argv.data(),
-            static_cast<GSubprocessFlags>(
-                G_SUBPROCESS_FLAGS_STDOUT_PIPE |
-                G_SUBPROCESS_FLAGS_STDERR_PIPE),
-            &error);
+    std::string start_error;
+    GSubprocess *process = start_subprocess(
+        arguments,
+        static_cast<GSubprocessFlags>(
+            G_SUBPROCESS_FLAGS_STDOUT_PIPE |
+            G_SUBPROCESS_FLAGS_STDERR_PIPE),
+        start_error);
     if (process == nullptr) {
         if (apply->state != nullptr &&
             apply->state->system.system_status != nullptr) {
             gtk_label_set_text(
                 GTK_LABEL(
                     apply->state->system.system_status),
-                error != nullptr &&
-                error->message != nullptr
-                    ? error->message
-                    : "Unable to start the release upgrade.");
+                start_error.empty()
+                    ? "Unable to start the release upgrade."
+                    : start_error.c_str());
         }
-        g_clear_error(&error);
         destroy_release_upgrade_apply(apply);
         return;
     }
@@ -752,7 +743,7 @@ void release_upgrade_plan_complete(
         static_cast<WindowState *>(
             g_object_get_data(
                 G_OBJECT(window),
-                "infiltrator-window-state"));
+                kWindowStateDataKey));
     auto *result =
         static_cast<ReleaseUpgradePlanResult *>(
             g_task_propagate_pointer(

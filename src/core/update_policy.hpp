@@ -10,6 +10,9 @@
 
 namespace infiltrator::software {
 
+inline constexpr char kSystemSoftwarePreferencesPath[] =
+    "/etc/infiltrator-software/automatic-updates.conf";
+
 struct SoftwarePreferences {
     bool refresh_schedule_enabled{true};
     unsigned first_refresh_minutes{10U};

@@ -113,7 +113,7 @@ void navigation_changed(
             auto *idle_state = static_cast<WindowState *>(
                 g_object_get_data(
                     G_OBJECT(window),
-                    "infiltrator-window-state"));
+                    kWindowStateDataKey));
             refresh_selected_page(idle_state);
             return G_SOURCE_REMOVE;
         },
