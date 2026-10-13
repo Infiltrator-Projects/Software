@@ -30,7 +30,8 @@ std::string encode_field(const std::string_view value)
 {
     std::string encoded;
     encoded.reserve(value.size());
-    for (const unsigned char ch : value) {
+    for (const char raw : value) {
+        const auto ch = static_cast<unsigned char>(raw);
         if ((ch >= 'a' && ch <= 'z') ||
             (ch >= 'A' && ch <= 'Z') ||
             (ch >= '0' && ch <= '9') ||
