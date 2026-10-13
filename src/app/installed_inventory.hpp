@@ -10,8 +10,7 @@
 namespace infiltrator::software {
 
 std::vector<PackageRecord> read_installed_packages(
-    std::string &error,
-    bool *from_engine = nullptr);
+    std::string &error);
 
 } // namespace infiltrator::software
 
