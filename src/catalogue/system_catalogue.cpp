@@ -152,15 +152,7 @@ std::unordered_set<std::string> flatpak_installed_ids(
     }
 
     const std::filesystem::directory_iterator end;
-    for (; iterator != end; iterator.increment(ec)) {
-        if (ec) {
-            append_warning(
-                warning,
-                std::string(user ? "Unable to finish enumerating user Flatpak inventory: "
-                                 : "Unable to finish enumerating system Flatpak inventory: ") +
-                    ec.message() + ".");
-            break;
-        }
+    while (iterator != end) {
         std::error_code entry_error;
         if (iterator->is_directory(entry_error)) {
             ids.insert(iterator->path().filename().string());
@@ -170,6 +162,16 @@ std::unordered_set<std::string> flatpak_installed_ids(
                 std::string("Unable to inspect Flatpak application entry ") +
                     iterator->path().string() + ": " +
                     entry_error.message() + ".");
+        }
+
+        iterator.increment(ec);
+        if (ec) {
+            append_warning(
+                warning,
+                std::string(user ? "Unable to finish enumerating user Flatpak inventory: "
+                                 : "Unable to finish enumerating system Flatpak inventory: ") +
+                    ec.message() + ".");
+            break;
         }
     }
     return ids;
