@@ -56,11 +56,8 @@ expect_field_token Depends gettext
 grep -Eq 'libxapp' <<<"$(field Depends)" || fail "Depends does not contain libxapp: $(field Depends)"
 expect_field_token Provides mintupdate
 expect_field_token Replaces mintupdate
+expect_field_token Conflicts mintupdate
 expect_field_token Recommends flatpak
-
-if grep -Eq '(^|, )mintupdate([, ]|$)' <<<"$(field Conflicts)"; then
-    fail "Bootstrap release must not Conflict with mintupdate or an installed Software release may be unable to self-update."
-fi
 
 dpkg-deb --fsys-tarfile "$package" | tar -tf - > package-files.txt
 
