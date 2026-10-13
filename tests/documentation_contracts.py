@@ -20,15 +20,20 @@ maintained = {
     "architecture": text("docs/ARCHITECTURE.md"),
     "package_engine": text("docs/PACKAGE_ENGINE.md"),
     "performance": text("docs/PERFORMANCE.md"),
+    "roadmap": text("docs/ROADMAP.md"),
     "state": text("docs/STATE.md"),
 }
 
 # Installed inventory is engine-owned. Historical migration prose may correctly
 # say that the engine reads dpkg status, and current prose may explicitly deny a
-# fallback. Reject only positive claims that Installed uses/retains/falls back to
-# a second path, plus the retired generic "compatibility fallback" terminology.
+# fallback. Reject positive fallback claims and wording that makes the engine
+# merely a preferred/optional Installed authority.
 installed_fallback = re.compile(
     r"\bInstalled\b.*\b(?:uses|retains|falls\s+back)\b.*\bfallback\b",
+    re.IGNORECASE,
+)
+installed_optional_engine = re.compile(
+    r"\bInstalled\b.*\bprefer(?:s|red)?\b.*\b(?:engine|shared\s+state)\b",
     re.IGNORECASE,
 )
 for name, document in maintained.items():
@@ -38,6 +43,10 @@ for name, document in maintained.items():
     for line in document.splitlines():
         if installed_fallback.search(line):
             raise AssertionError(f"{name} reintroduces an Installed fallback: {line}")
+        if installed_optional_engine.search(line):
+            raise AssertionError(
+                f"{name} makes the Installed engine authority optional: {line}"
+            )
 
 # The package-state implementation is the sole authority for the current schema
 # number. Documentation describes persisted fields and migration invariants so
