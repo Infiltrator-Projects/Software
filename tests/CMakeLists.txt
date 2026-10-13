@@ -62,6 +62,8 @@ add_software_test(software-package-state-test
     package_state_store_test.cpp software-engine)
 add_software_test(software-debian-transaction-test
     debian_transaction_test.cpp software-engine)
+add_software_test(software-debian-removal-multiarch-test
+    debian_removal_multiarch_test.cpp software-engine)
 add_software_test(software-kernel-inventory-test
     kernel_inventory_test.cpp software-engine)
 add_software_test(software-engine-service-core-test
