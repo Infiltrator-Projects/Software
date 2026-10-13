@@ -44,10 +44,16 @@ int main()
     assert(ordinary.kind == PackageKind::application);
     assert(!is_system_component(ordinary));
 
+    TransactionItem item;
+    item.package_id = package.id;
+    item.action = TransactionAction::upgrade;
+    item.from_version = "0.1.36";
+    item.to_version = "0.1.37";
+    item.disk_delta_bytes = 4096;
+    item.download_bytes = 2048;
+
     TransactionPlan plan;
-    plan.items.push_back(TransactionItem{
-        package.id, TransactionAction::upgrade, "0.1.36", "0.1.37",
-        4096, 2048, false});
+    plan.items.push_back(item);
     plan.download_bytes = 2048;
     plan.disk_delta_bytes = 4096;
     assert(plan.items.size() == 1U);
