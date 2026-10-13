@@ -253,12 +253,21 @@ for token in (
 ):
     assert token in dependency or token in transaction
 
-# Native read-only reconciliation reads authoritative dpkg state directly; it
-# must not regress into a package-manager subprocess merely to discover the
-# architecture registry already persisted by dpkg.
+# Native read-only reconciliation reads authoritative dpkg state directly. The
+# architectural contract is the absence of a process-execution capability in
+# this path, not whether comments name a retired dpkg command while explaining
+# why direct state is used.
 assert '"/var/lib/dpkg/arch"' in reconcile
-assert "--print-foreign-architectures" not in reconcile
-assert "g_spawn_sync(" not in reconcile
+for process_api in (
+    "g_spawn_",
+    "g_subprocess_",
+    "std::system(",
+    "popen(",
+    "fork(",
+    "posix_spawn",
+    "execv",
+):
+    assert process_api not in reconcile
 
 # Candidate selection remains policy-driven and persisted with the provenance
 # needed to explain why a candidate was selected.
