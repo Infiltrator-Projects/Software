@@ -35,6 +35,14 @@ expect_field_token() {
         fail "$name does not contain '$token': $actual"
 }
 
+reject_field_token() {
+    local name="$1" token="$2" actual
+    actual="$(field "$name")"
+    if grep -Eq "(^|, )${token}([, ]|$)" <<<"$actual"; then
+        fail "$name must not contain '$token': $actual"
+    fi
+}
+
 expect_file() {
     local path="$1"
     grep -Fqx "./${path}" package-files.txt || fail "Package is missing /${path}."
@@ -54,9 +62,9 @@ expect_field_token Depends gpgv
 expect_field_token Depends gettext
 
 grep -Eq 'libxapp' <<<"$(field Depends)" || fail "Depends does not contain libxapp: $(field Depends)"
-expect_field_token Provides mintupdate
-expect_field_token Replaces mintupdate
-expect_field_token Conflicts mintupdate
+reject_field_token Provides mintupdate
+reject_field_token Replaces mintupdate
+reject_field_token Conflicts mintupdate
 expect_field_token Recommends flatpak
 
 dpkg-deb --fsys-tarfile "$package" | tar -tf - > package-files.txt
