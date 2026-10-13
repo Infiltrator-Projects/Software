@@ -20,11 +20,14 @@ struct AptDeb822Stanza {
 };
 
 /*
- * Parse deb822-style APT source stanzas once for both inventory and mutation.
- * Byte boundaries refer to the original input so callers that edit a source
- * file can preserve its formatting and line endings. Field names are lowered,
- * continuation lines are folded with a single separating space, comments are
- * ignored, and malformed/duplicate fields mark only that stanza invalid.
+ * Parse deb822-style APT source stanzas once for inventory, mutation and the
+ * native repository engine. Byte boundaries refer to the original input so
+ * callers that edit a source file can preserve formatting and line endings.
+ * Field names are lowered, ordinary continuation lines are unfolded with one
+ * separating space, and inline Signed-By continuation lines retain paragraph
+ * breaks (including the deb822 '.' blank-line escape) because OpenPGP armour
+ * is not an ordinary whitespace-separated source field. Full-line comments
+ * are ignored, and malformed/duplicate fields mark only that stanza invalid.
  */
 [[nodiscard]] std::vector<AptDeb822Stanza> parse_apt_deb822_stanzas(
     std::string_view content);
