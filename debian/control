@@ -12,6 +12,7 @@ Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}, apt, gettext, gpgv, pkexec
 Provides: mintupdate
 Replaces: mintupdate
+Conflicts: mintupdate
 Recommends: flatpak, timeshift
 Description: unified Infiltrator software manager and updater
  Infiltrator Software provides one graphical surface for software discovery,
