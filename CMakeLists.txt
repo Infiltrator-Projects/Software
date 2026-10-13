@@ -26,35 +26,46 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 set(INFILTRATR_COMMON_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src/infiltratr-common")
-set(INFILTRATR_COMMON_EXPECTED_VERSION "1.19.38")
-set(INFILTRATR_COMMON_EXPECTED_COMMIT "7070c5812b50821fd7580101cb2289a3184f6b2c")
 
 if(NOT EXISTS "${INFILTRATR_COMMON_DIR}/VERSION")
     message(FATAL_ERROR
         "Common is missing. Clone recursively or run: git submodule update --init --recursive")
 endif()
 
+# The gitlink is the single authority for the Common revision.  Duplicating its
+# commit/version here made every Common update a multi-file synchronisation
+# exercise and made release validation depend on CMake source spelling.
 file(READ "${INFILTRATR_COMMON_DIR}/VERSION" INFILTRATR_COMMON_VERSION)
 string(STRIP "${INFILTRATR_COMMON_VERSION}" INFILTRATR_COMMON_VERSION)
-if(NOT INFILTRATR_COMMON_VERSION STREQUAL INFILTRATR_COMMON_EXPECTED_VERSION)
+set(INFILTRATR_COMMON_EXPECTED_VERSION "${INFILTRATR_COMMON_VERSION}")
+if(NOT INFILTRATR_COMMON_VERSION MATCHES "^[0-9]+\.[0-9]+\.[0-9]+$")
     message(FATAL_ERROR
-        "Infiltrator Software requires Common ${INFILTRATR_COMMON_EXPECTED_VERSION}; "
-        "found ${INFILTRATR_COMMON_VERSION}")
+        "Common VERSION must contain major.minor.patch; found ${INFILTRATR_COMMON_VERSION}")
 endif()
 
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/.git")
     find_package(Git REQUIRED)
+    execute_process(
+        COMMAND "${GIT_EXECUTABLE}" -C "${CMAKE_CURRENT_SOURCE_DIR}"
+                rev-parse "HEAD:src/infiltratr-common"
+        RESULT_VARIABLE COMMON_GITLINK_RESULT
+        OUTPUT_VARIABLE COMMON_GITLINK_COMMIT
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET)
     execute_process(
         COMMAND "${GIT_EXECUTABLE}" -C "${INFILTRATR_COMMON_DIR}" rev-parse HEAD
         RESULT_VARIABLE COMMON_GIT_RESULT
         OUTPUT_VARIABLE COMMON_GIT_COMMIT
         OUTPUT_STRIP_TRAILING_WHITESPACE
         ERROR_QUIET)
-    if(NOT COMMON_GIT_RESULT EQUAL 0 OR
-       NOT COMMON_GIT_COMMIT STREQUAL INFILTRATR_COMMON_EXPECTED_COMMIT)
+    if(NOT COMMON_GITLINK_RESULT EQUAL 0 OR NOT COMMON_GIT_RESULT EQUAL 0)
+        message(FATAL_ERROR "Unable to verify the Common submodule gitlink")
+    endif()
+    set(INFILTRATR_COMMON_EXPECTED_COMMIT "${COMMON_GITLINK_COMMIT}")
+    if(NOT COMMON_GIT_COMMIT STREQUAL COMMON_GITLINK_COMMIT)
         message(FATAL_ERROR
-            "Common must be pinned to ${INFILTRATR_COMMON_EXPECTED_COMMIT}; "
-            "found ${COMMON_GIT_COMMIT}")
+            "Common checkout ${COMMON_GIT_COMMIT} does not match the superproject "
+            "gitlink ${COMMON_GITLINK_COMMIT}")
     endif()
 endif()
 
@@ -259,13 +270,6 @@ add_executable(infiltrator-software-release-upgrade
 target_link_libraries(infiltrator-software-release-upgrade PRIVATE
     software-core software-engine PkgConfig::GLIB)
 
-if(BUILD_TESTING)
-    add_executable(software-release-metadata-test
-        tests/release_metadata_test.cpp)
-    target_include_directories(software-release-metadata-test PRIVATE src)
-    add_test(NAME software-release-metadata-test
-        COMMAND software-release-metadata-test)
-endif()
 
 add_executable(infiltrator-software
     src/app/main.cpp
@@ -296,7 +300,7 @@ add_executable(infiltrator-software
 
 
 target_link_libraries(infiltrator-software PRIVATE
-    software-core software-history software-client software-installed-state
+    software-core software-history software-client
     software-catalogue software-sources software-external
     InfiltratrCommon::Common PkgConfig::GTK4 PkgConfig::CURL)
 
@@ -361,186 +365,5 @@ foreach(target IN ITEMS
 endforeach()
 
 if(BUILD_TESTING)
-    # Release builds define NDEBUG by default, but the regression executables
-    # intentionally use assert() as their failure mechanism. Keep those
-    # assertions active so Release CTest cannot silently compile away checks.
-    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
-        add_compile_options(-UNDEBUG)
-    elseif(MSVC)
-        add_compile_options(/UNDEBUG)
-    endif()
-    add_executable(software-model-test tests/model_test.cpp)
-    target_link_libraries(software-model-test PRIVATE software-core)
-    add_test(NAME software-model-test COMMAND software-model-test)
-
-    add_executable(software-exact-transaction-spec-test
-        tests/exact_transaction_spec_test.cpp)
-    target_link_libraries(software-exact-transaction-spec-test PRIVATE
-        software-core)
-    add_test(
-        NAME software-exact-transaction-spec-test
-        COMMAND software-exact-transaction-spec-test)
-
-    add_executable(software-engine-compatibility-test
-        tests/engine_compatibility_test.cpp)
-    target_link_libraries(software-engine-compatibility-test PRIVATE
-        software-client)
-    add_test(
-        NAME software-engine-compatibility-test
-        COMMAND software-engine-compatibility-test)
-
-    add_executable(software-transaction-history-test
-        tests/transaction_history_test.cpp)
-    target_link_libraries(software-transaction-history-test PRIVATE
-        software-history)
-    add_test(
-        NAME software-transaction-history-test
-        COMMAND software-transaction-history-test)
-
-    add_executable(software-update-freshness-test
-        tests/update_freshness_test.cpp)
-    target_link_libraries(software-update-freshness-test PRIVATE software-core)
-    add_test(NAME software-update-freshness-test
-        COMMAND software-update-freshness-test)
-
-    add_executable(software-update-policy-test
-        tests/update_policy_test.cpp)
-    target_link_libraries(software-update-policy-test PRIVATE software-core)
-    add_test(NAME software-update-policy-test
-        COMMAND software-update-policy-test)
-
-    add_executable(software-update-tracker-test
-        tests/update_tracker_test.cpp)
-    target_link_libraries(software-update-tracker-test PRIVATE software-core)
-    add_test(NAME software-update-tracker-test
-        COMMAND software-update-tracker-test)
-
-    add_executable(software-debian-installed-test
-        tests/debian_installed_state_test.cpp)
-    target_link_libraries(software-debian-installed-test PRIVATE software-engine)
-    add_test(
-        NAME software-debian-installed-test
-        COMMAND software-debian-installed-test)
-
-    add_executable(software-debian-index-test
-        tests/debian_package_index_test.cpp)
-    target_link_libraries(software-debian-index-test PRIVATE software-engine)
-    add_test(
-        NAME software-debian-index-test
-        COMMAND software-debian-index-test)
-
-    add_executable(software-debian-version-test
-        tests/debian_version_test.cpp)
-    target_link_libraries(software-debian-version-test PRIVATE software-engine)
-    add_test(
-        NAME software-debian-version-test
-        COMMAND software-debian-version-test)
-
-    add_executable(software-debian-candidate-test
-        tests/debian_candidate_test.cpp)
-    target_link_libraries(software-debian-candidate-test PRIVATE software-engine)
-    add_test(
-        NAME software-debian-candidate-test
-        COMMAND software-debian-candidate-test)
-
-    add_executable(software-debian-phased-updates-test
-        tests/debian_phased_updates_test.cpp)
-    target_link_libraries(software-debian-phased-updates-test PRIVATE software-engine)
-    add_test(
-        NAME software-debian-phased-updates-test
-        COMMAND software-debian-phased-updates-test)
-
-    add_executable(software-debian-preferences-test
-        tests/debian_preferences_test.cpp)
-    target_link_libraries(software-debian-preferences-test PRIVATE software-engine)
-    add_test(
-        NAME software-debian-preferences-test
-        COMMAND software-debian-preferences-test)
-
-    add_executable(software-package-policy-test
-        tests/package_policy_test.cpp)
-    target_link_libraries(software-package-policy-test PRIVATE software-engine)
-    add_test(
-        NAME software-package-policy-test
-        COMMAND software-package-policy-test)
-
-    add_executable(software-debian-dependency-test
-        tests/debian_dependency_test.cpp)
-    target_link_libraries(software-debian-dependency-test PRIVATE software-engine)
-    add_test(
-        NAME software-debian-dependency-test
-        COMMAND software-debian-dependency-test)
-
-    add_executable(software-debian-repository-test
-        tests/debian_repository_test.cpp)
-    target_link_libraries(software-debian-repository-test PRIVATE software-engine)
-    add_test(
-        NAME software-debian-repository-test
-        COMMAND software-debian-repository-test)
-
-    add_executable(software-debian-source-configuration-test
-        tests/debian_source_configuration_test.cpp)
-    target_link_libraries(software-debian-source-configuration-test PRIVATE software-engine)
-    add_test(
-        NAME software-debian-source-configuration-test
-        COMMAND software-debian-source-configuration-test)
-
-    add_executable(software-package-state-test
-        tests/package_state_store_test.cpp)
-    target_link_libraries(software-package-state-test PRIVATE software-engine)
-    add_test(
-        NAME software-package-state-test
-        COMMAND software-package-state-test)
-
-    add_executable(software-debian-transaction-test
-        tests/debian_transaction_test.cpp)
-    target_link_libraries(software-debian-transaction-test PRIVATE software-engine)
-    add_test(
-        NAME software-debian-transaction-test
-        COMMAND software-debian-transaction-test)
-
-    add_executable(software-kernel-inventory-test
-        tests/kernel_inventory_test.cpp)
-    target_link_libraries(software-kernel-inventory-test PRIVATE software-engine)
-    add_test(
-        NAME software-kernel-inventory-test
-        COMMAND software-kernel-inventory-test)
-
-    add_executable(software-engine-service-core-test
-        tests/engine_service_core_test.cpp)
-    target_link_libraries(software-engine-service-core-test PRIVATE software-engine)
-    add_test(
-        NAME software-engine-service-core-test
-        COMMAND software-engine-service-core-test)
-
-    add_executable(software-apt-plan-guard-test
-        tests/apt_plan_guard_test.cpp)
-    target_link_libraries(software-apt-plan-guard-test PRIVATE
-        software-apt-plan-guard)
-    add_test(
-        NAME software-apt-plan-guard-test
-        COMMAND software-apt-plan-guard-test)
-
-    add_executable(software-catalogue-test tests/catalogue_test.cpp)
-    target_link_libraries(software-catalogue-test PRIVATE software-catalogue)
-    add_test(NAME software-catalogue-test COMMAND software-catalogue-test)
-
-    add_executable(software-catalogue-store-test
-        tests/catalogue_snapshot_store_test.cpp)
-    target_link_libraries(software-catalogue-store-test PRIVATE software-catalogue)
-    add_test(
-        NAME software-catalogue-store-test
-        COMMAND software-catalogue-store-test)
-
-    add_executable(software-sources-test tests/source_inventory_test.cpp)
-    target_link_libraries(software-sources-test PRIVATE software-sources)
-    add_test(NAME software-sources-test COMMAND software-sources-test)
-
-    add_executable(software-external-updates-test
-        tests/external_updates_test.cpp)
-    target_link_libraries(software-external-updates-test PRIVATE
-        software-external)
-    add_test(
-        NAME software-external-updates-test
-        COMMAND software-external-updates-test)
+    add_subdirectory(tests)
 endif()

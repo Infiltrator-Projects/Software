@@ -41,15 +41,21 @@ assert_head() {
 }
 
 assert_common_pin() {
-    local common_version common_commit
-    common_version="$(sed -n 's/.*INFILTRATR_COMMON_EXPECTED_VERSION "\([^"]*\)".*/\1/p' CMakeLists.txt)"
-    common_commit="$(sed -n 's/.*INFILTRATR_COMMON_EXPECTED_COMMIT "\([^"]*\)".*/\1/p' CMakeLists.txt)"
-    [[ -n "$common_version" ]] || die "Common expected version is missing from CMakeLists.txt."
-    [[ -n "$common_commit" ]] || die "Common expected commit is missing from CMakeLists.txt."
-    [[ "$(tr -d '[:space:]' < src/infiltratr-common/VERSION)" == "$common_version" ]] || \
-        die "Common VERSION does not match the source contract."
-    [[ "$(git -C src/infiltratr-common rev-parse HEAD)" == "$common_commit" ]] || \
-        die "Common gitlink does not match the source contract."
+    local common_version gitlink_commit checkout_commit
+    [[ -f src/infiltratr-common/VERSION ]] || die "Common VERSION is missing."
+    common_version="$(tr -d '[:space:]' < src/infiltratr-common/VERSION)"
+    [[ "$common_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || \
+        die "Common VERSION must be semantic x.y.z; got '$common_version'."
+
+    # The superproject gitlink already pins Common exactly.  Validate the
+    # checkout against that authority instead of scraping duplicated constants
+    # from CMakeLists.txt.
+    gitlink_commit="$(git rev-parse 'HEAD:src/infiltratr-common' 2>/dev/null)" || \
+        die "Unable to resolve the Common gitlink from HEAD."
+    checkout_commit="$(git -C src/infiltratr-common rev-parse HEAD 2>/dev/null)" || \
+        die "Unable to resolve the checked-out Common commit."
+    [[ "$checkout_commit" == "$gitlink_commit" ]] || \
+        die "Common checkout $checkout_commit does not match gitlink $gitlink_commit."
 }
 
 tag_sha() {

@@ -25,6 +25,11 @@
   <url type="homepage">https://github.com/Infiltrator-Projects/Software</url>
 
   <releases>
+    <release version="0.3.89" date="2026-10-13">
+      <description>
+        <p>Reduces build and UI coupling by making the Common gitlink authoritative and removing stale direct engine dependencies from the graphical application.</p>
+      </description>
+    </release>
     <release version="0.3.88" date="2026-10-13">
       <description>
         <p>Decouples deterministic Software release verification from the independent central APT repository lifecycle, removing cross-repository secret and timing assumptions.</p>
