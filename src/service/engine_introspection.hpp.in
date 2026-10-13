@@ -1,0 +1,13 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+#ifndef INFILTRATOR_SOFTWARE_ENGINE_INTROSPECTION_HPP
+#define INFILTRATOR_SOFTWARE_ENGINE_INTROSPECTION_HPP
+
+namespace infiltrator::software::service {
+
+inline constexpr char kEngineIntrospectionXml[] = R"DBUSXML(
+@SOFTWARE_ENGINE_INTERFACE_XML@
+)DBUSXML";
+
+} // namespace infiltrator::software::service
+
+#endif
