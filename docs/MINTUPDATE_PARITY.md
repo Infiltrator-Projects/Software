@@ -82,18 +82,17 @@ implemented Software path, including exact Cinnamon/Nemo selection and
 execution, external-update progress, tray visibility, history, unattended
 updates and the reviewed release-upgrade workflow.
 
-Software 0.3.52 corrects the replacement-planning bug exposed by an installed
+Software 0.3.52 corrected the replacement-planning bug exposed by an installed
 0.3.49 client: a candidate that both Conflicts with and Replaces an installed
-package is now resolved as an explicit reviewed removal, including dependency
+package is resolved as an explicit reviewed removal, including dependency
 validation against any replacement Provides relationship.
 
-The 0.3.52 Debian package itself deliberately uses `Provides: mintupdate` and
-`Replaces: mintupdate` without `Conflicts: mintupdate` so Software 0.3.49 can
-bootstrap to the fixed resolver instead of rejecting its own update. Software 0.3.52 is therefore the bootstrap step. After a host is running the
-fixed planner, a subsequent replacement release can restore
-`Conflicts: mintupdate`; the corrected resolver will then include removal of
-the installed Mint Update Manager explicitly in the reviewed transaction while
-`Provides: mintupdate` keeps Mint meta-package dependencies satisfied.
+The 0.3.52 Debian package temporarily omitted `Conflicts: mintupdate` solely so
+an older 0.3.49 installation could bootstrap to that corrected planner. That
+transition is complete. Current Software packages `Provide`, `Replace` and
+`Conflict` with `mintupdate`; the corrected resolver includes removal of an
+installed Mint Update Manager explicitly in the reviewed transaction, while
+`Provides: mintupdate` continues to satisfy Mint meta-package dependencies.
 
 This acceptance does not claim that a generic CI runner can prove a destructive
 Linux Mint point-release upgrade on every installed host. That operation still
