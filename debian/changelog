@@ -3,17 +3,24 @@ infiltrator-software (0.3.92) unstable; urgency=high
   * Unify editable deb822 APT-source parsing so repository inventory and
     enable/disable mutation agree on continuation fields, comments and stanza
     identity instead of maintaining subtly different parsers.
+  * Preserve deb822 stanza separators when adding an Enabled field, preventing
+    adjacent repository stanzas from being merged during enable/disable edits.
   * Split read-only source inventory from privileged source mutation at the
     CMake link boundary so the graphical application no longer carries source
     mutation code merely to display configured repositories.
   * Force automatic APT-maintenance simulation into the stable C locale before
     parsing its machine-readable removal plan, avoiding locale-dependent silent
     no-op maintenance on translated hosts.
+  * Keep assertions active in canonical Release-mode regression executables so
+    checks and side-effecting test setup cannot disappear under NDEBUG.
   * Replace expression-spelling source contracts with durable architecture,
     authorization, release and dependency-boundary checks; add regression
     coverage for continued deb822 source fields and invalid duplicate fields.
+  * Cancel superseded verification runs by Git ref and contract-test the
+    build-once publication path so an older same-version main commit cannot race
+    the current state into a release.
 
- -- Shannon Smith <infiltratr@yandex.com>  Tue, 13 Oct 2026 13:40:00 +1000
+ -- Shannon Smith <infiltratr@yandex.com>  Tue, 13 Oct 2026 14:30:00 +1000
 
 infiltrator-software (0.3.91) unstable; urgency=high
 
