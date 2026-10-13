@@ -54,8 +54,10 @@ jobs:
           "${{ steps.identity.outputs.version }}"
           "$GITHUB_SHA" "$RUNNER_TEMP"
 
-      - name: Verify update authorization and source contracts
-        run: python3 tests/source_contracts.py
+      - name: Verify architecture, authorization and documentation contracts
+        run: |
+          python3 tests/source_contracts.py
+          python3 tests/documentation_contracts.py
 
       - name: Build and test Debian package
         shell: bash
