@@ -129,6 +129,36 @@ int main()
     assert(plan->download_bytes == 150U);
     assert(plan->touches_system);
 
+    /*
+     * A repository refresh failure must retain the last valid generation for
+     * presentation while making it ineligible for new transaction planning.
+     * Reloading that same generation is an installed/cache operation, not
+     * evidence that repository freshness recovered.
+     */
+    core.record_refresh_failure("fixture metadata failure");
+    const EngineServiceStatus refresh_failed = core.status();
+    assert(!refresh_failed.healthy);
+    assert(refresh_failed.generation == 1U);
+    assert(refresh_failed.update_count == 2U);
+    assert(refresh_failed.detail.find("fixture metadata failure") !=
+           std::string::npos);
+
+    error.clear();
+    const auto blocked_after_refresh =
+        core.plan(request, "amd64", error);
+    assert(!blocked_after_refresh.has_value());
+    assert(!error.empty());
+
+    assert(core.reload(error));
+    assert(error.empty());
+    assert(!core.status().healthy);
+
+    core.record_refresh_success();
+    assert(core.status().healthy);
+    error.clear();
+    assert(core.plan(request, "amd64", error).has_value());
+    assert(error.empty());
+
     std::filesystem::remove_all(directory);
     assert(!core.reload(error));
     assert(!error.empty());
