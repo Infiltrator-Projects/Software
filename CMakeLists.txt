@@ -288,8 +288,22 @@ add_executable(infiltrator-software-update-helper
 target_link_libraries(infiltrator-software-update-helper PRIVATE
     software-apt-plan-guard software-engine PkgConfig::GLIB)
 
+# The installed D-Bus interface XML is the protocol-schema authority. Embed
+# that exact file into the service at configure time so the standalone binary
+# remains self-contained without maintaining a second hand-written copy.
+file(READ
+    "${CMAKE_CURRENT_SOURCE_DIR}/data/net.ssmith.infiltrator.software.Engine.xml"
+    SOFTWARE_ENGINE_INTERFACE_XML)
+file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/generated")
+configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/service/engine_introspection.hpp.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/generated/engine_introspection.hpp"
+    @ONLY)
+
 add_executable(infiltrator-software-engine
     src/service/main.cpp)
+target_include_directories(infiltrator-software-engine PRIVATE
+    "${CMAKE_CURRENT_BINARY_DIR}/generated")
 target_link_libraries(infiltrator-software-engine PRIVATE
     software-engine PkgConfig::GIO)
 target_compile_definitions(infiltrator-software-engine PRIVATE
