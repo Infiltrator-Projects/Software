@@ -88,8 +88,19 @@ std::vector<AptDeb822Stanza> parse_apt_deb822_stanzas(
                     stanza.valid = false;
                 } else {
                     const std::string continuation = text::trim(line);
-                    if (!continuation.empty()) {
-                        std::string &value = stanza.fields[current_key];
+                    std::string &value = stanza.fields[current_key];
+                    if (current_key == "signed-by") {
+                        /*
+                         * deb822 represents an empty continuation line as a
+                         * single dot. Preserve line structure for inline ASCII
+                         * armour; append_signed_by() trims only the outer
+                         * whitespace before validating the key block.
+                         */
+                        value.push_back('\n');
+                        if (continuation != ".") {
+                            value += continuation;
+                        }
+                    } else if (!continuation.empty()) {
                         if (!value.empty()) {
                             value.push_back(' ');
                         }
