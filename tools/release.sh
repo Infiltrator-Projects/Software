@@ -47,9 +47,6 @@ assert_common_pin() {
     [[ "$common_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || \
         die "Common VERSION must be semantic x.y.z; got '$common_version'."
 
-    # The superproject gitlink already pins Common exactly.  Validate the
-    # checkout against that authority instead of scraping duplicated constants
-    # from CMakeLists.txt.
     gitlink_commit="$(git rev-parse 'HEAD:src/infiltratr-common' 2>/dev/null)" || \
         die "Unable to resolve the Common gitlink from HEAD."
     checkout_commit="$(git -C src/infiltratr-common rev-parse HEAD 2>/dev/null)" || \
@@ -62,12 +59,46 @@ tag_sha() {
     git rev-list -n 1 "v$1" 2>/dev/null || true
 }
 
+package_architecture() {
+    local package="$1"
+    local architecture
+    architecture="$(dpkg-deb -f "$package" Architecture 2>/dev/null)" || \
+        die "Unable to read Debian package architecture: $package"
+    [[ "$architecture" =~ ^[A-Za-z0-9][A-Za-z0-9-]*$ ]] || \
+        die "Invalid Debian package architecture '$architecture'."
+    printf '%s\n' "$architecture"
+}
+
+built_package() {
+    local version="$1"
+    local parent
+    local -a packages
+    parent="$(dirname "$REPO_ROOT")"
+    packages=("$parent"/infiltrator-software_"${version}"_*.deb)
+    if [[ ${#packages[@]} -ne 1 || ! -f "${packages[0]}" ]]; then
+        die "Expected exactly one built Debian package for Software ${version}."
+    fi
+    printf '%s\n' "${packages[0]}"
+}
+
+release_package() {
+    local version="$1"
+    local release_dir="$2"
+    local -a packages
+    packages=("$release_dir"/software_"${version}"_*.deb)
+    if [[ ${#packages[@]} -ne 1 || ! -f "${packages[0]}" ]]; then
+        die "Expected exactly one release Debian package for Software ${version}."
+    fi
+    printf '%s\n' "${packages[0]}"
+}
+
 expected_assets() {
     local version="$1"
+    local package_name="$2"
     printf '%s\n' \
         LICENSE.txt \
         SHA256SUMS.txt \
-        "software_${version}_amd64.deb" \
+        "$package_name" \
         "software_${version}_source.tar.gz" | sort
 }
 
@@ -112,52 +143,61 @@ source_bundle() {
     local version="$1"
     local expected_sha="$2"
     local temp_root="$3"
-    local out root epoch
+    local out root staging epoch
 
-    require_command rsync
+    require_command git
     require_command tar
     require_command gzip
     assert_source_version "$version"
     assert_head "$expected_sha"
+    assert_common_pin
 
     out="${REPO_ROOT}/dist/release"
-    root="${temp_root}/software-source/Software-${version}"
-    rm -rf "${REPO_ROOT}/dist" "${temp_root}/software-source"
-    mkdir -p "$out" "$root"
+    staging="${temp_root}/software-source"
+    root="${staging}/Software-${version}"
+    rm -rf "${REPO_ROOT}/dist" "$staging"
+    mkdir -p "$out" "$staging"
 
-    # Capture source before the build so generated files can never leak into the
-    # release archive. VCS metadata and release output are the only exclusions.
-    rsync -a --exclude='.git' --exclude='dist' ./ "$root/"
+    # Build the source archive from Git objects rather than the working tree.
+    # Local build directories, editor files and other untracked state therefore
+    # cannot leak into a release even when this command is run outside CI.
+    git archive --format=tar --prefix="Software-${version}/" "$expected_sha" \
+        | tar -xf - -C "$staging"
+    mkdir -p "$root/src/infiltratr-common"
+    git -C src/infiltratr-common archive --format=tar HEAD \
+        | tar -xf - -C "$root/src/infiltratr-common"
 
     epoch="$(git show -s --format=%ct "$expected_sha")"
     find "$root" -exec touch -h -d "@$epoch" {} +
     tar --sort=name \
         --mtime="@$epoch" \
         --owner=0 --group=0 --numeric-owner \
-        -C "$(dirname "$root")" \
-        -cf - "$(basename "$root")" \
+        -C "$staging" \
+        -cf - "Software-${version}" \
         | gzip -n > "${out}/software_${version}_source.tar.gz"
     cp LICENSE "${out}/LICENSE.txt"
 }
 
 complete_bundle() {
     local version="$1"
-    local out package
+    local out package architecture release_name
 
     require_command sha256sum
+    require_command dpkg-deb
     assert_source_version "$version"
     out="${REPO_ROOT}/dist/release"
-    package="$(dirname "$REPO_ROOT")/infiltrator-software_${version}_amd64.deb"
-    [[ -f "$package" ]] || die "Verified Debian package is missing: $package"
+    package="$(built_package "$version")"
+    architecture="$(package_architecture "$package")"
+    release_name="software_${version}_${architecture}.deb"
     [[ -f "${out}/software_${version}_source.tar.gz" ]] || \
         die "Source bundle is missing before completion."
     [[ -f "${out}/LICENSE.txt" ]] || die "Release licence file is missing."
 
-    cp "$package" "${out}/software_${version}_amd64.deb"
+    cp "$package" "${out}/${release_name}"
     (
         cd "$out"
         sha256sum \
-            "software_${version}_amd64.deb" \
+            "$release_name" \
             "software_${version}_source.tar.gz" \
             LICENSE.txt > SHA256SUMS.txt
     )
@@ -167,7 +207,7 @@ verify_bundle() {
     local version="$1"
     local expected_sha="$2"
     local release_dir="$3"
-    local existing_tag_sha actual_files expected_files package
+    local existing_tag_sha actual_files expected_files package architecture package_name
 
     require_command git
     require_command sha256sum
@@ -181,7 +221,13 @@ verify_bundle() {
         die "Existing tag v${version} points to ${existing_tag_sha}; expected ${expected_sha}."
     fi
 
-    expected_files="$(expected_assets "$version")"
+    package="$(release_package "$version" "$release_dir")"
+    architecture="$(package_architecture "$package")"
+    package_name="software_${version}_${architecture}.deb"
+    [[ "$(basename "$package")" == "$package_name" ]] || \
+        die "Release Debian package filename does not match its architecture."
+
+    expected_files="$(expected_assets "$version" "$package_name")"
     actual_files="$(find "$release_dir" -maxdepth 1 -type f -printf '%f\n' | sort)"
     [[ "$actual_files" == "$expected_files" ]] || \
         die "Verified release bundle has an unexpected file set."
@@ -191,7 +237,6 @@ verify_bundle() {
         sha256sum -c SHA256SUMS.txt
     )
 
-    package="${release_dir}/software_${version}_amd64.deb"
     [[ "$(dpkg-deb -f "$package" Package)" == "infiltrator-software" ]] || \
         die "Release Debian package identity is incorrect."
     [[ "$(dpkg-deb -f "$package" Version)" == "$version" ]] || \
@@ -204,13 +249,15 @@ publish_github() {
     local release_dir="$3"
     local repository="$4"
     local tag="v${version}"
-    local existing_tag_sha actual_assets expected
+    local existing_tag_sha actual_assets expected package package_name
 
     require_command gh
     require_command git
     [[ -n "${GH_TOKEN:-}" ]] || die "GH_TOKEN is required for GitHub publication."
     verify_bundle "$version" "$expected_sha" "$release_dir"
-    expected="$(expected_assets "$version")"
+    package="$(release_package "$version" "$release_dir")"
+    package_name="$(basename "$package")"
+    expected="$(expected_assets "$version" "$package_name")"
 
     if gh release view "$tag" --repo "$repository" >/dev/null 2>&1; then
         git fetch --force --tags origin
@@ -231,7 +278,7 @@ publish_github() {
     if [[ "$actual_assets" != "$expected" ]]; then
         # Recovery from a previous partial upload is intentionally idempotent.
         gh release upload "$tag" \
-            "${release_dir}/software_${version}_amd64.deb" \
+            "$package" \
             "${release_dir}/software_${version}_source.tar.gz" \
             "${release_dir}/LICENSE.txt" \
             "${release_dir}/SHA256SUMS.txt" \

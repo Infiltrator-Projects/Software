@@ -12,6 +12,7 @@ fi
 
 package="$1"
 version="$(tr -d '[:space:]' < VERSION)"
+expected_architecture="$(dpkg-architecture -qDEB_HOST_ARCH)"
 
 fail() {
     echo "::error::$*" >&2
@@ -45,7 +46,7 @@ expect_file() {
 
 expect_field_exact Package infiltrator-software
 expect_field_exact Version "$version"
-expect_field_exact Architecture amd64
+expect_field_exact Architecture "$expected_architecture"
 expect_field_token Depends pkexec
 expect_field_token Depends gpgv
 expect_field_token Depends gettext

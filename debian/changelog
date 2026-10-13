@@ -1,12 +1,11 @@
-infiltrator-software (0.3.89) unstable; urgency=high
+infiltrator-software (0.3.90) unstable; urgency=high
 
-  * Make the Common submodule gitlink the single authority for its exact
-    revision, removing duplicated commit/version identity from the build and
-    eliminating release-script parsing of CMake source text.
-  * Move regression target definitions out of the production top-level build
-    file into tests/CMakeLists.txt and remove the GUI target's unused direct
-    software-installed-state link.
-  * Preserve the verified build, package, smoke, AppStream and deterministic
-    release gates while reducing build/release coupling.
+  * Build release source archives from tracked Git objects plus the exact Common
+    gitlink instead of copying the working tree, preventing generated or
+    untracked files from leaking into source releases.
+  * Derive Debian package architecture from the verified package rather than
+    hard-coding amd64 across CI, package verification and release publication.
+  * Tighten CMake dependency visibility, make source/core ownership explicit,
+    apply compiler warnings centrally and collapse repetitive test declarations.
 
- -- Shannon Smith <infiltratr@yandex.com>  Tue, 13 Oct 2026 12:02:00 +1100
+ -- Shannon Smith <infiltratr@yandex.com>  Tue, 13 Oct 2026 12:33:00 +1100

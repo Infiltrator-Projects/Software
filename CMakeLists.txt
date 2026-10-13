@@ -32,7 +32,7 @@ if(NOT EXISTS "${INFILTRATR_COMMON_DIR}/VERSION")
         "Common is missing. Clone recursively or run: git submodule update --init --recursive")
 endif()
 
-# The gitlink is the single authority for the Common revision.  Duplicating its
+# The gitlink is the single authority for the Common revision. Duplicating its
 # commit/version here made every Common update a multi-file synchronisation
 # exercise and made release validation depend on CMake source spelling.
 file(READ "${INFILTRATR_COMMON_DIR}/VERSION" INFILTRATR_COMMON_VERSION)
@@ -77,6 +77,14 @@ add_subdirectory("${INFILTRATR_COMMON_DIR}"
     "${CMAKE_CURRENT_BINARY_DIR}/infiltratr-common" EXCLUDE_FROM_ALL)
 include(
     "${INFILTRATR_COMMON_DIR}/cmake/InfiltratrTypographyAssets.cmake")
+
+# Apply the project warning contract once, after Common has been added so the
+# consumer cannot accidentally alter Common's own compiler policy. New Software
+# targets and tests inherit the same warnings without joining a fragile list.
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
+    add_compile_options(
+        -Wall -Wextra -Wpedantic -Wshadow -Wconversion -Wsign-conversion)
+endif()
 
 set(SOFTWARE_FONT_ARCHIVE
     "${CMAKE_CURRENT_BINARY_DIR}/software-mb-corpo-fonts.tar.xz")
@@ -166,9 +174,9 @@ add_library(software-engine STATIC
     src/engine/engine_service_core.cpp)
 target_include_directories(software-engine PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/src")
-target_link_libraries(software-engine PUBLIC
-    software-core software-installed-state
-    PRIVATE InfiltratrCommon::Common
+target_link_libraries(software-engine
+    PUBLIC software-core
+    PRIVATE software-installed-state InfiltratrCommon::Common
             PkgConfig::CURL PkgConfig::GLIB PkgConfig::ZLIB PkgConfig::LZMA
             PkgConfig::SQLITE3)
 
@@ -176,8 +184,8 @@ add_library(software-history STATIC
     src/core/transaction_history.cpp)
 target_include_directories(software-history PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/src")
-target_link_libraries(software-history PUBLIC
-    software-core
+target_link_libraries(software-history
+    PUBLIC software-core
     PRIVATE PkgConfig::SQLITE3)
 
 add_library(software-client STATIC
@@ -185,8 +193,9 @@ add_library(software-client STATIC
     src/client/engine_compatibility.cpp)
 target_include_directories(software-client PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/src")
-target_link_libraries(software-client PUBLIC
-    software-core PkgConfig::GIO)
+target_link_libraries(software-client
+    PUBLIC software-core
+    PRIVATE PkgConfig::GIO)
 target_compile_definitions(software-client PRIVATE
     INFILTRATOR_SOFTWARE_VERSION="${PROJECT_VERSION}")
 
@@ -196,24 +205,26 @@ add_library(software-catalogue STATIC
     src/catalogue/system_catalogue.cpp)
 target_include_directories(software-catalogue PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/src")
-target_link_libraries(software-catalogue PUBLIC
-    software-core InfiltratrCommon::Common
-    PkgConfig::APPSTREAM PkgConfig::CURL PkgConfig::JSON_GLIB)
+target_link_libraries(software-catalogue
+    PUBLIC software-core
+    PRIVATE InfiltratrCommon::Common PkgConfig::APPSTREAM
+            PkgConfig::CURL PkgConfig::JSON_GLIB)
 
 add_library(software-sources STATIC
     src/sources/source_inventory.cpp
     src/sources/source_mutation.cpp)
 target_include_directories(software-sources PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_link_libraries(software-sources PUBLIC software-core)
 
 add_library(software-external STATIC
     src/external/external_updates.cpp
     src/external/cinnamon_spices.cpp)
 target_include_directories(software-external PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/src")
-target_link_libraries(software-external PUBLIC
-    software-core PkgConfig::GIO
-    PkgConfig::CURL PkgConfig::JSON_GLIB PkgConfig::ZLIB)
+target_link_libraries(software-external
+    PRIVATE software-core PkgConfig::GIO PkgConfig::CURL
+            PkgConfig::JSON_GLIB PkgConfig::ZLIB)
 
 add_library(software-apt-plan-guard STATIC
     src/helper/apt_plan_guard.cpp)
@@ -270,7 +281,6 @@ add_executable(infiltrator-software-release-upgrade
 target_link_libraries(infiltrator-software-release-upgrade PRIVATE
     software-core software-engine PkgConfig::GLIB)
 
-
 add_executable(infiltrator-software
     src/app/main.cpp
     src/app/discover_view.cpp
@@ -297,7 +307,6 @@ add_executable(infiltrator-software
     src/app/kernel_manager.cpp
     src/app/theme.cpp
     src/app/ui_components.cpp)
-
 
 target_link_libraries(infiltrator-software PRIVATE
     software-core software-history software-client
@@ -348,21 +357,6 @@ install(FILES
 install(FILES ${SOFTWARE_FONT_FILES}
     DESTINATION share/fonts/truetype/infiltrator-software)
 install(FILES LICENSE DESTINATION share/doc/infiltrator-software)
-
-foreach(target IN ITEMS
-        software-core software-history software-installed-state software-engine software-client software-catalogue software-sources software-external
-        software-apt-plan-guard
-        infiltrator-software-helper infiltrator-software-update-helper
-        infiltrator-software-engine infiltrator-software-tray
-        infiltrator-software-session-updater infiltrator-software-cli
-        infiltrator-software-auto-updater infiltrator-software-maintenance
-        infiltrator-software-release-upgrade
-        infiltrator-software)
-    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
-        target_compile_options(${target} PRIVATE
-            -Wall -Wextra -Wpedantic -Wshadow -Wconversion -Wsign-conversion)
-    endif()
-endforeach()
 
 if(BUILD_TESTING)
     add_subdirectory(tests)
