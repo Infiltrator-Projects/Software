@@ -5,7 +5,8 @@
 These checks protect statements that materially define ownership and failure
 semantics. They deliberately avoid requiring preferred prose: source tests own
 implementation boundaries; this file only rejects maintained documentation that
-creates a second package-state authority or a duplicate schema-version truth.
+creates a second package-state authority, a duplicate schema-version truth, or
+an incomplete maintained-document index.
 """
 
 from pathlib import Path
@@ -16,6 +17,7 @@ def text(path: str) -> str:
     return Path(path).read_text()
 
 
+document_index = text("docs/README.md")
 maintained = {
     "architecture": text("docs/ARCHITECTURE.md"),
     "package_engine": text("docs/PACKAGE_ENGINE.md"),
@@ -23,6 +25,17 @@ maintained = {
     "roadmap": text("docs/ROADMAP.md"),
     "state": text("docs/STATE.md"),
 }
+
+# docs/README.md calls itself the maintained-document entry point. Make that
+# claim executable: every maintained Markdown contract beside the index itself
+# must be discoverable from it. This protects navigation/ownership truth while
+# remaining indifferent to ordering, labels and prose style.
+for path in sorted(Path("docs").glob("*.md")):
+    if path.name == "README.md":
+        continue
+    assert f"({path.name})" in document_index, (
+        f"docs/README.md does not index maintained document {path.name}"
+    )
 
 # Installed inventory is engine-owned. Historical migration prose may correctly
 # say that the engine reads dpkg status, and current prose may explicitly deny a
