@@ -3,10 +3,9 @@
 """Contracts for maintained architecture documentation.
 
 These checks protect statements that materially define ownership and failure
-semantics. They deliberately avoid prose formatting and implementation spelling:
-source tests own implementation boundaries; this file prevents maintained docs
-from reintroducing a second package-state authority or a duplicate schema-version
-source of truth.
+semantics. They deliberately avoid requiring preferred prose: source tests own
+implementation boundaries; this file only rejects maintained documentation that
+creates a second package-state authority or a duplicate schema-version truth.
 """
 
 from pathlib import Path
@@ -17,24 +16,31 @@ def text(path: str) -> str:
     return Path(path).read_text()
 
 
-architecture = text("docs/ARCHITECTURE.md")
-package_engine = text("docs/PACKAGE_ENGINE.md")
-performance = text("docs/PERFORMANCE.md")
-state = text("docs/STATE.md")
+maintained = {
+    "architecture": text("docs/ARCHITECTURE.md"),
+    "package_engine": text("docs/PACKAGE_ENGINE.md"),
+    "performance": text("docs/PERFORMANCE.md"),
+    "state": text("docs/STATE.md"),
+}
 
-# Installed inventory is engine-owned. Maintained architecture documents must
-# describe failure as an engine/client condition, never as permission for the
-# GUI to create a second dpkg-status reader or reconciliation path.
-assert "If the engine cannot provide Installed state" in architecture
-assert "Installed consumes only shared engine state" in package_engine
-assert "If the engine is unavailable, Installed reports that condition" in performance
-assert "does not create a second package-state authority" in state
+# Installed inventory is engine-owned. Historical migration prose may correctly
+# say that the engine reads dpkg status, but maintained docs must never describe
+# that file as a GUI/client fallback or another package-state authority.
+for name, document in maintained.items():
+    for line in document.splitlines():
+        lowered = line.lower()
+        if "installed" in lowered and "fallback" in lowered:
+            raise AssertionError(f"{name} reintroduces an Installed fallback: {line}")
+        if "/var/lib/dpkg/status" in line and "fallback" in lowered:
+            raise AssertionError(f"{name} makes dpkg status a fallback: {line}")
 
-for document in (architecture, package_engine, performance, state):
-    assert "Installed alone retains" not in document
-    assert "direct `/var/lib/dpkg/status` fallback" not in document
+assert "compatibility fallback" not in maintained["architecture"].lower()
 
 # The package-state implementation is the sole authority for the current schema
 # number. Documentation describes persisted fields and migration invariants so
 # a normal schema increment cannot make maintained design prose factually stale.
-assert re.search(r"schema version\s+[0-9]+", state, re.IGNORECASE) is None
+assert re.search(
+    r"schema version\s+[0-9]+",
+    maintained["state"],
+    re.IGNORECASE,
+) is None
