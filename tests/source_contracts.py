@@ -51,6 +51,7 @@ repository_controller_hpp = text("src/app/repository_controller.hpp")
 engine_client = text("src/client/engine_client.cpp")
 engine_client_hpp = text("src/client/engine_client.hpp")
 engine_service = text("src/service/main.cpp")
+engine_introspection_template = text("src/service/engine_introspection.hpp.in")
 engine_interface = text("data/net.ssmith.infiltrator.software.Engine.xml")
 transaction = text("src/engine/debian_transaction.cpp")
 dependency = text("src/engine/debian_dependency.cpp")
@@ -60,6 +61,7 @@ phased = text("src/engine/debian_phased_updates.cpp")
 preferences = text("src/engine/debian_preferences.cpp")
 reconcile = text("src/engine/debian_reconcile.cpp")
 repository = text("src/engine/debian_repository.cpp")
+source_configuration = text("src/engine/debian_source_configuration.cpp")
 debian_control = text("src/engine/debian_control.cpp")
 debian_installed_state = text("src/engine/debian_installed_state.cpp")
 debian_package_index = text("src/engine/debian_package_index.cpp")
@@ -131,6 +133,10 @@ assert not re.search(r'^\s*#\s*include\s+"engine/', app, re.MULTILINE)
 assert "EngineClient" in installed_inventory
 assert "DebianInstalledState::read" not in installed_inventory
 assert '"engine/debian_installed_state.hpp"' not in installed_inventory
+assert "from_engine" not in installed_inventory
+assert "from_engine" not in installed_controller
+assert '"Debian state"' not in installed_controller
+assert '"Debian + Flatpak"' not in installed_controller
 assert '"engine/kernel_inventory.hpp"' not in engine_client_hpp
 assert '"sources/source_inventory.hpp"' not in repository_controller_hpp
 assert "struct KernelRecord" in model
@@ -169,9 +175,9 @@ for path in Path("src/app").glob("*.cpp"):
     if path.name != "process_support.cpp":
         assert "g_subprocess_newv(" not in path.read_text()
 
-# Source inventory and privileged source mutation share one deb822 parser but
-# are separate link capabilities. The GUI must never acquire mutation code just
-# because it needs to display repositories.
+# All Debian deb822 consumers share one syntax authority. Read-only inventory
+# and privileged mutation remain separate link capabilities, and the engine
+# uses the same parser for trust-sensitive repository configuration.
 for target in (
     "software-source-format",
     "software-source-inventory",
@@ -182,13 +188,17 @@ assert "software-sources" not in cmake
 assert "software-source-inventory" in target_links(cmake, "infiltrator-software")
 assert "software-source-mutation" not in target_links(cmake, "infiltrator-software")
 assert "software-source-mutation" in target_links(cmake, "infiltrator-software-helper")
+assert "software-source-format" in target_links(cmake, "software-engine")
 assert includes(source_inventory, "sources/apt_source_format.hpp")
 assert includes(source_mutation, "sources/apt_source_format.hpp")
+assert includes(source_configuration, "sources/apt_source_format.hpp")
 assert "parse_apt_deb822_stanzas" in source_format
 assert "parse_apt_deb822_stanzas" in source_inventory
 assert "parse_apt_deb822_stanzas" in source_mutation
+assert "parse_apt_deb822_stanzas" in source_configuration
 assert "next_stanza_boundary" not in source_inventory
 assert "next_stanza_boundary" not in source_mutation
+assert "parse_fields" not in source_configuration
 
 # Debian package/control paragraphs likewise have one canonical parser for
 # installed state and repository package indexes.
@@ -221,6 +231,13 @@ for token in (
     "held",
 ):
     assert token in transaction
+assert "DebianDependencyResolver::resolve" in transaction
+for retired_helper in (
+    "retained_package_matches",
+    "retained_package_provides",
+    "retained_group_satisfied",
+):
+    assert retired_helper not in transaction
 for token in (
     "install_recommends",
     "planned_removals",
@@ -232,6 +249,13 @@ for token in (
     "remove_installed",
 ):
     assert token in dependency or token in transaction
+
+# Native read-only reconciliation reads authoritative dpkg state directly; it
+# must not regress into a package-manager subprocess merely to discover the
+# architecture registry already persisted by dpkg.
+assert '"/var/lib/dpkg/arch"' in reconcile
+assert "--print-foreign-architectures" not in reconcile
+assert "g_spawn_sync(" not in reconcile
 
 # Candidate selection remains policy-driven and persisted with the provenance
 # needed to explain why a candidate was selected.
@@ -287,7 +311,9 @@ assert '"apt-get", "-s", "autoremove", "--purge"' in maintenance
 assert '"LC_ALL", "C"' in maintenance
 assert '"/usr/libexec/infiltrator-software-update-helper"' in maintenance
 
-# Client/service compatibility and caller identity checks fail closed.
+# Client/service compatibility and caller identity checks fail closed. The
+# installed interface XML is also the sole D-Bus schema authority: the service
+# embeds a generated header rather than carrying another hand-written XML copy.
 assert "engine_version_is_compatible_with_client" in engine_client
 assert "ensure_engine_identity" in engine_client
 assert "GetConnectionUnixUser" in engine_client
@@ -295,6 +321,11 @@ assert "GetConnectionUnixProcessID" in engine_client
 assert '"PlanMixedTransaction"' in engine_service
 assert 'name="PlanMixedTransaction"' in engine_interface
 assert '<method name="Quit"/>' in engine_interface
+assert "SOFTWARE_ENGINE_INTERFACE_XML" in cmake
+assert "engine_introspection.hpp.in" in cmake
+assert "@SOFTWARE_ENGINE_INTERFACE_XML@" in engine_introspection_template
+assert "kEngineIntrospectionXml" in engine_service
+assert 'R"XML(' not in engine_service
 api_service = re.search(r"kApiVersion\s*=\s*(\d+)U", engine_service)
 api_client = re.search(r"kRequiredApiVersion\s*=\s*(\d+)U", engine_client)
 assert api_service and api_client
