@@ -89,6 +89,15 @@ bool supported_kind(const AsComponentKind kind) noexcept
            kind == AS_COMPONENT_KIND_WEB_APP;
 }
 
+void append_warning(
+    std::string &warning,
+    const std::string_view detail)
+{
+    if (detail.empty()) return;
+    if (!warning.empty()) warning.push_back(' ');
+    warning.append(detail);
+}
+
 std::filesystem::path flatpak_app_root(const bool user)
 {
     if (!user) {
@@ -103,38 +112,76 @@ std::filesystem::path flatpak_app_root(const bool user)
 }
 
 std::unordered_set<std::string> flatpak_installed_ids(
-    const bool user)
+    const bool user,
+    std::string &warning)
 {
     std::unordered_set<std::string> ids;
     const std::filesystem::path root =
         flatpak_app_root(user);
     if (root.empty()) {
+        if (user) {
+            append_warning(
+                warning,
+                "User Flatpak data directory is unavailable.");
+        }
         return ids;
     }
 
     std::error_code ec;
-    if (!std::filesystem::is_directory(root, ec) || ec) {
+    const bool directory = std::filesystem::is_directory(root, ec);
+    if (ec) {
+        append_warning(
+            warning,
+            std::string(user ? "Unable to inspect user Flatpak inventory: "
+                             : "Unable to inspect system Flatpak inventory: ") +
+                ec.message() + ".");
+        return ids;
+    }
+    if (!directory) {
         return ids;
     }
 
-    for (const auto &entry :
-         std::filesystem::directory_iterator(root, ec)) {
+    std::filesystem::directory_iterator iterator(root, ec);
+    if (ec) {
+        append_warning(
+            warning,
+            std::string(user ? "Unable to enumerate user Flatpak inventory: "
+                             : "Unable to enumerate system Flatpak inventory: ") +
+                ec.message() + ".");
+        return ids;
+    }
+
+    const std::filesystem::directory_iterator end;
+    for (; iterator != end; iterator.increment(ec)) {
         if (ec) {
+            append_warning(
+                warning,
+                std::string(user ? "Unable to finish enumerating user Flatpak inventory: "
+                                 : "Unable to finish enumerating system Flatpak inventory: ") +
+                    ec.message() + ".");
             break;
         }
-        if (entry.is_directory()) {
-            ids.insert(entry.path().filename().string());
+        std::error_code entry_error;
+        if (iterator->is_directory(entry_error)) {
+            ids.insert(iterator->path().filename().string());
+        } else if (entry_error) {
+            append_warning(
+                warning,
+                std::string("Unable to inspect Flatpak application entry ") +
+                    iterator->path().string() + ": " +
+                    entry_error.message() + ".");
         }
     }
     return ids;
 }
 
-std::vector<PackageRecord> flatpak_installed_records()
+std::vector<PackageRecord> flatpak_installed_records(
+    std::string &warning)
 {
     std::vector<PackageRecord> result;
     for (const bool user : {false, true}) {
         const auto installed =
-            flatpak_installed_ids(user);
+            flatpak_installed_ids(user, warning);
         for (const std::string &id : installed) {
             PackageRecord record;
             record.id =
@@ -166,7 +213,6 @@ std::vector<PackageRecord> flatpak_installed_records()
         });
     return result;
 }
-
 
 bool flatpak_available()
 {
@@ -339,9 +385,9 @@ std::vector<PackageRecord> flatpak_remote_records(
     }
 
     const auto system_installed =
-        flatpak_installed_ids(false);
+        flatpak_installed_ids(false, warning);
     const auto user_installed =
-        flatpak_installed_ids(true);
+        flatpak_installed_ids(true, warning);
 
     std::string system_output;
     std::string user_output;
@@ -357,8 +403,9 @@ std::vector<PackageRecord> flatpak_remote_records(
             system_installed,
             result);
     } else {
-        warning =
-            "System Flatpak catalogue is unavailable.";
+        append_warning(
+            warning,
+            "System Flatpak catalogue is unavailable.");
     }
     if (user_ok) {
         append_flatpak_remote_records(
@@ -367,15 +414,13 @@ std::vector<PackageRecord> flatpak_remote_records(
             user_installed,
             result);
     } else {
-        if (!warning.empty()) {
-            warning += " ";
-        }
-        warning +=
-            "User Flatpak catalogue is unavailable.";
+        append_warning(
+            warning,
+            "User Flatpak catalogue is unavailable.");
     }
 
     /*
-     * System and user installations are separate targets.  Keep both when
+     * System and user installations are separate targets. Keep both when
      * the same application is available in each scope, and only collapse
      * accidental duplicates within the same scoped identity.
      */
@@ -517,10 +562,7 @@ CatalogueSnapshot SystemCatalogue::refresh(std::string &error)
         }
     }
     if (!flatpak_warning.empty()) {
-        if (!error.empty()) {
-            error += " ";
-        }
-        error += flatpak_warning;
+        append_warning(error, flatpak_warning);
     }
 
     std::sort(
@@ -541,7 +583,7 @@ SystemCatalogue::installed_flatpaks(
     std::string &error) const
 {
     error.clear();
-    return flatpak_installed_records();
+    return flatpak_installed_records(error);
 }
 
 } // namespace infiltrator::software
