@@ -81,5 +81,23 @@ int main()
                "/etc/apt/sources.list.d/invalid.sources")
                .empty());
 
+    const std::string inline_key =
+        "Types: deb\n"
+        "URIs: https://inline.invalid/debian\n"
+        "Suites: stable\n"
+        "Signed-By:\n"
+        " -----BEGIN PGP PUBLIC KEY BLOCK-----\n"
+        " .\n"
+        " QUJD\n"
+        " -----END PGP PUBLIC KEY BLOCK-----\n";
+    const auto inline_stanzas = parse_apt_deb822_stanzas(inline_key);
+    assert(inline_stanzas.size() == 1U);
+    assert(inline_stanzas[0].valid);
+    const std::string &signed_by =
+        inline_stanzas[0].fields.at("signed-by");
+    assert(signed_by.find("BEGIN PGP PUBLIC KEY BLOCK") != std::string::npos);
+    assert(signed_by.find("\n\nQUJD\n") != std::string::npos);
+    assert(signed_by.find("\n.\n") == std::string::npos);
+
     return 0;
 }
