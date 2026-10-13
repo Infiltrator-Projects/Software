@@ -2,6 +2,7 @@
 #include "engine/debian_source_configuration.hpp"
 
 #include "core/text.hpp"
+#include "sources/apt_source_format.hpp"
 
 #include <algorithm>
 #include <charconv>
@@ -10,7 +11,6 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
-#include <map>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -79,24 +79,6 @@ bool parse_seconds(
     }
     parsed = result;
     return true;
-}
-
-std::string normalise_line_endings(const std::string_view content)
-{
-    std::string result;
-    result.reserve(content.size());
-    for (std::size_t index = 0U; index < content.size(); ++index) {
-        if (content[index] == '\r') {
-            if (index + 1U < content.size() &&
-                content[index + 1U] == '\n') {
-                continue;
-            }
-            result.push_back('\n');
-            continue;
-        }
-        result.push_back(content[index]);
-    }
-    return result;
 }
 
 bool valid_fingerprint_selector(
@@ -209,49 +191,6 @@ void parse_list_options(
     }
 }
 
-using Fields = std::map<std::string, std::string>;
-
-Fields parse_fields(const std::string_view block)
-{
-    Fields result;
-    std::istringstream input{std::string(block)};
-    std::string line;
-    std::string current;
-    while (std::getline(input, line)) {
-        if (!line.empty() && line.back() == '\r') line.pop_back();
-        if (!line.empty() &&
-            std::isspace(static_cast<unsigned char>(line.front())) != 0 &&
-            !current.empty()) {
-            const std::string continuation = trim(line);
-            result[current] += "\n";
-            if (continuation != ".") {
-                result[current] += continuation;
-            }
-            continue;
-        }
-        const std::size_t colon = line.find(':');
-        if (colon == std::string::npos) {
-            current.clear();
-            continue;
-        }
-        current = lower_ascii(trim(
-            std::string_view(line).substr(0U, colon)));
-        result[current] =
-            trim(std::string_view(line).substr(colon + 1U));
-    }
-    return result;
-}
-
-bool contains_word(
-    const std::string_view words,
-    const std::string_view expected)
-{
-    for (const std::string &word : split_words(words)) {
-        if (word == expected) return true;
-    }
-    return false;
-}
-
 bool read_text(
     const std::filesystem::path &path,
     std::string &content,
@@ -347,28 +286,27 @@ DebianSourceConfiguration::parse_deb822(
 {
     error.clear();
     std::vector<DebianRepositorySource> result;
-    const std::string normalized = normalise_line_endings(content);
-    const std::string_view normalized_view(normalized);
-    std::size_t start = 0U;
-    std::size_t stanza = 0U;
 
-    while (start < normalized_view.size()) {
-        std::size_t end = normalized_view.find("\n\n", start);
-        if (end == std::string_view::npos) end = normalized_view.size();
-        const std::string_view block =
-            normalized_view.substr(start, end - start);
-        start =
-            end == normalized_view.size()
-                ? normalized_view.size()
-                : end + 2U;
-        ++stanza;
-
-        const Fields fields = parse_fields(block);
+    for (const AptDeb822Stanza &stanza :
+         parse_apt_deb822_stanzas(content)) {
+        if (!stanza.valid) {
+            error = std::string(origin) + ": stanza " +
+                std::to_string(stanza.number) +
+                ": malformed or duplicate deb822 field.";
+            return {};
+        }
+        const auto &fields = stanza.fields;
         if (fields.empty()) continue;
         const auto types = fields.find("types");
-        if (types != fields.end() && !contains_word(types->second, "deb")) continue;
+        if (types != fields.end() &&
+            !apt_deb822_contains_word(fields, "types", "deb")) {
+            continue;
+        }
         const auto enabled = fields.find("enabled");
-        if (enabled != fields.end() && !parse_yes_no(enabled->second, true)) continue;
+        if (enabled != fields.end() &&
+            !parse_yes_no(enabled->second, true)) {
+            continue;
+        }
 
         const auto uris = fields.find("uris");
         const auto suites = fields.find("suites");
@@ -378,7 +316,7 @@ DebianSourceConfiguration::parse_deb822(
         const std::vector<std::string> suite_values = split_words(suites->second);
         if (uri_values.empty() || suite_values.empty()) {
             error = std::string(origin) + ": stanza " +
-                std::to_string(stanza) +
+                std::to_string(stanza.number) +
                 ": Debian repository URI and suite are required.";
             return {};
         }
@@ -414,7 +352,7 @@ DebianSourceConfiguration::parse_deb822(
                 if (found == fields.end()) return true;
                 if (parse_yes_no_strict(found->second, destination)) return true;
                 error = std::string(origin) + ": stanza " +
-                    std::to_string(stanza) + ": " + name +
+                    std::to_string(stanza.number) + ": " + name +
                     " must be yes or no.";
                 return false;
             };
@@ -424,7 +362,7 @@ DebianSourceConfiguration::parse_deb822(
                 if (found == fields.end()) return true;
                 if (parse_seconds(found->second, destination)) return true;
                 error = std::string(origin) + ": stanza " +
-                    std::to_string(stanza) + ": " + name +
+                    std::to_string(stanza.number) + ": " + name +
                     " must be a non-negative number of seconds.";
                 return false;
             };
@@ -454,7 +392,8 @@ DebianSourceConfiguration::parse_deb822(
             for (const std::string &suite : suite_values) {
                 DebianRepositorySource source;
                 source.id = std::string(origin) + ":stanza-" +
-                    std::to_string(stanza) + ":" + std::to_string(++ordinal);
+                    std::to_string(stanza.number) + ":" +
+                    std::to_string(++ordinal);
                 source.uri = uri;
                 source.suite = suite;
                 source.components = components;
@@ -473,7 +412,7 @@ DebianSourceConfiguration::parse_deb822(
                 append_signed_by(source, signed_by, error);
                 if (!error.empty()) {
                     error = std::string(origin) + ": stanza " +
-                        std::to_string(stanza) + ": " + error;
+                        std::to_string(stanza.number) + ": " + error;
                     return {};
                 }
                 result.emplace_back(std::move(source));
@@ -525,19 +464,23 @@ DebianSourceConfiguration::read(std::string &error)
 
         const std::filesystem::path directory{"/etc/apt/sources.list.d"};
         if (std::filesystem::is_directory(directory, ec) && !ec) {
-        for (const auto &entry : std::filesystem::directory_iterator(directory, ec)) {
-            if (ec) break;
-            if (!entry.is_regular_file(ec) || ec) {
-                ec.clear();
-                continue;
+            for (const auto &entry :
+                 std::filesystem::directory_iterator(directory, ec)) {
+                if (ec) break;
+                if (!entry.is_regular_file(ec) || ec) {
+                    ec.clear();
+                    continue;
+                }
+                const auto extension = entry.path().extension();
+                if (extension == ".list" || extension == ".sources") {
+                    files.emplace_back(entry.path());
+                }
             }
-            const auto extension = entry.path().extension();
-            if (extension == ".list" || extension == ".sources") files.emplace_back(entry.path());
-        }
         }
     }
     if (ec) {
-        error = "Unable to enumerate Debian repository source files: " + ec.message();
+        error = "Unable to enumerate Debian repository source files: " +
+            ec.message();
         return {};
     }
     std::sort(files.begin(), files.end());
@@ -564,7 +507,9 @@ DebianSourceConfiguration::read(std::string &error)
             std::make_move_iterator(parsed.end()));
     }
 
-    if (result.empty()) error = "No enabled Debian binary repositories are configured.";
+    if (result.empty()) {
+        error = "No enabled Debian binary repositories are configured.";
+    }
     return result;
 }
 
