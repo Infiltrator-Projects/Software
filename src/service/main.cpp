@@ -470,6 +470,7 @@ void refresh_complete(
                 ? "Repository refresh completed but the published state could not be reloaded."
                 : reload_error;
         } else {
+            state->core.record_refresh_success();
             const EngineServiceStatus after =
                 state->core.status();
             if (after.generation != before.generation) {
@@ -487,6 +488,17 @@ void refresh_complete(
 
     if (state == nullptr) {
         return;
+    }
+
+    if (!refreshed) {
+        const EngineServiceStatus before = state->last_status;
+        state->core.record_refresh_failure(error);
+        const EngineServiceStatus after = state->core.status();
+        if (after.healthy != before.healthy ||
+            after.detail != before.detail) {
+            emit_health_changed(state, after);
+        }
+        state->last_status = after;
     }
 
     std::vector<GDBusMethodInvocation *> waiters =
