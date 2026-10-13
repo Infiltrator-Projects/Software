@@ -330,117 +330,6 @@ bool explicitly_requested(
                candidate.architecture) != requested.end();
 }
 
-
-bool dependency_version_matches(
-    const std::string_view version,
-    const DebianDependencyAlternative &dependency)
-{
-    if (dependency.relation == DebianVersionRelation::any) return true;
-    const int comparison =
-        compare_debian_versions(version, dependency.version);
-    switch (dependency.relation) {
-    case DebianVersionRelation::less: return comparison < 0;
-    case DebianVersionRelation::less_equal: return comparison <= 0;
-    case DebianVersionRelation::equal: return comparison == 0;
-    case DebianVersionRelation::greater_equal: return comparison >= 0;
-    case DebianVersionRelation::greater: return comparison > 0;
-    case DebianVersionRelation::any: return true;
-    }
-    return false;
-}
-
-bool retained_package_matches(
-    const PackageRecord &package,
-    const DebianDependencyAlternative &dependency,
-    const std::string_view target_architecture)
-{
-    if (package_base(package.package_name) != dependency.package) {
-        return false;
-    }
-    if (!dependency.architecture_qualifier.empty() &&
-        dependency.architecture_qualifier != "any" &&
-        dependency.architecture_qualifier != "native" &&
-        package.architecture != dependency.architecture_qualifier) {
-        return false;
-    }
-    if (dependency.architecture_qualifier == "native" &&
-        !target_architecture.empty() &&
-        package.architecture != target_architecture) {
-        return false;
-    }
-    return dependency_version_matches(
-        package.installed_version, dependency);
-}
-
-bool retained_package_provides(
-    const PackageRecord &package,
-    const DebianDependencyAlternative &dependency)
-{
-    if (package.provides.empty()) return false;
-
-    std::string parse_error;
-    const auto parsed =
-        DebianDependencyResolver::parse(package.provides, parse_error);
-    if (!parsed.has_value()) return false;
-
-    for (const DebianDependencyGroup &group : parsed->groups) {
-        for (const DebianDependencyAlternative &provided : group.alternatives) {
-            if (provided.package != dependency.package) continue;
-            if (dependency.relation == DebianVersionRelation::any) return true;
-            if (provided.relation == DebianVersionRelation::equal &&
-                !provided.version.empty() &&
-                dependency_version_matches(provided.version, dependency)) {
-                return true;
-            }
-        }
-    }
-    return false;
-}
-
-bool retained_group_satisfied(
-    const DebianDependencyGroup &group,
-    const std::vector<PackageRecord> &retained,
-    const std::string_view target_architecture)
-{
-    for (const DebianDependencyAlternative &alternative : group.alternatives) {
-        for (const PackageRecord &package : retained) {
-            if (retained_package_matches(
-                    package, alternative, target_architecture) ||
-                retained_package_provides(package, alternative)) {
-                return true;
-            }
-        }
-    }
-    return false;
-}
-
-std::string dependency_group_text(const DebianDependencyGroup &group)
-{
-    std::string text;
-    for (std::size_t index = 0U; index < group.alternatives.size(); ++index) {
-        if (index != 0U) text += " | ";
-        const auto &alternative = group.alternatives[index];
-        text += alternative.package;
-        if (!alternative.architecture_qualifier.empty()) {
-            text += ":" + alternative.architecture_qualifier;
-        }
-        if (alternative.relation != DebianVersionRelation::any) {
-            const char *relation = "";
-            switch (alternative.relation) {
-            case DebianVersionRelation::less: relation = "<<"; break;
-            case DebianVersionRelation::less_equal: relation = "<="; break;
-            case DebianVersionRelation::equal: relation = "="; break;
-            case DebianVersionRelation::greater_equal: relation = ">="; break;
-            case DebianVersionRelation::greater: relation = ">>"; break;
-            case DebianVersionRelation::any: break;
-            }
-            text += " (" + std::string(relation) + " " +
-                alternative.version + ")";
-        }
-    }
-    return text;
-}
-
 bool installed_system_critical(const PackageRecord &package)
 {
     const std::string name = package_base(package.package_name);
@@ -454,6 +343,22 @@ bool installed_system_critical(const PackageRecord &package)
         name == "infiltrator-software" ||
         name.rfind("linux-image", 0U) == 0U ||
         name.rfind("linux-modules", 0U) == 0U;
+}
+
+std::string resolution_error(
+    const DebianResolution &resolution)
+{
+    std::string result =
+        "Native dependency resolution could not produce a safe transaction.";
+    for (const DebianResolutionProblem &problem :
+         resolution.problems) {
+        result += "\n" + problem.package + ": ";
+        if (!problem.expression.empty()) {
+            result += problem.expression + " — ";
+        }
+        result += problem.detail;
+    }
+    return result;
 }
 
 std::optional<TransactionPlan> plan_removal(
@@ -500,37 +405,23 @@ std::optional<TransactionPlan> plan_removal(
         }
     }
 
-    for (const PackageRecord &owner : retained) {
-        const std::string hard_dependencies =
-            owner.pre_depends.empty()
-                ? owner.depends
-                : owner.depends.empty()
-                    ? owner.pre_depends
-                    : owner.pre_depends + ", " + owner.depends;
-        if (hard_dependencies.empty()) continue;
-
-        std::string parse_error;
-        const auto parsed =
-            DebianDependencyResolver::parse(
-                hard_dependencies, parse_error);
-        if (!parsed.has_value()) {
-            error =
-                "Unable to prove removal safety because installed package " +
-                owner.id + " has an invalid dependency expression: " +
-                parse_error;
-            return std::nullopt;
-        }
-
-        for (const DebianDependencyGroup &group : parsed->groups) {
-            if (!retained_group_satisfied(
-                    group, retained, target_architecture)) {
-                error =
-                    "Removing the selected package set would break " +
-                    dependency_group_text(group) +
-                    " required by installed package " + owner.id + ".";
-                return std::nullopt;
-            }
-        }
+    /*
+     * Removal safety must use the same dependency, Provides and Multi-Arch
+     * semantics as install/upgrade resolution. A former local reimplementation
+     * had already drifted: it accepted an arbitrary foreign architecture for
+     * an unqualified dependency and treated :any as valid without the required
+     * Multi-Arch metadata. Resolve the projected retained state through the
+     * canonical resolver instead of maintaining a second interpretation.
+     */
+    const DebianResolution retained_state =
+        DebianDependencyResolver::resolve(
+            {}, retained, {}, target_architecture, policy);
+    if (!retained_state.complete()) {
+        error =
+            "Removing the selected package set would leave an invalid "
+            "retained package state.\n" +
+            resolution_error(retained_state);
+        return std::nullopt;
     }
 
     TransactionPlan plan;
@@ -570,22 +461,6 @@ std::optional<TransactionPlan> plan_removal(
         });
     error.clear();
     return plan;
-}
-
-std::string resolution_error(
-    const DebianResolution &resolution)
-{
-    std::string result =
-        "Native dependency resolution could not produce a safe transaction.";
-    for (const DebianResolutionProblem &problem :
-         resolution.problems) {
-        result += "\n" + problem.package + ": ";
-        if (!problem.expression.empty()) {
-            result += problem.expression + " — ";
-        }
-        result += problem.detail;
-    }
-    return result;
 }
 
 } // namespace
