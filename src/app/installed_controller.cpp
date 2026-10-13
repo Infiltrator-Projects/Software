@@ -187,7 +187,11 @@ void installed_complete(
             message
                 << result->records.size()
                 << " installed software items read from the shared native "
-                   "package engine and Flatpak.";
+                   "package engine";
+            if (flatpak_available) {
+                message << " and Flatpak";
+            }
+            message << ".";
         }
         if (!result->flatpak_warning.empty()) {
             message
