@@ -137,5 +137,17 @@ int main()
     assert(modifiers[0].architecture_additions.size() == 1U);
     assert(modifiers[0].architecture_removals.size() == 1U);
 
+    error.clear();
+    const auto duplicate_trust = DebianSourceConfiguration::parse_deb822(
+        "Types: deb\n"
+        "URIs: https://duplicate.invalid/debian\n"
+        "Suites: stable\n"
+        "Signed-By: /usr/share/keyrings/first.gpg\n"
+        "Signed-By: /usr/share/keyrings/second.gpg\n",
+        "duplicate.sources",
+        error);
+    assert(duplicate_trust.empty());
+    assert(error.find("duplicate deb822 field") != std::string::npos);
+
     return 0;
 }
