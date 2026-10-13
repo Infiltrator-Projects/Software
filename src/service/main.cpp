@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "engine/engine_service_core.hpp"
 #include "core/update_policy.hpp"
+#include "engine_introspection.hpp"
 
 #include <gio/gio.h>
 
@@ -21,6 +22,7 @@ using infiltrator::software::TransactionAction;
 using infiltrator::software::TransactionItem;
 using infiltrator::software::TransactionPlan;
 using infiltrator::software::TransactionRequest;
+using infiltrator::software::service::kEngineIntrospectionXml;
 
 constexpr const char *kBusName =
     "net.ssmith.infiltrator.software.Engine";
@@ -30,56 +32,6 @@ constexpr const char *kInterfaceName =
     "net.ssmith.infiltrator.software.Engine";
 constexpr guint kApiVersion = 5U;
 constexpr std::size_t kMaximumPlanPackages = 4096U;
-
-constexpr const char *kIntrospectionXml = R"XML(
-<node>
-  <interface name="net.ssmith.infiltrator.software.Engine">
-    <method name="GetStatus">
-      <arg name="status" type="a{sv}" direction="out"/>
-    </method>
-    <method name="ListInstalled">
-      <arg name="packages" type="aa{sv}" direction="out"/>
-    </method>
-    <method name="ListUpdates">
-      <arg name="packages" type="aa{sv}" direction="out"/>
-    </method>
-    <method name="ListKernels">
-      <arg name="kernel_type" type="s" direction="in"/>
-      <arg name="kernels" type="aa{sv}" direction="out"/>
-    </method>
-    <method name="PlanTransaction">
-      <arg name="action" type="s" direction="in"/>
-      <arg name="package_ids" type="as" direction="in"/>
-      <arg name="install_recommends" type="b" direction="in"/>
-      <arg name="plan" type="a{sv}" direction="out"/>
-    </method>
-    <method name="PlanMixedTransaction">
-      <arg name="action" type="s" direction="in"/>
-      <arg name="package_ids" type="as" direction="in"/>
-      <arg name="remove_package_ids" type="as" direction="in"/>
-      <arg name="install_recommends" type="b" direction="in"/>
-      <arg name="plan" type="a{sv}" direction="out"/>
-    </method>
-    <method name="ReloadState">
-      <arg name="status" type="a{sv}" direction="out"/>
-    </method>
-    <method name="RefreshInstalledState">
-      <arg name="status" type="a{sv}" direction="out"/>
-    </method>
-    <method name="RefreshState">
-      <arg name="status" type="a{sv}" direction="out"/>
-    </method>
-    <method name="Quit"/>
-    <signal name="StateChanged">
-      <arg name="generation" type="t"/>
-    </signal>
-    <signal name="HealthChanged">
-      <arg name="healthy" type="b"/>
-      <arg name="detail" type="s"/>
-    </signal>
-  </interface>
-</node>
-)XML";
 
 struct ServiceState {
     explicit ServiceState(std::string state_database_path)
@@ -1113,7 +1065,7 @@ int main()
     GError *error = nullptr;
     state.node_info =
         g_dbus_node_info_new_for_xml(
-            kIntrospectionXml,
+            kEngineIntrospectionXml,
             &error);
     if (state.node_info == nullptr) {
         g_printerr(
