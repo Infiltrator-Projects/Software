@@ -25,6 +25,11 @@
   <url type="homepage">https://github.com/Infiltrator-Projects/Software</url>
 
   <releases>
+    <release version="0.3.94" date="2026-10-13">
+      <description>
+        <p>Reconciles maintained architecture documentation with engine-only Installed-state ownership and adds a documentation contract preventing ownership and schema-version authority from drifting.</p>
+      </description>
+    </release>
     <release version="0.3.93" date="2026-10-13">
       <description>
         <p>Restores co-installation with Linux Mint Update Manager by removing mintupdate replacement/conflict package metadata and adds contracts preventing accidental removal from returning.</p>
