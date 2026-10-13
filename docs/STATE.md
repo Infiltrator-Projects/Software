@@ -46,7 +46,7 @@ Software and the panel indicator are clients.
 
 The initial D-Bus service is now implemented. It exposes `GetStatus`, `ListInstalled`, `ListUpdates`, `PlanTransaction` and `ReloadState` on `net.ssmith.infiltrator.software.Engine`, with `StateChanged` and `HealthChanged` signals. Package-state database reads are read-only and do not require clients to own or mutate the database. The service caches update state per generation so multiple clients consume the same calculation.
 
-The indicator subscribes to StateChanged and HealthChanged and reads ListUpdates from the same engine generation used by Software. Software's Installed and ordinary Updates paths likewise prefer the service, and engine-backed update transactions use PlanTransaction. Native reconciliation now owns configured-source refresh and generation publication; a compatibility fallback remains only for systems on which no usable native generation is available.
+The indicator subscribes to StateChanged and HealthChanged and reads ListUpdates from the same engine generation used by Software. Software's Installed and ordinary Updates paths likewise use the service, and engine-backed update transactions use PlanTransaction. Native reconciliation owns configured-source refresh and generation publication. If the engine cannot provide Installed state, the GUI reports that failure; it does not create a second package-state authority by parsing `/var/lib/dpkg/status` itself.
 
 ## Startup
 
@@ -64,11 +64,15 @@ The engine records refresh failure separately and publishes health/freshness sta
 
 Corrupt derived state is discarded and rebuilt from authoritative inputs.
 
+Client failure does not create an alternate package-state implementation. Installed state remains engine-owned; when the engine is unavailable or cannot load a valid generation, clients surface that condition and recover through the engine/reconciliation path rather than reading authoritative dpkg files independently.
+
 ## Schema evolution
 
-Database schema versions are explicit.
+Database schema versions are explicit in the package-state implementation.
 
 Migrations are transactional. If a migration cannot complete safely, the engine can rebuild derived state rather than corrupting authoritative package information.
+
+Maintained documentation describes the current persisted contract rather than duplicating the implementation's numeric schema version. The code-level schema version remains the single authority used to accept, migrate or reject a database.
 
 ## User-specific state
 
@@ -86,24 +90,14 @@ The privileged executor does not accept database rows as implicit authority; it 
 
 ## Implemented generation store
 
-The native engine now has a PackageStateStore that publishes installed and repository package state as immutable SQLite generations. Publication uses a single immediate transaction: generation rows, installed records, repository records and the current-generation pointer commit together or not at all. The current and immediately previous generations are retained so readers never need to observe a partially written refresh and a failed publish leaves the previous generation intact.
+The native engine has a PackageStateStore that publishes installed and repository package state as immutable SQLite generations. Publication uses a single immediate transaction: generation rows, installed records, repository records and the current-generation pointer commit together or not at all. The current and immediately previous generations are retained so readers never need to observe a partially written refresh and a failed publish leaves the previous generation intact.
 
-Schema version 5 retains installed Depends, Pre-Depends, Provides, Priority, Multi-Arch and Essential metadata alongside installed identity/version/size, repository policy/provenance, source-package identity and signed-pocket security classification used by native candidate selection and update presentation. Migrations from earlier derived schemas run inside one SQLite transaction; on failure no partial DDL or version change is retained. Current-generation reads also use one read transaction so a client cannot mix rows from different published generations. Derived state remains rebuildable from authoritative inputs.
-
+The current schema retains installed Depends, Pre-Depends, Provides, Conflicts, Breaks, Replaces, Priority, Multi-Arch, held, Essential and protected-package metadata alongside installed identity/version/size. Repository records retain policy/provenance, source-package identity, signed-pocket security classification, release archive/support metadata and the dependency relationships needed by native candidate selection and transaction planning. Migrations from earlier derived schemas run inside one SQLite transaction; on failure no partial DDL or version change is retained. Current-generation reads also use one read transaction so a client cannot mix rows from different published generations. Derived state remains rebuildable from authoritative inputs.
 
 ## Externally installed first-party native builds
 
-First-party native `.run` installers that produce and install a Debian package
-remain ordinary installed-package state. Calendar is the reference case: its
-local hardware-native builder emits an `infiltrator-calendar` package with a
-version such as `1.0.45+nativepgo1` and installs that package through the
-Debian package database.
+First-party native `.run` installers that produce and install a Debian package remain ordinary installed-package state. Calendar is the reference case: its local hardware-native builder emits an `infiltrator-calendar` package with a version such as `1.0.45+nativepgo1` and installs that package through the Debian package database.
 
-Software must therefore discover such builds from authoritative dpkg state;
-they do not require a separate private installation receipt. Debian candidate
-comparison remains authoritative: a later release such as `1.0.46` is newer
-than `1.0.45+nativepgo1`, while a same-release generic `1.0.46` is not
-allowed to silently downgrade `1.0.46+nativepgo1`.
+Software must therefore discover such builds from authoritative dpkg state; they do not require a separate private installation receipt. Debian candidate comparison remains authoritative: a later release such as `1.0.46` is newer than `1.0.45+nativepgo1`, while a same-release generic `1.0.46` is not allowed to silently downgrade `1.0.46+nativepgo1`.
 
-Regression fixtures cover both installed-state parsing and those version-order
-semantics.
+Regression fixtures cover both installed-state parsing and those version-order semantics.
