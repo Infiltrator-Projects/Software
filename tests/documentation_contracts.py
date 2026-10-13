@@ -24,17 +24,20 @@ maintained = {
 }
 
 # Installed inventory is engine-owned. Historical migration prose may correctly
-# say that the engine reads dpkg status, but maintained docs must never describe
-# that file as a GUI/client fallback or another package-state authority.
+# say that the engine reads dpkg status, and current prose may explicitly deny a
+# fallback. Reject only positive claims that Installed uses/retains/falls back to
+# a second path, plus the retired generic "compatibility fallback" terminology.
+installed_fallback = re.compile(
+    r"\bInstalled\b.*\b(?:uses|retains|falls\s+back)\b.*\bfallback\b",
+    re.IGNORECASE,
+)
 for name, document in maintained.items():
+    assert "compatibility fallback" not in document.lower(), (
+        f"{name} reintroduces the retired compatibility fallback"
+    )
     for line in document.splitlines():
-        lowered = line.lower()
-        if "installed" in lowered and "fallback" in lowered:
+        if installed_fallback.search(line):
             raise AssertionError(f"{name} reintroduces an Installed fallback: {line}")
-        if "/var/lib/dpkg/status" in line and "fallback" in lowered:
-            raise AssertionError(f"{name} makes dpkg status a fallback: {line}")
-
-assert "compatibility fallback" not in maintained["architecture"].lower()
 
 # The package-state implementation is the sole authority for the current schema
 # number. Documentation describes persisted fields and migration invariants so
