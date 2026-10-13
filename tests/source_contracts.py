@@ -188,7 +188,10 @@ assert "software-sources" not in cmake
 assert "software-source-inventory" in target_links(cmake, "infiltrator-software")
 assert "software-source-mutation" not in target_links(cmake, "infiltrator-software")
 assert "software-source-mutation" in target_links(cmake, "infiltrator-software-helper")
-assert "software-source-format" in target_links(cmake, "software-engine")
+assert re.search(
+    r"target_link_libraries\s*\(\s*software-engine\s+PRIVATE\s+software-source-format\s*\)",
+    cmake,
+)
 assert includes(source_inventory, "sources/apt_source_format.hpp")
 assert includes(source_mutation, "sources/apt_source_format.hpp")
 assert includes(source_configuration, "sources/apt_source_format.hpp")
