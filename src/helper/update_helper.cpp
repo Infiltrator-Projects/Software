@@ -29,6 +29,8 @@
 
 namespace {
 
+using infiltrator::software::kSystemSoftwarePreferencesPath;
+
 bool write_full(
     const int fd,
     const std::string_view content)
@@ -727,7 +729,6 @@ int run_apt(std::vector<std::string> arguments)
     return WEXITSTATUS(status);
 }
 
-
 int run_apt_capture(
     std::vector<std::string> arguments,
     std::string &output)
@@ -811,7 +812,7 @@ bool sha256_file(
             g_checksum_update(
                 checksum,
                 reinterpret_cast<const guchar *>(buffer.data()),
-                static_cast<gsize>(count));
+                static_cast<gssize>(count));
         }
     }
     if (input.bad()) {
@@ -1030,7 +1031,6 @@ int execute_dpkg_configure()
     std::perror("Unable to execute dpkg --configure -a");
     return 127;
 }
-
 
 } // namespace
 
@@ -1295,14 +1295,6 @@ int main(int argc, char **argv)
             return 0;
         }
 
-        /*
-         * Refresh root-owned metadata only after the user has reviewed the
-         * complete plan and PolicyKit has authorized this exact execution.
-         * Every planned package mutation is explicit. Installs/upgrades are
-         * pinned to the reviewed version; approved removals are named
-         * explicitly. Recommends/Suggests are disabled so APT cannot silently
-         * broaden the native plan.
-         */
         if (!wait_for_package_manager(
                 progress_path,
                 progress_token)) {
@@ -1343,13 +1335,6 @@ int main(int argc, char **argv)
             }
         }
 
-        /*
-         * Repository metadata may have changed after the user approved the
-         * plan. Re-simulate the exact privileged command against the refreshed
-         * metadata and require a one-for-one match with the approved package
-         * identities and versions. Any added dependency, missing change,
-         * architecture drift or removal aborts before system mutation.
-         */
         write_progress(
             progress_path,
             progress_token,
@@ -1421,11 +1406,6 @@ int main(int argc, char **argv)
                 return 70;
             }
 
-            /*
-             * The final APT invocation is not allowed to fetch replacement
-             * bytes after verification. It must consume only the isolated
-             * archive set whose SHA-256 values matched the reviewed plan.
-             */
             arguments.insert(arguments.begin(), "-o");
             arguments.insert(
                 arguments.begin() + 1,
