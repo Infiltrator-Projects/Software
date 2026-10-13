@@ -21,9 +21,11 @@ jobs:
   linux:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
-    outputs:
-      version: ${{ steps.identity.outputs.version }}
-      release: ${{ steps.identity.outputs.release }}
+    # Publication is deliberately the final step of the same job that qualified
+    # the release bundle. The token is exposed only to that step and checkout
+    # does not persist credentials for build/test scripts.
+    permissions:
+      contents: write
 
     steps:
       - name: Check out source and Common
@@ -31,6 +33,7 @@ jobs:
         with:
           fetch-depth: 0
           submodules: recursive
+          persist-credentials: false
 
       - name: Verify source and release identity
         id: identity
@@ -132,45 +135,12 @@ jobs:
           bash tools/release.sh complete-bundle
           "${{ steps.identity.outputs.version }}"
 
-      - name: Upload verified release bundle
-        if: steps.identity.outputs.release == 'true'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: software-release-${{ steps.identity.outputs.version }}
-          path: dist/release/
-          if-no-files-found: error
-          retention-days: 7
-
-  publish:
-    needs: linux
-    if: needs.linux.outputs.release == 'true'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    permissions:
-      actions: read
-      contents: write
-    concurrency:
-      group: publish-release-${{ github.repository }}
-      cancel-in-progress: false
-
-    steps:
-      - name: Check out exact verified release commit
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.sha }}
-          fetch-depth: 0
-
-      - name: Download verified release bundle
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with:
-          name: software-release-${{ needs.linux.outputs.version }}
-          path: release
-
       - name: Ensure verified GitHub release
+        if: steps.identity.outputs.release == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: >-
           bash tools/release.sh publish-github
-          "${{ needs.linux.outputs.version }}" "$GITHUB_SHA"
-          release "$GITHUB_REPOSITORY"
+          "${{ steps.identity.outputs.version }}" "$GITHUB_SHA"
+          dist/release "$GITHUB_REPOSITORY"
