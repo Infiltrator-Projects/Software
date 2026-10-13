@@ -82,6 +82,7 @@ tray = text("src/tray/main.cpp")
 cli = text("src/cli/main.cpp")
 control = text("debian/control")
 parity = text("docs/MINTUPDATE_PARITY.md")
+workflow = text(".github/workflows/ci.yml")
 version = text("VERSION").strip()
 readme = text("README.md")
 changelog = text("debian/changelog")
@@ -99,6 +100,18 @@ assert metainfo_releases
 assert metainfo_releases[0].get("version") == version
 for marker in ("Warning: truncated output", "tokens truncated", "Total output lines:"):
     assert marker not in changelog
+
+# Verification follows the mutable ref, so a superseded main/PR run cannot
+# race the current state into publication. Publication consumes the one package
+# already qualified by the verification job; it never rebuilds that artefact.
+assert "group: verify-${{ github.repository }}-${{ github.ref }}" in workflow
+assert "cancel-in-progress: true" in workflow
+assert workflow.count("dpkg-buildpackage -us -uc -b") == 1
+publish_job = workflow.split("\n  publish:", 1)
+assert len(publish_job) == 2
+assert "dpkg-buildpackage" not in publish_job[1]
+assert "actions/download-artifact@" in publish_job[1]
+assert "publish-github" in publish_job[1]
 
 # Mint Update parity is an audited capability matrix, not prose claiming that
 # an installed host has already completed destructive qualification.
