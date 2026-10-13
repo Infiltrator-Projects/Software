@@ -21,7 +21,6 @@ struct InstalledResult {
     std::vector<PackageRecord> records;
     std::string error;
     std::string flatpak_warning;
-    bool from_engine{false};
     std::size_t flatpak_count{0U};
 };
 
@@ -90,9 +89,7 @@ void installed_worker(
     result->generation =
         data == nullptr ? 0U : data->generation;
     result->records =
-        read_installed_packages(
-            result->error,
-            &result->from_engine);
+        read_installed_packages(result->error);
 
     SystemCatalogue system_catalogue;
     std::string flatpak_error;
@@ -170,25 +167,32 @@ void installed_complete(
             G_LIST_MODEL(controller->strings)),
         additions.data());
 
+    const bool native_available = result->error.empty();
+    const bool flatpak_available = result->flatpak_count > 0U;
+
     if (controller->status != nullptr) {
         std::ostringstream message;
-        if (!result->error.empty()) {
+        if (!native_available) {
             message
-                << "Installed inventory unavailable: "
+                << "Native installed-package inventory unavailable: "
                 << result->error;
+            if (flatpak_available) {
+                message
+                    << " Showing "
+                    << result->flatpak_count
+                    << " installed Flatpak item"
+                    << (result->flatpak_count == 1U ? "." : "s.");
+            }
         } else {
             message
                 << result->records.size()
-                << " installed software items read from "
-                << (result->from_engine
-                        ? "the shared native package engine"
-                        : "Debian package state")
-                << " and Flatpak.";
-            if (!result->flatpak_warning.empty()) {
-                message
-                    << " Flatpak inventory warning: "
-                    << result->flatpak_warning;
-            }
+                << " installed software items read from the shared native "
+                   "package engine and Flatpak.";
+        }
+        if (!result->flatpak_warning.empty()) {
+            message
+                << " Flatpak inventory warning: "
+                << result->flatpak_warning;
         }
         gtk_label_set_text(
             GTK_LABEL(controller->status),
@@ -202,22 +206,28 @@ void installed_complete(
             count.c_str());
     }
     if (controller->backend != nullptr) {
+        const char *backend = nullptr;
+        if (native_available) {
+            backend = flatpak_available
+                ? "Native + Flatpak"
+                : "Native engine";
+        } else {
+            backend = flatpak_available
+                ? "Flatpak only"
+                : "Native engine";
+        }
         gtk_label_set_text(
             GTK_LABEL(controller->backend),
-            result->from_engine
-                ? (result->flatpak_count > 0U
-                       ? "Native + Flatpak"
-                       : "Native engine")
-                : (result->flatpak_count > 0U
-                       ? "Debian + Flatpak"
-                       : "Debian state"));
+            backend);
     }
     if (controller->backend_state != nullptr) {
         gtk_label_set_text(
             GTK_LABEL(controller->backend_state),
-            result->error.empty()
+            native_available
                 ? "Ready"
-                : "Unavailable");
+                : flatpak_available
+                    ? "Partial"
+                    : "Unavailable");
     }
 
     delete result;
