@@ -51,6 +51,7 @@ repository_controller_hpp = text("src/app/repository_controller.hpp")
 engine_client = text("src/client/engine_client.cpp")
 engine_client_hpp = text("src/client/engine_client.hpp")
 engine_service = text("src/service/main.cpp")
+engine_core = text("src/engine/engine_service_core.cpp")
 engine_introspection_template = text("src/service/engine_introspection.hpp.in")
 engine_interface = text("data/net.ssmith.infiltrator.software.Engine.xml")
 transaction = text("src/engine/debian_transaction.cpp")
@@ -103,17 +104,19 @@ assert metainfo_releases[0].get("version") == version
 for marker in ("Warning: truncated output", "tokens truncated", "Total output lines:"):
     assert marker not in changelog
 
-# Verification follows the mutable ref, so a superseded main/PR run cannot
-# race the current state into publication. Publication consumes the one package
-# already qualified by the verification job; it never rebuilds that artefact.
+# Verification and publication are one linear authority. The exact bundle that
+# passed qualification is published from the same job and filesystem: no
+# Actions-artifact relay, no second checkout, and no rebuilt release package.
 assert "group: verify-${{ github.repository }}-${{ github.ref }}" in workflow
 assert "cancel-in-progress: true" in workflow
 assert workflow.count("dpkg-buildpackage -us -uc -b") == 1
-publish_job = workflow.split("\n  publish:", 1)
-assert len(publish_job) == 2
-assert "dpkg-buildpackage" not in publish_job[1]
-assert "actions/download-artifact@" in publish_job[1]
-assert "publish-github" in publish_job[1]
+assert workflow.count("publish-github") == 1
+assert "actions/upload-artifact@" not in workflow
+assert "actions/download-artifact@" not in workflow
+assert "\n  publish:" not in workflow
+assert "persist-credentials: false" in workflow
+assert workflow.index("complete-bundle") < workflow.index("publish-github")
+assert "dist/release" in workflow
 
 # Mint Update parity is an audited capability matrix, not prose claiming that
 # an installed host has already completed destructive qualification.
@@ -252,6 +255,14 @@ for token in (
     "remove_installed",
 ):
     assert token in dependency or token in transaction
+
+# Failed repository refreshes are explicit live service state. A retained
+# generation is displayable but cannot silently become plan-authoritative until
+# a full metadata refresh succeeds.
+assert "record_refresh_failure(error)" in engine_service
+assert "record_refresh_success()" in engine_service
+assert "record_refresh_failure(refresh_error)" in engine_core
+assert "refresh_error_.empty()" in engine_core
 
 # Native read-only reconciliation reads authoritative dpkg state directly. The
 # architectural contract is the absence of a process-execution capability in
@@ -397,6 +408,7 @@ for option in (
 assert '"ignore"' in cli
 assert "load_release_info" in release_upgrader
 assert "build_plan" in release_upgrader
+
 # Software is an independent updater. Package metadata must never claim or
 # force replacement of Linux Mint's Update Manager.
 assert "Provides: mintupdate" not in control
