@@ -1,8 +1,8 @@
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 
-# Linux Mint Update Manager replacement audit
+# Linux Mint Update Manager capability-parity audit
 
-This file is a replacement acceptance gate, not a feature wish list.
+This file is a capability-parity audit, not a package-replacement declaration.
 
 Audit baseline: Linux Mint `linuxmint/mintupdate` master at commit
 `a6a9f5767905b8fc94923d0b4ca0538a93309a90` (2026-09-12), version line
@@ -10,10 +10,10 @@ Audit baseline: Linux Mint `linuxmint/mintupdate` master at commit
 integration, preferences, automation, tray behaviour, release-upgrade helper
 and command-line interface.
 
-This table records the audited replacement contract. Required source paths are
+This table records the audited capability contract. Required source paths are
 implemented in Software 0.3.52 and exercised by build, unit, smoke and package
 verification. Installed-host qualification remains important for destructive
-distribution upgrades, but it is no longer a missing feature in the replacement
+distribution upgrades, but it is no longer a missing feature in the parity
 implementation.
 
 ## Parity matrix
@@ -58,7 +58,7 @@ implementation.
 | Broken APT/source configuration detection with guided repository repair | Implemented through Repair, source inventory diagnostics and repository/mirror guidance | Required |
 | Mirror reachability/default-mirror checks and guided mirror switching | Implemented for Linux Mint repository freshness/reachability with direct Mint mirror settings hand-off | Required while hosted on Mint/Ubuntu |
 | Launch/manage system snapshots before risky updates | Implemented with Timeshift launch plus optional mandatory pre-system-update snapshot | Required until Infiltrator checkpoint replacement is complete |
-| Point-release / distribution release upgrade workflow | Implemented: edition normalization/meta-package prerequisite, release notes/risk acknowledgement, exact reviewed plan, shutdown/sleep inhibition, source transition and post-upgrade identity verification; real destructive host execution remains qualification rather than a source gap | Required before replacing Mint Update Manager on Mint |
+| Point-release / distribution release upgrade workflow | Implemented: edition normalization/meta-package prerequisite, release notes/risk acknowledgement, exact reviewed plan, shutdown/sleep inhibition, source transition and post-upgrade identity verification; real destructive host execution remains qualification rather than a source gap | Required for parity on Mint |
 | Update Manager information/log view | Implemented through History plus graphical package diagnostic log | Required |
 | Keyboard shortcuts/help discoverability | Partial; non-blocking polish remains | Desirable |
 | Welcome/onboarding screen | Not required as a separate screen; Discover performs onboarding | Equivalent |
@@ -74,25 +74,28 @@ implementation.
 | Remove unused Flatpak runtimes before unattended Flatpak update | Implemented | Required when Flatpak is enabled |
 | Match Flatpak theme runtimes to the desktop theme | Implemented | Required when Flatpak is enabled |
 
-## Replacement acceptance
+## Parity acceptance and coexistence
 
-The source replacement gate is complete for Software 0.3.52. Required
+The source capability-parity gate is complete for Software 0.3.52. Required
 Mint Update Manager capabilities in the audited 7.1.5 baseline have an
 implemented Software path, including exact Cinnamon/Nemo selection and
 execution, external-update progress, tray visibility, history, unattended
 updates and the reviewed release-upgrade workflow.
 
-Software 0.3.52 corrected the replacement-planning bug exposed by an installed
-0.3.49 client: a candidate that both Conflicts with and Replaces an installed
-package is resolved as an explicit reviewed removal, including dependency
-validation against any replacement Provides relationship.
+Software 0.3.52 also corrected a general replacement-planning bug exposed by an
+installed 0.3.49 client: when a package genuinely both Conflicts with and
+Replaces an installed package, the resolver can represent that as an explicit
+reviewed removal and validate dependency satisfaction through an appropriate
+Provides relationship. That resolver behaviour remains valid for packages that
+actually declare those relationships.
 
-The 0.3.52 Debian package temporarily omitted `Conflicts: mintupdate` solely so
-an older 0.3.49 installation could bootstrap to that corrected planner. That
-transition is complete. Current Software packages `Provide`, `Replace` and
-`Conflict` with `mintupdate`; the corrected resolver includes removal of an
-installed Mint Update Manager explicitly in the reviewed transaction, while
-`Provides: mintupdate` continues to satisfy Mint meta-package dependencies.
+Infiltrator Software itself must not claim those relationships with Linux Mint
+Update Manager. From Software 0.3.93 onward the Debian package deliberately has
+no `Provides: mintupdate`, `Replaces: mintupdate` or `Conflicts: mintupdate`
+metadata. Software and Mint Update Manager are therefore intentionally
+co-installable, and installing or upgrading Software must not schedule
+`mintupdate` for removal. Removing Mint Update Manager, if ever desired, is a
+separate explicit user action rather than a Software installation side effect.
 
 This acceptance does not claim that a generic CI runner can prove a destructive
 Linux Mint point-release upgrade on every installed host. That operation still
