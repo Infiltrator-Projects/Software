@@ -14,6 +14,7 @@
 #include <cctype>
 #include <cstdlib>
 #include <filesystem>
+#include <fstream>
 #include <string>
 #include <string_view>
 #include <sstream>
@@ -148,6 +149,47 @@ std::string build_fingerprint(
     return result;
 }
 
+bool valid_architecture_name(const std::string_view value)
+{
+    if (value.empty() ||
+        std::isalnum(static_cast<unsigned char>(value.front())) == 0) {
+        return false;
+    }
+    return std::all_of(
+        value.begin() + 1,
+        value.end(),
+        [](const unsigned char character) {
+            return std::isalnum(character) != 0 || character == '-';
+        });
+}
+
+bool append_foreign_architectures(
+    const std::string_view text,
+    const std::string_view native_architecture,
+    std::vector<std::string> &architectures,
+    std::string &error)
+{
+    std::istringstream input{std::string(text)};
+    std::string architecture;
+    while (input >> architecture) {
+        if (!valid_architecture_name(architecture)) {
+            error =
+                "The dpkg architecture registry contains an invalid "
+                "architecture name: " + architecture + ".";
+            return false;
+        }
+        if (architecture == native_architecture ||
+            std::find(
+                architectures.begin(),
+                architectures.end(),
+                architecture) != architectures.end()) {
+            continue;
+        }
+        architectures.emplace_back(std::move(architecture));
+    }
+    return true;
+}
+
 bool configured_architectures(
     const std::string_view native_architecture,
     std::vector<std::string> &architectures,
@@ -162,74 +204,58 @@ bool configured_architectures(
 
     const char *override_value =
         std::getenv("INFILTRATOR_SOFTWARE_FOREIGN_ARCHITECTURES");
-    std::string foreign;
     if (override_value != nullptr) {
-        foreign = override_value;
-    } else {
-        gchar *program = g_find_program_in_path("dpkg");
-        if (program == nullptr) {
-            return true;
-        }
-        gchar *argv[] = {
-            program,
-            const_cast<gchar *>("--print-foreign-architectures"),
-            nullptr};
-        gchar *standard_output = nullptr;
-        gchar *standard_error = nullptr;
-        gint wait_status = 0;
-        GError *spawn_error = nullptr;
-        const gboolean spawned =
-            g_spawn_sync(
-                nullptr,
-                argv,
-                nullptr,
-                G_SPAWN_DEFAULT,
-                nullptr,
-                nullptr,
-                &standard_output,
-                &standard_error,
-                &wait_status,
-                &spawn_error);
-        const bool exited_ok =
-            spawned != FALSE &&
-            g_spawn_check_wait_status(
-                wait_status, &spawn_error) != FALSE;
-        if (!exited_ok) {
-            error =
-                spawn_error != nullptr &&
-                spawn_error->message != nullptr
-                    ? std::string(spawn_error->message)
-                    : "dpkg --print-foreign-architectures failed.";
-            g_free(program);
-            g_free(standard_output);
-            g_free(standard_error);
-            g_clear_error(&spawn_error);
+        if (!append_foreign_architectures(
+                override_value,
+                native_architecture,
+                architectures,
+                error)) {
             return false;
         }
-        foreign =
-            standard_output == nullptr
-                ? std::string{}
-                : std::string(standard_output);
-        g_free(program);
-        g_free(standard_output);
-        g_free(standard_error);
-        g_clear_error(&spawn_error);
+    } else {
+        /*
+         * dpkg persists its configured architecture registry as text. Read
+         * that authoritative state directly rather than spawning
+         * `dpkg --print-foreign-architectures` from the native reconciliation
+         * path. The registry can contain the native architecture as well; it
+         * is already known from the build/host mapping and is de-duplicated.
+         */
+        const std::filesystem::path registry{"/var/lib/dpkg/arch"};
+        std::ifstream input(registry);
+        if (input) {
+            std::ostringstream text;
+            text << input.rdbuf();
+            if (!input.good() && !input.eof()) {
+                error =
+                    "Unable to finish reading the dpkg architecture registry.";
+                return false;
+            }
+            if (!append_foreign_architectures(
+                    text.str(),
+                    native_architecture,
+                    architectures,
+                    error)) {
+                return false;
+            }
+        } else {
+            std::error_code exists_error;
+            const bool exists =
+                std::filesystem::exists(registry, exists_error);
+            if (exists_error) {
+                error =
+                    "Unable to inspect the dpkg architecture registry: " +
+                    exists_error.message();
+                return false;
+            }
+            if (exists) {
+                error = "Unable to read the dpkg architecture registry.";
+                return false;
+            }
+        }
     }
 
-    std::istringstream input(foreign);
-    std::string architecture;
-    while (input >> architecture) {
-        if (architecture.empty() ||
-            architecture == native_architecture ||
-            std::find(
-                architectures.begin(),
-                architectures.end(),
-                architecture) != architectures.end()) {
-            continue;
-        }
-        architectures.emplace_back(std::move(architecture));
-    }
     std::sort(architectures.begin(), architectures.end());
+    error.clear();
     return true;
 }
 
