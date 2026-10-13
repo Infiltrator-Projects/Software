@@ -73,6 +73,8 @@ add_software_test(software-catalogue-test
 add_software_test(software-catalogue-store-test
     catalogue_snapshot_store_test.cpp software-catalogue)
 add_software_test(software-sources-test
-    source_inventory_test.cpp software-sources)
+    source_inventory_test.cpp software-source-inventory software-source-mutation)
+add_software_test(software-apt-source-format-test
+    apt_source_format_test.cpp software-source-inventory software-source-mutation)
 add_software_test(software-external-updates-test
     external_updates_test.cpp software-external)

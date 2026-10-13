@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "sources/source_inventory.hpp"
 
+#include "sources/apt_source_format.hpp"
 #include "core/text.hpp"
 
 #include <algorithm>
@@ -22,28 +23,6 @@ namespace {
 using text::lower_ascii;
 using text::trim;
 using text::split_words;
-
-
-struct StanzaBoundary {
-    std::size_t end{0U};
-    std::size_t next{0U};
-};
-
-StanzaBoundary next_stanza_boundary(
-    const std::string_view content,
-    const std::size_t start)
-{
-    const std::size_t lf = content.find("\n\n", start);
-    const std::size_t crlf = content.find("\r\n\r\n", start);
-    if (crlf != std::string_view::npos &&
-        (lf == std::string_view::npos || crlf < lf)) {
-        return {crlf, crlf + 4U};
-    }
-    if (lf != std::string_view::npos) {
-        return {lf, lf + 2U};
-    }
-    return {content.size(), content.size()};
-}
 
 std::string read_text_file(const std::filesystem::path &path)
 {
@@ -97,56 +76,9 @@ bool append_apt_file(
     return true;
 }
 
-std::map<std::string, std::string> parse_key_values(
-    std::string_view content)
-{
-    std::map<std::string, std::string> values;
-    std::istringstream input{std::string(content)};
-    std::string line;
-    std::string current_key;
-
-    while (std::getline(input, line)) {
-        if (!line.empty() &&
-            std::isspace(static_cast<unsigned char>(line.front())) != 0 &&
-            !current_key.empty()) {
-            values[current_key] += " " + trim(line);
-            continue;
-        }
-
-        const std::size_t colon = line.find(':');
-        if (colon == std::string::npos) {
-            current_key.clear();
-            continue;
-        }
-
-        current_key = lower_ascii(trim(
-            std::string_view(line).substr(0U, colon)));
-        values[current_key] = trim(
-            std::string_view(line).substr(colon + 1U));
-    }
-
-    return values;
-}
-
-bool contains_word(
-    const std::string_view words,
-    const std::string_view expected)
-{
-    for (const std::string &word : split_words(words)) {
-        if (word == expected) return true;
-    }
-    return false;
-}
-
 bool parse_bool(std::string_view value, const bool fallback)
 {
-    std::string lower;
-    lower.reserve(value.size());
-    for (const char ch : value) {
-        lower.push_back(
-            static_cast<char>(
-                std::tolower(static_cast<unsigned char>(ch))));
-    }
+    const std::string lower = lower_ascii(trim(value));
     if (lower == "yes" || lower == "true" || lower == "1") {
         return true;
     }
@@ -342,55 +274,49 @@ std::vector<SourceRecord> SourceInventory::parse_apt_deb822(
     const std::string_view backing_file)
 {
     std::vector<SourceRecord> result;
-    std::size_t start = 0U;
-    std::size_t stanza_number = 0U;
 
-    while (start < content.size()) {
-        ++stanza_number;
-        const StanzaBoundary boundary =
-            next_stanza_boundary(content, start);
-        const std::size_t end = boundary.end;
-
-        const std::string_view block =
-            content.substr(start, end - start);
-        const auto values = parse_key_values(block);
-
+    for (const AptDeb822Stanza &stanza :
+         parse_apt_deb822_stanzas(content)) {
+        if (!stanza.valid) {
+            continue;
+        }
+        const auto &values = stanza.fields;
         const auto uris = values.find("uris");
         const auto suites = values.find("suites");
         const auto types = values.find("types");
 
-        if (uris != values.end() &&
-            suites != values.end() &&
-            (types == values.end() ||
-             contains_word(types->second, "deb") ||
-             contains_word(types->second, "deb-src"))) {
-            const bool enabled =
-                values.find("enabled") == values.end() ||
-                parse_bool(values.at("enabled"), true);
-
-            for (const std::string &uri : split_words(uris->second)) {
-                SourceRecord record;
-                record.kind = SourceKind::apt;
-                record.name = uri + " " + suites->second;
-                record.location = uri;
-                record.scope = "System";
-                record.backing_file = std::string(backing_file);
-                record.apt_suites = suites->second;
-                record.entry_index = stanza_number;
-                record.enabled = enabled;
-
-                record.detail = suites->second;
-                const auto components = values.find("components");
-                if (components != values.end() &&
-                    !components->second.empty()) {
-                    record.detail += " · " + components->second;
-                }
-
-                result.emplace_back(std::move(record));
-            }
+        if (uris == values.end() ||
+            suites == values.end() ||
+            (types != values.end() &&
+             !apt_deb822_contains_word(values, "types", "deb") &&
+             !apt_deb822_contains_word(values, "types", "deb-src"))) {
+            continue;
         }
 
-        start = boundary.next;
+        const bool enabled =
+            values.find("enabled") == values.end() ||
+            parse_bool(values.at("enabled"), true);
+
+        for (const std::string &uri : split_words(uris->second)) {
+            SourceRecord record;
+            record.kind = SourceKind::apt;
+            record.name = uri + " " + suites->second;
+            record.location = uri;
+            record.scope = "System";
+            record.backing_file = std::string(backing_file);
+            record.apt_suites = suites->second;
+            record.entry_index = stanza.number;
+            record.enabled = enabled;
+
+            record.detail = suites->second;
+            const auto components = values.find("components");
+            if (components != values.end() &&
+                !components->second.empty()) {
+                record.detail += " · " + components->second;
+            }
+
+            result.emplace_back(std::move(record));
+        }
     }
 
     return result;

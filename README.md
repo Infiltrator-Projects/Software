@@ -6,7 +6,7 @@
 
 Infiltrator Software is the software-management application for the Infiltrator project family. It presents software discovery, installation, removal, updates, system components, repositories, release channels, history and repair as one coherent graphical product.
 
-**Current source version:** 0.3.91<br>
+**Current source version:** 0.3.92<br>
 **Language:** C++17 application/core with native GTK4 Linux shell; C11 Common foundation  
 **Shared foundation:** Common 1.19.38<br>
 **Current package compatibility:** Debian repositories and .deb packages; Flatpak and AppStream catalogue integration  
@@ -141,7 +141,7 @@ See [UI Design](docs/UI_DESIGN.md) and the [Software UI Vision](docs/UI_VISION.m
     ├── engine/              native Debian state, repository and resolver engine
     ├── catalogue/           Infiltrator + AppStream catalogue sources
     ├── external/            Flatpak and Cinnamon/Nemo update providers
-    ├── sources/             repository/source modelling
+    ├── sources/             repository/source modelling and narrow mutation logic
     ├── helper/              constrained privileged compatibility helpers
     ├── tray/                XApp desktop-panel indicator
     └── infiltratr-common/   exact Common 1.19.38 gitlink

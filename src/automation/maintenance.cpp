@@ -20,12 +20,14 @@ namespace {
 
 using namespace infiltrator::software;
 
-
 bool run_capture(
     std::vector<std::string> arguments,
     std::string &output,
     std::string &error)
 {
+    output.clear();
+    error.clear();
+
     std::vector<gchar *> argv;
     argv.reserve(arguments.size() + 1U);
     for (std::string &argument : arguments) {
@@ -275,6 +277,16 @@ int main()
             "infiltrator-software-maintenance must run as root.\n");
         return 1;
     }
+
+    /*
+     * The APT simulation below is machine-parsed (not displayed text). Keep
+     * its grammar stable across host locales so "Remv" plan records and
+     * version brackets cannot silently disappear on a translated system.
+     */
+    (void)setenv("LC_ALL", "C", 1);
+    (void)setenv("LANG", "C", 1);
+    (void)setenv("DEBIAN_FRONTEND", "noninteractive", 1);
+
     if (!std::filesystem::exists(kSystemSoftwarePreferencesPath)) {
         return 0;
     }
@@ -318,7 +330,7 @@ int main()
 
     /*
      * Mint Update Manager's automatic-maintenance contract is apt autoremove
-     * --purge.  Software preserves that behaviour but adds a fail-closed
+     * --purge. Software preserves that behaviour but adds a fail-closed
      * preview: the exact simulated removals are checked against Software's
      * native kernel lifecycle model before the privileged mutation is allowed.
      */

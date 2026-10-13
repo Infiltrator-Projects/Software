@@ -236,12 +236,28 @@ target_link_libraries(software-catalogue
     PRIVATE InfiltratrCommon::Common PkgConfig::APPSTREAM
             PkgConfig::CURL PkgConfig::JSON_GLIB)
 
-add_library(software-sources STATIC
-    src/sources/source_inventory.cpp
-    src/sources/source_mutation.cpp)
-target_include_directories(software-sources PUBLIC
+# Reading configured sources and mutating them are deliberately separate build
+# capabilities. The graphical application receives inventory only; the
+# privileged helper is the sole consumer of source-file mutation code.
+add_library(software-source-format STATIC
+    src/sources/apt_source_format.cpp)
+target_include_directories(software-source-format PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/src")
-target_link_libraries(software-sources PUBLIC software-core)
+
+add_library(software-source-inventory STATIC
+    src/sources/source_inventory.cpp)
+target_include_directories(software-source-inventory PUBLIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_link_libraries(software-source-inventory
+    PUBLIC software-core
+    PRIVATE software-source-format)
+
+add_library(software-source-mutation STATIC
+    src/sources/source_mutation.cpp)
+target_include_directories(software-source-mutation PUBLIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_link_libraries(software-source-mutation
+    PRIVATE software-source-format)
 
 add_library(software-external STATIC
     src/external/external_updates.cpp
@@ -260,7 +276,7 @@ target_include_directories(software-apt-plan-guard PUBLIC
 add_executable(infiltrator-software-helper
     src/helper/source_helper.cpp)
 target_link_libraries(infiltrator-software-helper PRIVATE
-    software-sources)
+    software-source-mutation)
 
 add_executable(infiltrator-software-update-helper
     src/helper/update_helper.cpp)
@@ -337,7 +353,7 @@ add_executable(infiltrator-software
 
 target_link_libraries(infiltrator-software PRIVATE
     software-core software-history software-client
-    software-catalogue software-sources software-external
+    software-catalogue software-source-inventory software-external
     InfiltratrCommon::Common PkgConfig::GTK4 PkgConfig::CURL)
 
 target_compile_definitions(infiltrator-software PRIVATE
