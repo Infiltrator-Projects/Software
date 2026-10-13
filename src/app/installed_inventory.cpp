@@ -7,13 +7,8 @@
 namespace infiltrator::software {
 
 std::vector<PackageRecord> read_installed_packages(
-    std::string &error,
-    bool *from_engine)
+    std::string &error)
 {
-    if (from_engine != nullptr) {
-        *from_engine = false;
-    }
-
     EngineClient engine;
     std::vector<PackageRecord> packages;
     if (!engine.list_installed(packages, error)) {
@@ -22,9 +17,6 @@ std::vector<PackageRecord> read_installed_packages(
 
     for (PackageRecord &package : packages) {
         classify_package_role(package);
-    }
-    if (from_engine != nullptr) {
-        *from_engine = true;
     }
     error.clear();
     return packages;
