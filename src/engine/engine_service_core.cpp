@@ -163,7 +163,9 @@ bool EngineServiceCore::refresh_installed(std::string &error)
      * Package payload execution changes dpkg state but does not require a
      * second network metadata refresh. Reconcile the authoritative installed
      * database against the already verified repository generation so Updates
-     * can drop completed work immediately.
+     * can drop completed work immediately. This path deliberately does not
+     * clear a repository-refresh failure: installed-state success cannot prove
+     * that repository metadata is current again.
      */
     if (!snapshot_.has_value()) {
         return refresh(error);
@@ -173,6 +175,8 @@ bool EngineServiceCore::refresh_installed(std::string &error)
     std::vector<PackageRecord> installed =
         DebianInstalledState::read(installed_error);
     if (!installed_error.empty()) {
+        healthy_ = false;
+        detail_ = installed_error;
         error = installed_error;
         return false;
     }
@@ -191,6 +195,10 @@ bool EngineServiceCore::refresh_installed(std::string &error)
             snapshot_->source_fingerprint,
             published_generation,
             error)) {
+        healthy_ = false;
+        detail_ = error.empty()
+            ? "Unable to publish reconciled installed package state."
+            : error;
         return false;
     }
 
@@ -207,26 +215,52 @@ bool EngineServiceCore::refresh(std::string &error)
             default_repository_cache_path(),
             published_generation,
             refresh_error)) {
-        detail_ = snapshot_.has_value()
-            ? "Refresh failed; retained generation " +
-                std::to_string(snapshot_->generation) + ": " +
-                refresh_error
-            : refresh_error;
-        healthy_ = snapshot_.has_value();
+        record_refresh_failure(refresh_error);
         error = refresh_error;
         return false;
     }
 
-    return reload(error);
+    if (!reload(error)) {
+        record_refresh_failure(error);
+        return false;
+    }
+
+    record_refresh_success();
+    return true;
+}
+
+void EngineServiceCore::record_refresh_failure(
+    const std::string_view error)
+{
+    refresh_error_ = error.empty()
+        ? "Repository refresh failed."
+        : std::string(error);
+}
+
+void EngineServiceCore::record_refresh_success() noexcept
+{
+    refresh_error_.clear();
 }
 
 EngineServiceStatus EngineServiceCore::status() const
 {
     EngineServiceStatus result;
-    result.healthy = healthy_;
-    result.detail = detail_.empty()
-        ? (healthy_ ? "Ready" : "Package state unavailable.")
-        : detail_;
+    result.healthy = healthy_ && refresh_error_.empty();
+    if (!healthy_) {
+        result.detail = detail_.empty()
+            ? "Package state unavailable."
+            : detail_;
+    } else if (!refresh_error_.empty()) {
+        result.detail = snapshot_.has_value()
+            ? "Refresh failed; retained generation " +
+                std::to_string(snapshot_->generation) + ": " +
+                refresh_error_
+            : refresh_error_;
+    } else {
+        result.detail = detail_.empty()
+            ? "Ready"
+            : detail_;
+    }
 
     if (snapshot_.has_value()) {
         result.generation = snapshot_->generation;
@@ -289,10 +323,11 @@ std::optional<TransactionPlan> EngineServiceCore::plan(
             "No package-state generation is available for planning.";
         return std::nullopt;
     }
-    if (!healthy_) {
+    const EngineServiceStatus current = status();
+    if (!current.healthy) {
         error =
             "Package state is not healthy enough to create a new "
-            "transaction plan: " + detail_;
+            "transaction plan: " + current.detail;
         return std::nullopt;
     }
 
