@@ -355,7 +355,7 @@ assert '"ignore"' in cli
 assert "load_release_info" in release_upgrader
 assert "build_plan" in release_upgrader
 assert "Provides: mintupdate" in control
-assert "Conflicts: mintupdate" not in control
+assert "Conflicts: mintupdate" in control
 assert "Replaces: mintupdate" in control
 
 # Authored raster identity is an asset contract, independent of GTK source
