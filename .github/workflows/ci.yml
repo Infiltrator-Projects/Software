@@ -11,9 +11,10 @@ permissions:
   contents: read
 
 concurrency:
-  # Main pushes use immutable SHAs, so one push can never cancel another.
-  # PR updates share their ref and may supersede an older verification run.
-  group: verify-${{ github.repository }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  # Verification is meaningful only for the newest state of a ref. In
+  # particular, a newer main push must retire an older same-version run before
+  # that superseded commit can race the final commit to publication.
+  group: verify-${{ github.repository }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
