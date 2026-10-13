@@ -1,3 +1,22 @@
+infiltrator-software (0.3.95) unstable; urgency=high
+
+  * Route pure-removal final-state validation through the canonical dependency
+    resolver, eliminating a weaker duplicate interpreter whose Multi-Arch rules
+    could approve an invalid retained package set.
+  * Make deb822 source syntax one shared authority for inventory, mutation and
+    native repository configuration while preserving inline Signed-By armour
+    and rejecting malformed or duplicate trust-sensitive fields.
+  * Remove the dpkg architecture-query subprocess from native reconciliation by
+    reading and validating dpkg's persisted architecture registry directly.
+  * Remove retired Installed fallback state, report engine failures as explicit
+    partial/unavailable state, and surface Flatpak inventory filesystem errors.
+  * Make the installed D-Bus interface XML the single protocol-schema authority
+    and generate the service's embedded introspection data from that exact file.
+  * Add focused Multi-Arch removal regressions and strengthen architecture and
+    documentation contracts around the consolidated ownership boundaries.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Wed, 14 Oct 2026 08:24:00 +1100
+
 infiltrator-software (0.3.94) unstable; urgency=high
 
   * Reconcile maintained architecture, package-engine, state and performance
