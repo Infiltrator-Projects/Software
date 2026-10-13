@@ -354,9 +354,11 @@ for option in (
 assert '"ignore"' in cli
 assert "load_release_info" in release_upgrader
 assert "build_plan" in release_upgrader
-assert "Provides: mintupdate" in control
-assert "Conflicts: mintupdate" in control
-assert "Replaces: mintupdate" in control
+# Software is an independent updater. Package metadata must never claim or
+# force replacement of Linux Mint's Update Manager.
+assert "Provides: mintupdate" not in control
+assert "Conflicts: mintupdate" not in control
+assert "Replaces: mintupdate" not in control
 
 # Authored raster identity is an asset contract, independent of GTK source
 # arrangement.
