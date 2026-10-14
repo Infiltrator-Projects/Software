@@ -1,0 +1,36 @@
+name: Repair bootstrap
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  correct-runner:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Correct runner source and remove bootstrap
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('.github/workflows/forensic-repair.yml')
+          text = path.read_text()
+          old = '== \\n       cinnamon_native.count("curl_easy_perform(curl)")'
+          new = '== cinnamon_native.count("curl_easy_perform(curl)")'
+          if text.count(old) != 1:
+              raise SystemExit(f'expected one malformed assertion, found {text.count(old)}')
+          path.write_text(text.replace(old, new, 1))
+          PY
+          git rm .github/workflows/repair-bootstrap.yml
+          git config user.name "Shannon Smith"
+          git config user.email "infiltratr@yandex.com"
+          git add -A
+          git commit -m "Correct one-shot repair runner"
+          git push origin HEAD:main
