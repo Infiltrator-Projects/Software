@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "app/repair_diagnostics.hpp"
 
+#include "app/process_support.hpp"
 #include "app/text_utils.hpp"
 #include "client/engine_client.hpp"
 #include "core/model.hpp"
@@ -20,67 +21,22 @@ bool run_dpkg_audit(std::string &diagnostic, std::string &error)
     diagnostic.clear();
     error.clear();
 
-    gchar *program = g_find_program_in_path("dpkg");
-    if (program == nullptr) {
-        error = "dpkg is not available for package-state diagnostics.";
+    SubprocessResult process;
+    if (!run_subprocess_sync({"dpkg", "--audit"}, process, error)) {
+        if (error.empty()) {
+            error = "Unable to run dpkg package-state diagnostics.";
+        }
         return false;
     }
-
-    gchar *argv[] = {
-        program,
-        const_cast<gchar *>("--audit"),
-        nullptr
-    };
-    gchar *standard_output = nullptr;
-    gchar *standard_error = nullptr;
-    gint wait_status = 0;
-    GError *spawn_error = nullptr;
-    const gboolean spawned =
-        g_spawn_sync(
-            nullptr,
-            argv,
-            nullptr,
-            G_SPAWN_SEARCH_PATH,
-            nullptr,
-            nullptr,
-            &standard_output,
-            &standard_error,
-            &wait_status,
-            &spawn_error);
-    g_free(program);
-
-    if (!spawned) {
+    if (!process.successful) {
         error =
-            spawn_error != nullptr && spawn_error->message != nullptr
-                ? std::string(spawn_error->message)
-                : "Unable to run dpkg package-state diagnostics.";
-        g_clear_error(&spawn_error);
-        g_free(standard_output);
-        g_free(standard_error);
+            !process.standard_error.empty()
+                ? single_line(process.standard_error)
+                : "dpkg package-state diagnostics failed.";
         return false;
     }
 
-    GError *status_error = nullptr;
-    const gboolean successful =
-        g_spawn_check_wait_status(wait_status, &status_error);
-    if (!successful) {
-        error =
-            standard_error != nullptr && *standard_error != '\0'
-                ? single_line(standard_error)
-                : status_error != nullptr && status_error->message != nullptr
-                    ? std::string(status_error->message)
-                    : "dpkg package-state diagnostics failed.";
-        g_clear_error(&status_error);
-        g_free(standard_output);
-        g_free(standard_error);
-        return false;
-    }
-
-    if (standard_output != nullptr) {
-        diagnostic = single_line(standard_output);
-    }
-    g_free(standard_output);
-    g_free(standard_error);
+    diagnostic = single_line(process.standard_output);
     return true;
 }
 

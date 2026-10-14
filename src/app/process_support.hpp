@@ -20,6 +20,23 @@ namespace infiltrator::software::app {
     GSubprocessFlags flags,
     std::string &error);
 
+struct SubprocessResult {
+    std::string standard_output;
+    std::string standard_error;
+    bool successful{false};
+};
+
+/*
+ * Run one subprocess to completion while keeping construction, pipe and GError
+ * ownership inside the GUI process boundary. The return value describes the
+ * ability to start and communicate with the process; child exit success is
+ * deliberately separate so each caller retains its product-specific policy.
+ */
+[[nodiscard]] bool run_subprocess_sync(
+    const std::vector<std::string> &arguments,
+    SubprocessResult &result,
+    std::string &error);
+
 } // namespace infiltrator::software::app
 
 #endif

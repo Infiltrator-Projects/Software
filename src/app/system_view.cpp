@@ -40,7 +40,6 @@ struct SystemResult {
     std::vector<PackageRecord> updates;
     std::string error;
     std::string update_warning;
-    bool from_engine{false};
 };
 
 struct SystemTaskData {
@@ -245,7 +244,6 @@ void system_worker(
         result->updates = std::move(loaded.updates);
         result->error = std::move(loaded.error);
         result->update_warning = std::move(loaded.update_warning);
-        result->from_engine = loaded.from_engine;
     }
 
     g_task_return_pointer(
@@ -287,7 +285,6 @@ void system_complete(
 
     const std::string error = result->error;
     const std::string warning = result->update_warning;
-    const bool from_engine = result->from_engine;
     delete result;
 
     rebuild_system(state);
@@ -302,9 +299,7 @@ void system_complete(
             message
                 << state->system.system_records.size()
                 << " kernel, driver and core system components read "
-                << (from_engine
-                        ? "from the shared native package engine."
-                        : "from direct Debian package state.");
+                << "from the shared native package engine.";
             if (!warning.empty()) {
                 message
                     << " Update status: "
@@ -440,53 +435,25 @@ void release_upgrade_plan_worker(
     auto *result =
         new ReleaseUpgradePlanResult{};
 
-    gchar *stdout_text = nullptr;
-    gchar *stderr_text = nullptr;
-    gint wait_status = 0;
-    GError *gerror = nullptr;
-    gchar *argv[] = {
-        const_cast<gchar *>(
-            "/usr/bin/infiltrator-software-release-upgrade"),
-        const_cast<gchar *>("plan"),
-        nullptr
-    };
-    const gboolean spawned =
-        g_spawn_sync(
-            nullptr,
-            argv,
-            nullptr,
-            G_SPAWN_DEFAULT,
-            nullptr,
-            nullptr,
-            &stdout_text,
-            &stderr_text,
-            &wait_status,
-            &gerror);
+    SubprocessResult process;
+    std::string process_error;
+    const bool communicated = run_subprocess_sync(
+        {"/usr/bin/infiltrator-software-release-upgrade", "plan"},
+        process,
+        process_error);
 
-    bool success = spawned != FALSE;
-    if (success) {
-        success =
-            g_spawn_check_wait_status(
-                wait_status,
-                &gerror) != FALSE;
-    }
-
-    if (!success) {
-        if (stderr_text != nullptr &&
-            *stderr_text != '\0') {
-            result->error =
-                single_line(stderr_text);
-        } else if (
-            gerror != nullptr &&
-            gerror->message != nullptr) {
-            result->error =
-                gerror->message;
-        } else {
-            result->error =
-                "Unable to calculate the release-upgrade plan.";
-        }
-    } else if (stdout_text != nullptr) {
-        std::istringstream input(stdout_text);
+    if (!communicated) {
+        result->error =
+            process_error.empty()
+                ? "Unable to calculate the release-upgrade plan."
+                : process_error;
+    } else if (!process.successful) {
+        result->error =
+            !process.standard_error.empty()
+                ? single_line(process.standard_error)
+                : "Unable to calculate the release-upgrade plan.";
+    } else {
+        std::istringstream input(process.standard_output);
         std::string line;
         while (std::getline(input, line)) {
             std::vector<std::string> fields;
@@ -578,10 +545,6 @@ void release_upgrade_plan_worker(
                 "The release-upgrade planner returned an incomplete review plan.";
         }
     }
-
-    g_free(stdout_text);
-    g_free(stderr_text);
-    g_clear_error(&gerror);
 
     g_task_return_pointer(
         task,
@@ -857,20 +820,25 @@ void system_snapshots_clicked(
     auto *state =
         static_cast<WindowState *>(
             user_data);
-    GError *error = nullptr;
-    if (!g_spawn_command_line_async(
-            "pkexec timeshift-gtk",
-            &error) &&
-        state != nullptr &&
+    std::string error;
+    GSubprocess *process = start_subprocess(
+        {"pkexec", "timeshift-gtk"},
+        G_SUBPROCESS_FLAGS_NONE,
+        error);
+    if (process != nullptr) {
+        /* Timeshift owns the interactive snapshot session after launch. */
+        g_object_unref(process);
+        return;
+    }
+
+    if (state != nullptr &&
         state->system.system_status != nullptr) {
         gtk_label_set_text(
             GTK_LABEL(state->system.system_status),
-            error != nullptr &&
-            error->message != nullptr
-                ? error->message
-                : "Timeshift is not installed.");
+            error.empty()
+                ? "Timeshift is not installed."
+                : error.c_str());
     }
-    g_clear_error(&error);
 }
 
 GtkWidget *make_system_page(WindowState *state)

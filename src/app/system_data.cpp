@@ -15,9 +15,7 @@ SystemDataResult load_system_data(const bool refresh_metadata)
     SystemDataResult result;
 
     std::vector<PackageRecord> installed =
-        infiltrator::software::read_installed_packages(
-            result.error,
-            &result.from_engine);
+        infiltrator::software::read_installed_packages(result.error);
     if (result.error.empty()) {
         for (PackageRecord &package : installed) {
             infiltrator::software::classify_package_role(package);

@@ -44,7 +44,7 @@ The package engine exposes current snapshot/generation, state-changed events, re
 
 Software and the panel indicator are clients.
 
-The initial D-Bus service is now implemented. It exposes `GetStatus`, `ListInstalled`, `ListUpdates`, `PlanTransaction` and `ReloadState` on `net.ssmith.infiltrator.software.Engine`, with `StateChanged` and `HealthChanged` signals. Package-state database reads are read-only and do not require clients to own or mutate the database. The service caches update state per generation so multiple clients consume the same calculation.
+The D-Bus service is implemented from the installed interface XML, which is the protocol-schema authority. It exposes status and health, installed/update/kernel snapshots, exact and mixed transaction planning, installed/full refresh and reload controls, and controlled shutdown, with `StateChanged` and `HealthChanged` signals. Package-state database reads are read-only and do not require clients to own or mutate the database. The service caches update state per generation so multiple clients consume the same calculation.
 
 The indicator subscribes to StateChanged and HealthChanged and reads ListUpdates from the same engine generation used by Software. Software's Installed and ordinary Updates paths likewise use the service, and engine-backed update transactions use PlanTransaction. Native reconciliation owns configured-source refresh and generation publication. If the engine cannot provide Installed state, the GUI reports that failure; it does not create a second package-state authority by parsing `/var/lib/dpkg/status` itself.
 

@@ -27,7 +27,7 @@
   <releases>
     <release version="0.3.95" date="2026-10-14">
       <description>
-        <p>Consolidates dependency, repository-source and D-Bus authorities; fixes Multi-Arch removal safety and Installed/Flatpak failure reporting; and removes a read-only dpkg architecture-query subprocess.</p>
+        <p>Consolidates dependency, repository-source, D-Bus, GUI-process and history-path authorities; fixes Multi-Arch removal safety, catalogue cache publication, Installed/Flatpak failure reporting and Cinnamon HTTPS redirect confinement; and advances the qualified Common dependency.</p>
       </description>
     </release>
     <release version="0.3.94" date="2026-10-13">

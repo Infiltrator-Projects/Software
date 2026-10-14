@@ -2,6 +2,7 @@
 #include "app/app_coordinator.hpp"
 #include "app/navigation_controller.hpp"
 #include "app/page_registry.hpp"
+#include "app/process_support.hpp"
 #include "app/ui_components.hpp"
 #include "app/window_state.hpp"
 #include "core/update_policy.hpp"
@@ -266,19 +267,26 @@ void shell_destroy_window_state(gpointer data)
 
 void shell_ensure_update_indicator()
 {
-    gchar *program = g_find_program_in_path("infiltrator-software-tray");
-    if (program == nullptr) return;
-    g_free(program);
-
-    GError *error = nullptr;
-    if (!g_spawn_command_line_async("infiltrator-software-tray", &error)) {
-        if (error != nullptr) {
+    std::string error;
+    GSubprocess *process = start_subprocess(
+        {"infiltrator-software-tray"},
+        G_SUBPROCESS_FLAGS_NONE,
+        error);
+    if (process == nullptr) {
+        if (!error.empty()) {
             g_warning(
                 "Unable to start software update indicator: %s",
-                error->message);
-            g_error_free(error);
+                error.c_str());
         }
+        return;
     }
+
+    /*
+     * The tray is a separately owned long-lived process. Dropping the client
+     * handle does not terminate it; the tray's own single-instance contract
+     * resolves duplicate launch attempts.
+     */
+    g_object_unref(process);
 }
 
 gboolean shell_window_key_pressed(

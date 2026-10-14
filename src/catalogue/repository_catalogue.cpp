@@ -559,12 +559,16 @@ bool RepositoryCatalogue::write_file(
         return false;
     }
 
-    if (!infiltratr_atomic_file_write_bytes(
+    const int status =
+        infiltratr_atomic_file_write_bytes(
             path.c_str(),
             INFILTRATR_ATOMIC_FILE_PRIVATE,
             content.data(),
-            content.size())) {
-        error = "Unable to write the catalogue cache atomically.";
+            content.size());
+    if (status != 0) {
+        error =
+            "Unable to write the catalogue cache atomically (status " +
+            std::to_string(status) + ").";
         return false;
     }
     return true;

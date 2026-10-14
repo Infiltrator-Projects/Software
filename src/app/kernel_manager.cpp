@@ -10,7 +10,6 @@
 #include <gio/gio.h>
 
 #include <algorithm>
-#include <filesystem>
 #include <optional>
 #include <set>
 #include <sstream>
@@ -94,23 +93,17 @@ std::string kernel_key(
     return kernel.version + "|" + kernel.kernel_type;
 }
 
-std::filesystem::path history_path()
-{
-    const char *data = g_get_user_data_dir();
-    if (data == nullptr || *data == '\0') return {};
-    return std::filesystem::path(data) /
-        "infiltrator-software" / "history.sqlite3";
-}
-
 void record_history(
     const TransactionPlan &plan,
     const bool success,
     const std::string_view message)
 {
-    const std::filesystem::path path = history_path();
-    if (path.empty() || plan.items.empty()) return;
+    const std::string path = user_transaction_history_path();
+    if (path.empty() || plan.items.empty()) {
+        return;
+    }
 
-    TransactionHistoryStore store(path.string());
+    TransactionHistoryStore store(path);
     std::string error;
     if (!store.append(plan, success, message, error)) {
         g_warning(

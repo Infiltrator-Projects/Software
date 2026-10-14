@@ -14,6 +14,11 @@ infiltrator-software (0.3.95) unstable; urgency=high
     and generate the service's embedded introspection data from that exact file.
   * Add focused Multi-Arch removal regressions and strengthen architecture and
     documentation contracts around the consolidated ownership boundaries.
+  * Complete a repository-wide forensic pass: remove stale dual-source state,
+    consolidate GUI subprocess construction and user history-path ownership,
+    and correct catalogue-cache handling of Common's errno-style atomic writer.
+  * Fail closed on Cinnamon Spice HTTPS redirects, advance the exact Common pin
+    to 1.19.42, and align maintained state/package documentation with reality.
 
  -- Shannon Smith <infiltratr@yandex.com>  Wed, 14 Oct 2026 08:24:00 +1100
 

@@ -73,6 +73,29 @@ bool curl_ready()
     return status == CURLE_OK;
 }
 
+bool configure_https_only(CURL *curl)
+{
+    if (curl == nullptr) {
+        return false;
+    }
+#if LIBCURL_VERSION_NUM >= 0x075500
+    const CURLcode protocols =
+        curl_easy_setopt(curl, CURLOPT_PROTOCOLS_STR, "https");
+    const CURLcode redirects =
+        curl_easy_setopt(curl, CURLOPT_REDIR_PROTOCOLS_STR, "https");
+#else
+    const CURLcode protocols =
+        curl_easy_setopt(curl, CURLOPT_PROTOCOLS, CURLPROTO_HTTPS);
+    const CURLcode redirects =
+        curl_easy_setopt(curl, CURLOPT_REDIR_PROTOCOLS, CURLPROTO_HTTPS);
+#endif
+    const CURLcode redirect_limit =
+        curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 5L);
+    return protocols == CURLE_OK &&
+           redirects == CURLE_OK &&
+           redirect_limit == CURLE_OK;
+}
+
 struct TextDownloadBuffer {
     std::string *text{};
     std::size_t maximum{0U};
@@ -124,6 +147,11 @@ bool fetch_text(
     CURL *curl = curl_easy_init();
     if (curl == nullptr) {
         error = "Unable to create the HTTPS request.";
+        return false;
+    }
+    if (!configure_https_only(curl)) {
+        curl_easy_cleanup(curl);
+        error = "Unable to enforce HTTPS-only Cinnamon Spice transport.";
         return false;
     }
 
@@ -933,6 +961,12 @@ bool download_archive(
     if (curl == nullptr) {
         std::fclose(file);
         error = "Unable to create the Cinnamon Spice HTTPS request.";
+        return false;
+    }
+    if (!configure_https_only(curl)) {
+        curl_easy_cleanup(curl);
+        std::fclose(file);
+        error = "Unable to enforce HTTPS-only Cinnamon Spice transport.";
         return false;
     }
 

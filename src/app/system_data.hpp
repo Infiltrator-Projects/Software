@@ -14,7 +14,6 @@ struct SystemDataResult {
     std::vector<PackageRecord> updates;
     std::string error;
     std::string update_warning;
-    bool from_engine{false};
 };
 
 SystemDataResult load_system_data(bool refresh_metadata);

@@ -14,5 +14,6 @@ Recommends: flatpak, timeshift
 Description: unified Infiltrator software manager and updater
  Infiltrator Software provides one graphical surface for software discovery,
  installed applications, updates, system components, repositories, history
- and repair. The native Debian compatibility engine is replacing APT command
- dependencies while retaining Debian repositories and .deb compatibility.
+ and repair. The native Debian engine owns package selection, dependency resolution and
+ reviewed plans; APT remains a constrained privileged executor for verified
+ .deb transactions.

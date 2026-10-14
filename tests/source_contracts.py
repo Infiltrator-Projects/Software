@@ -77,6 +77,8 @@ guard = text("src/helper/apt_plan_guard.cpp")
 external_updates = text("src/external/external_updates.cpp")
 cinnamon_native = text("src/external/cinnamon_spices.cpp")
 system_catalogue = text("src/catalogue/system_catalogue.cpp")
+repository_catalogue = text("src/catalogue/repository_catalogue.cpp")
+kernel_manager = text("src/app/kernel_manager.cpp")
 auto_updater = text("src/automation/main.cpp")
 maintenance = text("src/automation/maintenance.cpp")
 session_updater = text("src/session/main.cpp")
@@ -138,6 +140,7 @@ assert "DebianInstalledState::read" not in installed_inventory
 assert '"engine/debian_installed_state.hpp"' not in installed_inventory
 assert "from_engine" not in installed_inventory
 assert "from_engine" not in installed_controller
+assert "from_engine" not in app
 assert '"Debian state"' not in installed_controller
 assert '"Debian + Flatpak"' not in installed_controller
 assert '"engine/kernel_inventory.hpp"' not in engine_client_hpp
@@ -173,10 +176,22 @@ assert includes(updates_view, "app/page_support.hpp")
 assert "destroy_installed_controller" in installed_controller
 
 # GUI subprocess ownership has exactly one low-level construction boundary.
+# Cover GSubprocess and legacy g_spawn entry points so choosing another GLib
+# constructor cannot silently bypass the ownership contract.
 assert "g_subprocess_newv(" in process_support
 for path in Path("src/app").glob("*.cpp"):
-    if path.name != "process_support.cpp":
-        assert "g_subprocess_newv(" not in path.read_text()
+    if path.name == "process_support.cpp":
+        continue
+    source = path.read_text()
+    for low_level_process_api in (
+        "g_subprocess_new(",
+        "g_subprocess_newv(",
+        "g_subprocess_launcher_new(",
+        "g_spawn_",
+    ):
+        assert low_level_process_api not in source, (
+            f"{path} bypasses app/process_support with {low_level_process_api}"
+        )
 
 # All Debian deb822 consumers share one syntax authority. Read-only inventory
 # and privileged mutation remain separate link capabilities, and the engine
@@ -302,6 +317,18 @@ for column in (
 for token in ("cached_release_current", "verify_payload", "read_cached"):
     assert token in repository
 
+# Common's atomic POSIX writer is errno-style: zero is success. Reversing this
+# contract makes successful cache publication look like failure and actual
+# write failures look successful.
+atomic_write = re.search(
+    r"const int (?P<status>[A-Za-z_]\w*)\s*=\s*"
+    r"infiltratr_atomic_file_write_bytes\(.*?\);\s*"
+    r"if \((?P=status) != 0\)",
+    repository_catalogue,
+    re.DOTALL,
+)
+assert atomic_write is not None
+
 # External ecosystems stay explicit. Flatpak scope and exact Cinnamon update
 # ownership are behavioural-test concerns, while these symbols guard against a
 # silent fallback to removed external updater processes.
@@ -317,6 +344,9 @@ for token in (
 assert '"cinnamon-spice-updater"' not in external_updates
 assert 'std::string("flatpak:")' in system_catalogue
 assert "installed_flatpaks" in system_catalogue
+assert "CURLOPT_PROTOCOLS_STR" in cinnamon_native
+assert "CURLOPT_REDIR_PROTOCOLS_STR" in cinnamon_native
+assert cinnamon_native.count("if (!configure_https_only(curl))") == cinnamon_native.count("curl_easy_perform(curl)")
 
 # Release upgrade/recovery and automatic maintenance retain explicit durable
 # state and exact execution boundaries.
@@ -360,6 +390,8 @@ for source in (auto_updater, maintenance, cli, helper):
     assert "kSystemSoftwarePreferencesPath" in source
 assert "system_transaction_history_path" in auto_updater
 assert "system_transaction_history_path" in maintenance
+assert "history.sqlite3" not in kernel_manager
+assert "user_transaction_history_path()" in kernel_manager
 assert "system_on_battery" in session_updater
 assert "system_on_battery" in auto_updater
 assert "refresh_installed" in tray
