@@ -65,11 +65,34 @@ jobs:
       - name: Build and test Debian package
         shell: bash
         run: |
-          set -euo pipefail
+          set -uo pipefail
           chmod +x debian/rules
           # debian/rules owns the canonical release configuration and runs CTest.
           # CI compiles once and releases exactly the package that passed tests.
-          dpkg-buildpackage -us -uc -b
+          build_log="$RUNNER_TEMP/dpkg-buildpackage.log"
+          set +e
+          dpkg-buildpackage -us -uc -b 2>&1 | tee "$build_log"
+          status=${PIPESTATUS[0]}
+          set -e
+          if [[ "$status" -ne 0 ]]; then
+            echo "::group::Debian build failure context"
+            tail -n 120 "$build_log" || true
+            echo "::endgroup::"
+
+            # GitHub's job-log download is not always available to repository
+            # automation. Surface the actual compiler/CTest/package diagnostics
+            # as check annotations as well as ordinary log text so a failed
+            # build remains diagnosable through the checks API.
+            diagnostics="$(grep -E '(^|: )(error:|fatal error:)|undefined reference|FAILED:|CMake Error|Assertion|assertion|Tests Failed|[0-9]+% tests passed|Error [0-9]+' "$build_log" | tail -n 20 || true)"
+            if [[ -z "$diagnostics" ]]; then
+              diagnostics="$(tail -n 40 "$build_log")"
+            fi
+            diagnostics="${diagnostics//'%'/'%25'}"
+            diagnostics="${diagnostics//$'\r'/'%0D'}"
+            diagnostics="${diagnostics//$'\n'/'%0A'}"
+            echo "::error title=Debian build/test failure::$diagnostics"
+            exit "$status"
+          fi
 
       - name: Verify Debian package contract
         shell: bash
