@@ -21,12 +21,19 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           path = Path('.github/workflows/forensic-repair.yml')
-          text = path.read_text()
-          old = '== \\n       cinnamon_native.count("curl_easy_perform(curl)")'
-          new = '== cinnamon_native.count("curl_easy_perform(curl)")'
-          if text.count(old) != 1:
-              raise SystemExit(f'expected one malformed assertion, found {text.count(old)}')
-          path.write_text(text.replace(old, new, 1))
+          lines = path.read_text().splitlines()
+          needle = 'assert cinnamon_native.count("configure_https_only(curl);")'
+          matches = [i for i, line in enumerate(lines) if needle in line]
+          if len(matches) != 1:
+              raise SystemExit(f'expected one malformed assertion line, found {len(matches)}')
+          index = matches[0]
+          if index + 1 >= len(lines) or 'cinnamon_native.count("curl_easy_perform(curl)")' not in lines[index + 1]:
+              raise SystemExit('malformed assertion continuation was not adjacent')
+          prefix = lines[index][:lines[index].index('assert')]
+          lines[index:index + 2] = [
+              prefix + 'assert cinnamon_native.count("configure_https_only(curl);") == cinnamon_native.count("curl_easy_perform(curl)")'
+          ]
+          path.write_text('\n'.join(lines) + '\n')
           PY
           git rm .github/workflows/repair-bootstrap.yml
           git config user.name "Shannon Smith"
