@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Contracts for maintained architecture documentation.
+"""Contracts for maintained architecture documentation and repository policy.
 
 These checks protect statements that materially define ownership and failure
 semantics. They deliberately avoid requiring preferred prose: source tests own
-implementation boundaries; this file only rejects maintained documentation that
-creates a second package-state authority, a duplicate schema-version truth, or
+implementation boundaries; this file rejects maintained documentation or
+repository structure that creates a second authority, stale version truth, or
 an incomplete maintained-document index.
 """
 
@@ -18,6 +18,7 @@ def text(path: str) -> str:
 
 
 document_index = text("docs/README.md")
+readme = text("README.md")
 maintained = {
     "architecture": text("docs/ARCHITECTURE.md"),
     "package_engine": text("docs/PACKAGE_ENGINE.md"),
@@ -36,6 +37,26 @@ for path in sorted(Path("docs").glob("*.md")):
     assert f"({path.name})" in document_index, (
         f"docs/README.md does not index maintained document {path.name}"
     )
+
+# Release documentation defines .github/workflows/ci.yml as the one permanent
+# verification/publication authority. Temporary repair or publication workflows
+# are release state, not harmless clutter: leaving one behind creates another
+# executable path around the qualified-artifact contract.
+workflows = {
+    path.name
+    for path in Path(".github/workflows").iterdir()
+    if path.is_file()
+}
+assert workflows == {"ci.yml"}, (
+    f"unexpected permanent workflow set: {sorted(workflows)}"
+)
+
+# Common is pinned by the gitlink and Common's own VERSION file. README may
+# describe that contract, but must not copy the current Common version into a
+# second manually maintained source of truth.
+assert re.search(r"\bCommon\s+[0-9]+\.[0-9]+\.[0-9]+\b", readme) is None, (
+    "README duplicates the authoritative Common version"
+)
 
 # Installed inventory is engine-owned. Historical migration prose may correctly
 # say that the engine reads dpkg status, and current prose may explicitly deny a
