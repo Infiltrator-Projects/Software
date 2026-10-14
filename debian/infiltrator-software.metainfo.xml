@@ -8,7 +8,7 @@
   <project_license>GPL-3.0-or-later</project_license>
 
   <description>
-    <p>Infiltrator Software provides one coherent surface for discovering, installing, updating and repairing software while keeping package-system mechanics isolated behind replaceable backend contracts.</p>
+    <p>Infiltrator Software provides one coherent surface for discovering, installing, updating and repairing software while keeping package-system mechanics behind explicit engine, service and privileged-execution boundaries.</p>
     <p>The Linux implementation merges verified Infiltrator catalogue records, host AppStream applications and configured Flatpak metadata while presenting Discover, Installed, Updates, System, Repositories, History and Repair in one application.</p>
   </description>
 
