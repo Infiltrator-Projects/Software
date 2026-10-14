@@ -765,32 +765,30 @@ void repository_mirror_settings_clicked(
     GtkButton *,
     gpointer user_data)
 {
-    auto *state =
-        static_cast<WindowState *>(
-            user_data);
-    GError *error = nullptr;
-    if (!g_spawn_command_line_async(
-            "pkexec mintsources",
-            &error)) {
-        if (state != nullptr &&
-            state->repositories.status != nullptr) {
+    auto *state = static_cast<WindowState *>(user_data);
+    std::string error;
+    GSubprocess *process = start_subprocess(
+        {"pkexec", "mintsources"},
+        G_SUBPROCESS_FLAGS_NONE,
+        error);
+    if (process == nullptr) {
+        if (state != nullptr && state->repositories.status != nullptr) {
             gtk_label_set_text(
-                GTK_LABEL(
-                    state->repositories.status),
-                error != nullptr &&
-                error->message != nullptr
-                    ? error->message
-                    : "Linux Mint mirror settings are unavailable.");
+                GTK_LABEL(state->repositories.status),
+                error.empty()
+                    ? "Linux Mint mirror settings are unavailable."
+                    : error.c_str());
         }
-    } else if (
-        state != nullptr &&
-        state->repositories.status != nullptr) {
+        return;
+    }
+
+    /* mintsources owns its own lifetime after successful construction. */
+    g_object_unref(process);
+    if (state != nullptr && state->repositories.status != nullptr) {
         gtk_label_set_text(
-            GTK_LABEL(
-                state->repositories.status),
+            GTK_LABEL(state->repositories.status),
             "Mirror settings opened. Refresh repositories after changing a mirror.");
     }
-    g_clear_error(&error);
 }
 
 GtkWidget *make_repositories_page(WindowState *state)
