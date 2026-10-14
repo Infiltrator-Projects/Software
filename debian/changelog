@@ -19,6 +19,10 @@ infiltrator-software (0.3.95) unstable; urgency=high
     and correct catalogue-cache handling of Common's errno-style atomic writer.
   * Fail closed on Cinnamon Spice HTTPS redirects, advance the exact Common pin
     to 1.19.42, and align maintained state/package documentation with reality.
+  * Remove the obsolete self-modifying forensic repair workflow and make the
+    single permanent CI/release workflow an executable repository contract.
+  * Remove duplicated Common-version prose and retired backend terminology so
+    the gitlink and current engine/service boundaries remain the only truths.
 
  -- Shannon Smith <infiltratr@yandex.com>  Wed, 14 Oct 2026 08:24:00 +1100
 
