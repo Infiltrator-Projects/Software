@@ -8,7 +8,7 @@ Infiltrator Software is the software-management application for the Infiltrator 
 
 **Current source version:** 0.3.95<br>
 **Language:** C++17 application/core with native GTK4 Linux shell; C11 Common foundation  
-**Shared foundation:** Common 1.19.38<br>
+**Shared foundation:** exact Infiltratr Common gitlink; Common's own `VERSION` file is authoritative<br>
 **Current package compatibility:** Debian repositories and .deb packages; Flatpak and AppStream catalogue integration  
 **0.4 direction:** native Infiltrator Debian-compatibility engine for inventory, refresh and resolution; constrained compatibility execution for final .deb mutation  
 **Licence:** GPL-3.0-or-later
@@ -126,7 +126,7 @@ See [Transactions](docs/TRANSACTIONS.md).
 
 ## Appearance
 
-Software uses the Common 1.19.38 appearance contract. Follow OS, Day and Night modes share project-family typography, semantic colours and structural metrics.
+Software consumes the appearance contract from the pinned Infiltratr Common gitlink. Follow OS, Day and Night modes share project-family typography, semantic colours and structural metrics.
 
 Discover is visual and spacious. Installed and Updates are denser working views. System separates critical components clearly. Repositories behaves like a source/settings surface. History is chronological. Repair presents health first and problems only when they exist.
 
@@ -144,7 +144,7 @@ See [UI Design](docs/UI_DESIGN.md) and the [Software UI Vision](docs/UI_VISION.m
     ├── sources/             repository/source modelling and narrow mutation logic
     ├── helper/              constrained privileged compatibility helpers
     ├── tray/                XApp desktop-panel indicator
-    └── infiltratr-common/   exact Common 1.19.38 gitlink
+    └── infiltratr-common/   exact Common gitlink
 
     tests/                   regression and contract tests
     docs/                    architecture and product contracts
