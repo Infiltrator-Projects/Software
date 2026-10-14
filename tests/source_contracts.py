@@ -32,7 +32,7 @@ def local_includes(source: str) -> set[str]:
 
 def cmake_target_body(cmake: str, command: str, target: str) -> str:
     pattern = re.compile(
-        rf"\b{re.escape(command)}\s*\(\s*{re.escape(target)}\b(.*?)\)",
+        rf"\b{re.escape(command)}\s*\(\s*{re.escape(target)}(?=\s|\))(.*?)\)",
         re.DOTALL,
     )
     bodies = [match.group(1) for match in pattern.finditer(cmake)]
