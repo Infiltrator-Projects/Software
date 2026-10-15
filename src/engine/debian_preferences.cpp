@@ -511,6 +511,8 @@ DebianAptPreferences DebianAptPreferences::read(
         configuration->path(
             "Dir::Etc::Preferences",
             "preferences");
+    // With stock Dir::Etc this default resolves to /etc/apt/preferences.d;
+    // DebianAptConfiguration::path still honours Dir::Etc and RootDir overrides.
     const std::filesystem::path directory =
         configuration->path(
             "Dir::Etc::PreferencesParts",
