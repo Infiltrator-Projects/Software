@@ -46,6 +46,8 @@ add_software_test(software-debian-version-test
     debian_version_test.cpp software-engine)
 add_software_test(software-debian-candidate-test
     debian_candidate_test.cpp software-engine)
+add_software_test(software-debian-apt-configuration-test
+    debian_apt_configuration_test.cpp software-engine)
 add_software_test(software-debian-phased-updates-test
     debian_phased_updates_test.cpp software-engine)
 add_software_test(software-debian-preferences-test

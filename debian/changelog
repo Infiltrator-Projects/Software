@@ -1,3 +1,19 @@
+infiltrator-software (0.3.96) unstable; urgency=high
+
+  * Replace the read-only apt-config subprocess and duplicate phased-update
+    parser with one native APT configuration authority that follows APT_CONFIG,
+    fragment, main-file and apt-get binary-specific precedence.
+  * Respect configured APT preferences paths and official .pref/.conf fragment
+    filename rules so compatibility policy cannot drift from host configuration.
+  * Make native policy-process boundaries executable architecture contracts and
+    add focused configuration precedence/path regression coverage.
+  * Strengthen the engine smoke test from process liveness to a real GetStatus
+    round trip on the declared D-Bus name, object and interface.
+  * Make GitHub release recovery byte-immutable: verify existing asset SHA-256
+    digests, upload only missing assets, and never clobber same-version bytes.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Thu, 15 Oct 2026 15:23:00 +1100
+
 infiltrator-software (0.3.95) unstable; urgency=high
 
   * Route pure-removal final-state validation through the canonical dependency

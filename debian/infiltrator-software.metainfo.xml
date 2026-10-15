@@ -25,6 +25,11 @@
   <url type="homepage">https://github.com/Infiltrator-Projects/Software</url>
 
   <releases>
+    <release version="0.3.96" date="2026-10-15">
+      <description>
+        <p>Consolidates native APT configuration policy, honours host precedence and configured preference paths without apt-config subprocesses, strengthens D-Bus qualification, and makes same-version release assets byte-immutable.</p>
+      </description>
+    </release>
     <release version="0.3.95" date="2026-10-14">
       <description>
         <p>Consolidates dependency, repository-source, D-Bus, GUI-process and history-path authorities; fixes Multi-Arch removal safety, catalogue cache publication, Installed/Flatpak failure reporting and Cinnamon HTTPS redirect confinement; and advances the qualified Common dependency.</p>

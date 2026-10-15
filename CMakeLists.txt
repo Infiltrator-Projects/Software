@@ -188,6 +188,7 @@ add_library(software-engine STATIC
     src/engine/debian_version.cpp
     src/engine/debian_candidate.cpp
     src/engine/package_policy.cpp
+    src/engine/debian_apt_configuration.cpp
     src/engine/debian_phased_updates.cpp
     src/engine/debian_preferences.cpp
     src/engine/debian_dependency.cpp

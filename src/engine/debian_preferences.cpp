@@ -2,8 +2,7 @@
 #include "engine/debian_preferences.hpp"
 
 #include "core/text.hpp"
-
-#include <glib.h>
+#include "engine/debian_apt_configuration.hpp"
 
 #include <algorithm>
 #include <charconv>
@@ -358,14 +357,6 @@ bool parse_pin(
     return false;
 }
 
-bool has_suffix(
-    const std::string_view value,
-    const std::string_view suffix)
-{
-    return value.size() >= suffix.size() &&
-           value.substr(value.size() - suffix.size()) == suffix;
-}
-
 bool preference_filename(
     const std::filesystem::path &path)
 {
@@ -373,14 +364,6 @@ bool preference_filename(
     if (name.empty() || name.front() == '.') {
         return false;
     }
-    if (name.back() == '~' ||
-        has_suffix(name, ".bak") ||
-        has_suffix(name, ".disabled") ||
-        has_suffix(name, ".save") ||
-        has_suffix(name, ".distUpgrade")) {
-        return false;
-    }
-
     for (const char raw : name) {
         const unsigned char ch =
             static_cast<unsigned char>(raw);
@@ -390,7 +373,8 @@ bool preference_filename(
         }
         return false;
     }
-    return true;
+    const std::string extension = path.extension().string();
+    return extension.empty() || extension == ".pref";
 }
 
 bool read_text(
@@ -416,90 +400,6 @@ bool read_text(
     }
 
     content = stream.str();
-    return true;
-}
-
-bool read_default_release(
-    std::string &release,
-    std::string &error)
-{
-    release.clear();
-    gchar *program = g_find_program_in_path("apt-config");
-    if (program == nullptr) {
-        return true;
-    }
-
-    gchar *argv[] = {
-        program,
-        const_cast<gchar *>("shell"),
-        const_cast<gchar *>("INFILTRATOR_DEFAULT_RELEASE"),
-        const_cast<gchar *>("APT::Default-Release"),
-        nullptr};
-    gchar *standard_output = nullptr;
-    gchar *standard_error = nullptr;
-    gint wait_status = 0;
-    GError *spawn_error = nullptr;
-    const gboolean spawned =
-        g_spawn_sync(
-            nullptr,
-            argv,
-            nullptr,
-            G_SPAWN_DEFAULT,
-            nullptr,
-            nullptr,
-            &standard_output,
-            &standard_error,
-            &wait_status,
-            &spawn_error);
-    const bool exited_ok =
-        spawned != FALSE &&
-        g_spawn_check_wait_status(
-            wait_status, &spawn_error) != FALSE;
-    if (!exited_ok) {
-        error =
-            spawn_error != nullptr &&
-                spawn_error->message != nullptr
-                ? std::string(spawn_error->message)
-                : "apt-config could not read APT::Default-Release.";
-        g_free(program);
-        g_free(standard_output);
-        g_free(standard_error);
-        g_clear_error(&spawn_error);
-        return false;
-    }
-
-    std::string output =
-        standard_output == nullptr
-            ? std::string{}
-            : trim(standard_output);
-    g_free(program);
-    g_free(standard_output);
-    g_free(standard_error);
-    g_clear_error(&spawn_error);
-
-    if (output.empty()) {
-        return true;
-    }
-    const std::size_t equals = output.find('=');
-    if (equals == std::string::npos) {
-        error =
-            "apt-config returned malformed APT::Default-Release output.";
-        return false;
-    }
-
-    std::string value = trim(
-        std::string_view(output).substr(equals + 1U));
-    if (!value.empty() && value.back() == ';') {
-        value.pop_back();
-        value = trim(value);
-    }
-    if (value.size() >= 2U &&
-        ((value.front() == '\'' && value.back() == '\'') ||
-         (value.front() == '"' && value.back() == '"'))) {
-        value =
-            value.substr(1U, value.size() - 2U);
-    }
-    release = std::move(value);
     return true;
 }
 
@@ -600,16 +500,28 @@ DebianAptPreferences DebianAptPreferences::read(
     DebianAptPreferences result;
     error.clear();
 
+    const auto configuration =
+        DebianAptConfiguration::read(error);
+    if (!configuration.has_value()) {
+        return {};
+    }
+
     std::vector<std::filesystem::path> files;
-    const std::filesystem::path main{"/etc/apt/preferences"};
+    const std::filesystem::path main =
+        configuration->path(
+            "Dir::Etc::Preferences",
+            "preferences");
+    const std::filesystem::path directory =
+        configuration->path(
+            "Dir::Etc::PreferencesParts",
+            "preferences.d");
+
     std::error_code ec;
     if (std::filesystem::is_regular_file(main, ec) && !ec) {
         files.emplace_back(main);
     }
     ec.clear();
 
-    const std::filesystem::path directory{
-        "/etc/apt/preferences.d"};
     if (std::filesystem::is_directory(directory, ec) && !ec) {
         for (const auto &entry :
              std::filesystem::directory_iterator(
@@ -655,11 +567,9 @@ DebianAptPreferences DebianAptPreferences::read(
         result.append(std::move(parsed));
     }
 
-    if (!read_default_release(
-            result.default_release_,
-            error)) {
-        return {};
-    }
+    result.default_release_ =
+        configuration->value("APT::Default-Release")
+            .value_or(std::string{});
     return result;
 }
 

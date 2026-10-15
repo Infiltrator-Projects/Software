@@ -2,23 +2,19 @@
 #include "engine/debian_phased_updates.hpp"
 
 #include "core/text.hpp"
+#include "engine/debian_apt_configuration.hpp"
 
-#include <algorithm>
-#include <cctype>
-#include <filesystem>
 #include <fstream>
 #include <random>
-#include <sstream>
 #include <string>
 #include <string_view>
 #include <utility>
-#include <vector>
 
 namespace infiltrator::software {
 namespace {
 
-using text::trim;
 using text::lower_ascii;
+using text::trim;
 
 bool bool_value(
     const std::string_view value,
@@ -38,125 +34,24 @@ bool bool_value(
     return false;
 }
 
-std::string unquote(std::string value)
+bool configured_boolean(
+    const DebianAptConfiguration &configuration,
+    const std::string_view key,
+    bool &value,
+    std::string &error)
 {
-    value = trim(value);
-    if (value.size() >= 2U &&
-        ((value.front() == '"' && value.back() == '"') ||
-         (value.front() == '\'' && value.back() == '\''))) {
-        value =
-            value.substr(1U, value.size() - 2U);
+    const auto configured = configuration.value(key);
+    if (!configured.has_value()) {
+        return true;
     }
-    return value;
-}
-
-void parse_config_line(
-    std::string line,
-    std::string &machine_id,
-    bool &always_include,
-    bool &never_include)
-{
-    const std::size_t slash = line.find("//");
-    const std::size_t hash = line.find('#');
-    std::size_t comment = std::string::npos;
-    if (slash != std::string::npos) {
-        comment = slash;
-    }
-    if (hash != std::string::npos) {
-        comment =
-            comment == std::string::npos
-                ? hash
-                : std::min(comment, hash);
-    }
-    if (comment != std::string::npos) {
-        line.erase(comment);
-    }
-
-    line = trim(line);
-    if (line.empty()) {
-        return;
-    }
-    if (!line.empty() && line.back() == ';') {
-        line.pop_back();
-    }
-
-    const std::size_t split =
-        line.find_first_of(" \t");
-    if (split == std::string::npos) {
-        return;
-    }
-
-    const std::string key =
-        lower_ascii(line.substr(0U, split));
-    const std::string value =
-        unquote(line.substr(split + 1U));
-
-    if (key == "apt::machine-id") {
-        machine_id = value;
-        return;
-    }
-
-    bool parsed = false;
-    if (!bool_value(value, parsed)) {
-        return;
-    }
-
-    if (key ==
-        "apt::get::always-include-phased-updates") {
-        always_include = parsed;
-    } else if (
-        key ==
-        "update-manager::always-include-phased-updates") {
-        always_include = parsed;
-    } else if (
-        key ==
-        "apt::get::never-include-phased-updates") {
-        never_include = parsed;
-    } else if (
-        key ==
-        "update-manager::never-include-phased-updates") {
-        never_include = parsed;
-    }
-}
-
-bool readable_config_file(
-    const std::filesystem::path &path)
-{
-    const std::string name = path.filename().string();
-    if (name.empty() || name.front() == '.' ||
-        name.back() == '~') {
-        return false;
-    }
-    for (const char raw : name) {
-        const unsigned char ch =
-            static_cast<unsigned char>(raw);
-        if (std::isalnum(ch) != 0 ||
-            ch == '-' || ch == '_') {
-            continue;
-        }
+    if (!bool_value(*configured, value)) {
+        error =
+            "APT configuration option " +
+            std::string(key) +
+            " has an invalid boolean value.";
         return false;
     }
     return true;
-}
-
-void read_config_file(
-    const std::filesystem::path &path,
-    std::string &machine_id,
-    bool &always_include,
-    bool &never_include)
-{
-    std::ifstream input(path);
-    if (!input) {
-        return;
-    }
-    std::string line;
-    while (std::getline(input, line)) {
-        parse_config_line(
-            std::move(line),
-            machine_id,
-            always_include,
-            never_include);
-    }
 }
 
 std::string read_machine_id()
@@ -175,48 +70,44 @@ DebianPhasedUpdatesPolicy
 DebianPhasedUpdatesPolicy::read(std::string &error)
 {
     error.clear();
+    const auto configuration =
+        DebianAptConfiguration::read(error);
+    if (!configuration.has_value()) {
+        return {};
+    }
 
-    std::string machine_id;
+    std::string machine_id =
+        configuration->value("APT::Machine-ID")
+            .value_or(std::string{});
     bool always_include = false;
     bool never_include = false;
 
-    read_config_file(
-        "/etc/apt/apt.conf",
-        machine_id,
-        always_include,
-        never_include);
-
-    std::error_code ec;
-    const std::filesystem::path directory{
-        "/etc/apt/apt.conf.d"};
-    if (std::filesystem::is_directory(directory, ec) && !ec) {
-        std::vector<std::filesystem::path> files;
-        for (const auto &entry :
-             std::filesystem::directory_iterator(
-                 directory, ec)) {
-            if (ec) {
-                break;
-            }
-            if (entry.is_regular_file(ec) &&
-                !ec &&
-                readable_config_file(entry.path())) {
-                files.emplace_back(entry.path());
-            }
-            ec.clear();
-        }
-        std::sort(files.begin(), files.end());
-        for (const auto &path : files) {
-            read_config_file(
-                path,
-                machine_id,
-                always_include,
-                never_include);
-        }
+    if (!configured_boolean(
+            *configuration,
+            "APT::Get::Always-Include-Phased-Updates",
+            always_include,
+            error) ||
+        !configured_boolean(
+            *configuration,
+            "APT::Get::Never-Include-Phased-Updates",
+            never_include,
+            error)) {
+        return {};
     }
-    if (ec) {
-        error =
-            "Unable to enumerate APT configuration for phased updates: " +
-            ec.message();
+
+    // Mint Update Manager historically exposes aliases for the same policy.
+    // When present they are later compatibility inputs and therefore override
+    // the generic APT values, matching the previous Software behaviour.
+    if (!configured_boolean(
+            *configuration,
+            "Update-Manager::Always-Include-Phased-Updates",
+            always_include,
+            error) ||
+        !configured_boolean(
+            *configuration,
+            "Update-Manager::Never-Include-Phased-Updates",
+            never_include,
+            error)) {
         return {};
     }
 

@@ -125,8 +125,6 @@ identity() {
     esac
 
     if [[ "$release" == true ]]; then
-        # Pull tag state only for publication/recovery. Pull requests and other
-        # verification-only runs do not need an extra network dependency.
         git fetch --force --tags origin
         existing_tag_sha="$(tag_sha "$version")"
         if [[ -n "$existing_tag_sha" && "$existing_tag_sha" != "$expected_sha" ]]; then
@@ -160,9 +158,6 @@ source_bundle() {
     rm -rf "${REPO_ROOT}/dist" "$staging"
     mkdir -p "$out" "$staging"
 
-    # Build the source archive from Git objects rather than the working tree.
-    # Local build directories, editor files and other untracked state therefore
-    # cannot leak into a release even when this command is run outside CI.
     git archive --format=tar --prefix="Software-${version}/" "$expected_sha" \
         | tar -xf - -C "$staging"
     mkdir -p "$root/src/infiltratr-common"
@@ -251,10 +246,13 @@ publish_github() {
     local release_dir="$3"
     local repository="$4"
     local tag="v${version}"
-    local existing_tag_sha actual_assets expected package package_name
+    local existing_tag_sha expected package package_name remote_rows name digest local_digest
+    local -a missing_paths
+    declare -A seen
 
     require_command gh
     require_command git
+    require_command sha256sum
     [[ -n "${GH_TOKEN:-}" ]] || die "GH_TOKEN is required for GitHub publication."
     verify_bundle "$version" "$expected_sha" "$release_dir"
     package="$(release_package "$version" "$release_dir")"
@@ -275,23 +273,62 @@ publish_github() {
             --latest
     fi
 
-    actual_assets="$(gh release view "$tag" --repo "$repository" \
-        --json assets --jq '.assets[].name' | sort)"
-    if [[ "$actual_assets" != "$expected" ]]; then
-        # Recovery from a previous partial upload is intentionally idempotent.
+    remote_rows="$(gh api \
+        -H 'Accept: application/vnd.github+json' \
+        "repos/${repository}/releases/tags/${tag}" \
+        --jq '.assets[] | [.name, (.digest // "")] | @tsv')"
+
+    while IFS=$'\t' read -r name digest; do
+        [[ -n "$name" ]] || continue
+        grep -Fxq -- "$name" <<< "$expected" || \
+            die "Release $tag contains unexpected asset '$name'."
+        [[ -f "${release_dir}/${name}" ]] || \
+            die "Local verified release asset is missing: $name"
+        local_digest="sha256:$(sha256sum "${release_dir}/${name}" | awk '{print $1}')"
+        [[ -n "$digest" ]] || \
+            die "GitHub did not report a digest for existing immutable asset '$name'."
+        [[ "$digest" == "$local_digest" ]] || \
+            die "Existing release asset '$name' differs from the verified bundle; release assets are immutable."
+        seen["$name"]=1
+    done <<< "$remote_rows"
+
+    missing_paths=()
+    while IFS= read -r name; do
+        [[ -n "$name" ]] || continue
+        if [[ -z "${seen[$name]+x}" ]]; then
+            missing_paths+=("${release_dir}/${name}")
+        fi
+    done <<< "$expected"
+
+    if [[ ${#missing_paths[@]} -gt 0 ]]; then
         gh release upload "$tag" \
-            "$package" \
-            "${release_dir}/software_${version}_source.tar.gz" \
-            "${release_dir}/LICENSE.txt" \
-            "${release_dir}/SHA256SUMS.txt" \
-            --repo "$repository" \
-            --clobber
-        actual_assets="$(gh release view "$tag" --repo "$repository" \
-            --json assets --jq '.assets[].name' | sort)"
+            "${missing_paths[@]}" \
+            --repo "$repository"
     fi
 
-    [[ "$actual_assets" == "$expected" ]] || \
-        die "Release $tag has an unexpected asset set."
+    remote_rows="$(gh api \
+        -H 'Accept: application/vnd.github+json' \
+        "repos/${repository}/releases/tags/${tag}" \
+        --jq '.assets[] | [.name, (.digest // "")] | @tsv')"
+    unset seen
+    declare -A seen=()
+    while IFS=$'\t' read -r name digest; do
+        [[ -n "$name" ]] || continue
+        grep -Fxq -- "$name" <<< "$expected" || \
+            die "Release $tag contains unexpected asset '$name'."
+        [[ -f "${release_dir}/${name}" ]] || \
+            die "Local verified release asset is missing: $name"
+        local_digest="sha256:$(sha256sum "${release_dir}/${name}" | awk '{print $1}')"
+        [[ "$digest" == "$local_digest" ]] || \
+            die "Published release asset '$name' does not match the verified bundle."
+        seen["$name"]=1
+    done <<< "$remote_rows"
+
+    while IFS= read -r name; do
+        [[ -n "$name" ]] || continue
+        [[ -n "${seen[$name]+x}" ]] || \
+            die "Release $tag is missing expected asset '$name'."
+    done <<< "$expected"
 }
 
 usage() {
