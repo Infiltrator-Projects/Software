@@ -25,6 +25,11 @@
   <url type="homepage">https://github.com/Infiltrator-Projects/Software</url>
 
   <releases>
+    <release version="0.3.97" date="2026-10-15">
+      <description>
+        <p>Preserves configured repository order when equal-priority, equal-version package candidates come from source positions with multiple digits, with focused regression coverage for APT-compatible source precedence.</p>
+      </description>
+    </release>
     <release version="0.3.96" date="2026-10-15">
       <description>
         <p>Consolidates native APT configuration policy, honours host precedence and configured preference paths without apt-config subprocesses, strengthens D-Bus qualification, and makes same-version release assets byte-immutable.</p>

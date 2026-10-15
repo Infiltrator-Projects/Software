@@ -1,3 +1,13 @@
+infiltrator-software (0.3.97) unstable; urgency=high
+
+  * Preserve APT same-version source precedence when configured source positions
+    reach multiple digits; numeric source positions now order 2 before 10
+    instead of relying on raw lexical source identifiers.
+  * Add focused candidate-selection regression coverage so repository-order
+    precedence cannot silently drift from configured source order again.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Thu, 15 Oct 2026 16:20:00 +1100
+
 infiltrator-software (0.3.96) unstable; urgency=high
 
   * Replace the read-only apt-config subprocess and duplicate phased-update

@@ -4,6 +4,7 @@
 #include "engine/debian_version.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -66,6 +67,93 @@ bool compatible_architecture(
            candidate.architecture == installed.architecture;
 }
 
+/*
+ * Repository source identifiers deliberately retain their configured file,
+ * line/stanza and expansion ordinal.  For equal version/priority candidates,
+ * Debian APT selects the instance from the source configured earliest.  A raw
+ * lexical comparison is subtly wrong once a numeric component reaches two
+ * digits (":10" sorts before ":2").  Compare digit runs by numeric magnitude
+ * without converting them to an integer, so arbitrarily long identifiers stay
+ * deterministic and cannot overflow.
+ */
+bool source_precedes(
+    const std::string_view left,
+    const std::string_view right)
+{
+    std::size_t left_index = 0U;
+    std::size_t right_index = 0U;
+
+    while (left_index < left.size() &&
+           right_index < right.size()) {
+        const unsigned char left_character =
+            static_cast<unsigned char>(left[left_index]);
+        const unsigned char right_character =
+            static_cast<unsigned char>(right[right_index]);
+
+        if (std::isdigit(left_character) != 0 &&
+            std::isdigit(right_character) != 0) {
+            const std::size_t left_begin = left_index;
+            const std::size_t right_begin = right_index;
+
+            while (left_index < left.size() &&
+                   std::isdigit(static_cast<unsigned char>(
+                       left[left_index])) != 0) {
+                ++left_index;
+            }
+            while (right_index < right.size() &&
+                   std::isdigit(static_cast<unsigned char>(
+                       right[right_index])) != 0) {
+                ++right_index;
+            }
+
+            std::size_t left_significant = left_begin;
+            while (left_significant < left_index &&
+                   left[left_significant] == '0') {
+                ++left_significant;
+            }
+            std::size_t right_significant = right_begin;
+            while (right_significant < right_index &&
+                   right[right_significant] == '0') {
+                ++right_significant;
+            }
+
+            const std::size_t left_digits =
+                left_index - left_significant;
+            const std::size_t right_digits =
+                right_index - right_significant;
+            if (left_digits != right_digits) {
+                return left_digits < right_digits;
+            }
+
+            if (left_digits != 0U) {
+                const int numeric_order =
+                    left.substr(left_significant, left_digits).compare(
+                        right.substr(
+                            right_significant,
+                            right_digits));
+                if (numeric_order != 0) {
+                    return numeric_order < 0;
+                }
+            }
+
+            const std::size_t left_run = left_index - left_begin;
+            const std::size_t right_run = right_index - right_begin;
+            if (left_run != right_run) {
+                return left_run < right_run;
+            }
+            continue;
+        }
+
+        if (left_character != right_character) {
+            return left_character < right_character;
+        }
+        ++left_index;
+        ++right_index;
+    }
+
+    return left.size() < right.size();
+}
+
 bool better_candidate(
     const DebianPackageVersion &left,
     const int left_priority,
@@ -94,7 +182,7 @@ bool better_candidate(
     }
 
     if (left.source != right.source) {
-        return left.source < right.source;
+        return source_precedes(left.source, right.source);
     }
     return left.filename < right.filename;
 }

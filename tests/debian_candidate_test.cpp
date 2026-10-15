@@ -57,6 +57,7 @@ int main()
         installed("multi:i386", "2.0", "i386"),
         installed("low-priority", "1.0"),
         installed("same", "2.0"),
+        installed("source-order", "1.0"),
         installed("infiltrator-calendar", "1.0.45+nativepgo1"),
         installed("native-current", "1.0.46+nativepgo1")
     };
@@ -81,6 +82,8 @@ int main()
         available("low-priority", "2.0", "low"),
         available("same", "2.0", "stable", "all"),
         available("same", "2.0", "testing", "amd64"),
+        available("source-order", "1.1", "sources.list:10"),
+        available("source-order", "1.1", "sources.list:2"),
         available("infiltrator-calendar", "1.0.46", "stable"),
         available("native-current", "1.0.46", "stable")
     };
@@ -166,6 +169,12 @@ int main()
     assert(same.candidate->source == "stable");
     assert(!same.upgrade_available);
     assert(!same.downgrade_selected);
+
+    const auto &source_order = find("source-order");
+    assert(source_order.candidate.has_value());
+    assert(source_order.candidate->version == "1.1");
+    assert(source_order.candidate->source == "sources.list:2");
+    assert(source_order.upgrade_available);
 
     const auto &native_upgrade = find("infiltrator-calendar");
     assert(native_upgrade.candidate.has_value());
