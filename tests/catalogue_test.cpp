@@ -164,7 +164,17 @@ exit 1
     error.clear();
     const auto installed_flatpaks =
         system_catalogue.installed_flatpaks(error);
-    assert(error.empty());
+    /*
+     * installed_flatpaks() is deliberately best-effort across both Flatpak
+     * scopes and reports partial filesystem warnings. The host's real system
+     * Flatpak tree is outside this fixture and may legitimately contribute a
+     * warning; only the isolated user scope is under this test's authority.
+     * Require that the fixture scope remained warning-free without converting
+     * an unrelated host warning into a nondeterministic test failure.
+     */
+    assert(error.find("User Flatpak") == std::string::npos);
+    assert(error.find("user Flatpak") == std::string::npos);
+    assert(error.find(data.string()) == std::string::npos);
     bool found_user_install = false;
     for (const auto &record :
          installed_flatpaks) {
