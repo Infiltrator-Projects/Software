@@ -57,11 +57,14 @@ jobs:
           "${{ steps.identity.outputs.version }}"
           "$GITHUB_SHA" "$RUNNER_TEMP"
 
-      - name: Verify architecture, authorization and documentation contracts
-        run: |
-          python3 tests/source_contracts.py
-          python3 tests/hardening_contracts.py
-          python3 tests/documentation_contracts.py
+      - name: Verify architecture and authorization contracts
+        run: python3 tests/source_contracts.py
+
+      - name: Verify forensic hardening contracts
+        run: python3 tests/hardening_contracts.py
+
+      - name: Verify documentation contracts
+        run: python3 tests/documentation_contracts.py
 
       - name: Build and test Debian package
         shell: bash
