@@ -126,7 +126,7 @@ jobs:
           echo "launch exit status: $status"
           cat launch.out || true
           cat launch.err || true
-          if grep -Fq "Embedded Discover hero raster failed to decode" launch.err; then
+          if grep -Fq "Embedded raster asset failed to decode" launch.err; then
             echo "::error::Embedded Discover raster artwork failed to decode during the graphical smoke test."
             exit 1
           fi
