@@ -1195,6 +1195,18 @@ void rebuild_discover(WindowState *state)
             G_LIST_MODEL(state->discover.discover_visible)),
         additions.data());
 
+    /*
+     * Do not reserve a large anonymous catalogue viewport while
+     * metadata is loading or a filter has no results. Curated
+     * Featured content remains useful immediately; the catalogue
+     * grid joins the composition only when it has real records.
+     */
+    if (state->discover.discover_grid_scroll != nullptr) {
+        gtk_widget_set_visible(
+            state->discover.discover_grid_scroll,
+            !indices.empty());
+    }
+
     if (state->discover.discover_status != nullptr) {
         std::ostringstream status;
         status << indices.size() << " of "
@@ -2074,19 +2086,13 @@ GtkWidget *make_discover_welcome_hero()
             "welcome-kicker");
 
     GtkWidget *heading =
-        gtk_label_new(nullptr);
-    gtk_label_set_xalign(
-        GTK_LABEL(heading), 0.0F);
-    gtk_label_set_markup(
-        GTK_LABEL(heading),
-        "Welcome to <span foreground=\"#d93cff\">Infiltrator</span>"
-        " <span foreground=\"#57a8ff\">Software</span>");
-    gtk_widget_add_css_class(
-        heading, "welcome-title");
+        make_label(
+            "Software, simply managed.",
+            "welcome-title");
 
     GtkWidget *subtitle =
         make_label(
-            "Discover, install and keep your system up to date with the latest software.",
+            "Discover, install and maintain software from trusted sources with clear system state.",
             "welcome-subtitle");
     gtk_label_set_wrap(
         GTK_LABEL(subtitle), true);
@@ -2199,12 +2205,12 @@ GtkWidget *make_discover_page(WindowState *state)
     gtk_box_append(
         GTK_BOX(featured_copy),
         make_label(
-            "Featured Applications",
+            "Featured",
             "panel-title"));
     gtk_box_append(
         GTK_BOX(featured_copy),
         make_label(
-            "Recommended software from the current catalogue.",
+            "A considered selection from your available catalogue.",
             "panel-subtitle"));
     gtk_box_append(
         GTK_BOX(featured_header),
@@ -2327,7 +2333,7 @@ GtkWidget *make_discover_page(WindowState *state)
     gtk_box_append(
         GTK_BOX(health_copy),
         make_label(
-            "Keep your system healthy",
+            "System health",
             "health-banner-title"));
     state->discover.discover_health_banner_state =
         make_label(
@@ -2342,7 +2348,7 @@ GtkWidget *make_discover_page(WindowState *state)
     gtk_box_append(
         GTK_BOX(health_row),
         make_label(
-            "Open Repair Center  ›",
+            "Review  ›",
             "health-banner-action",
             1.0F));
     gtk_button_set_child(
@@ -2555,20 +2561,32 @@ GtkWidget *make_discover_page(WindowState *state)
     gtk_widget_set_valign(grid, GTK_ALIGN_START);
     gtk_widget_add_css_class(grid, "discover-grid");
 
-    GtkWidget *scroll = gtk_scrolled_window_new();
+    state->discover.discover_grid_scroll =
+        gtk_scrolled_window_new();
+    gtk_widget_add_css_class(
+        state->discover.discover_grid_scroll,
+        "discover-catalogue-scroller");
     gtk_widget_set_size_request(
-        scroll, -1, 520);
+        state->discover.discover_grid_scroll, -1, 480);
     gtk_scrolled_window_set_policy(
-        GTK_SCROLLED_WINDOW(scroll),
+        GTK_SCROLLED_WINDOW(
+            state->discover.discover_grid_scroll),
         GTK_POLICY_NEVER,
         GTK_POLICY_AUTOMATIC);
     gtk_scrolled_window_set_overlay_scrolling(
-        GTK_SCROLLED_WINDOW(scroll),
+        GTK_SCROLLED_WINDOW(
+            state->discover.discover_grid_scroll),
         false);
     gtk_scrolled_window_set_child(
-        GTK_SCROLLED_WINDOW(scroll),
+        GTK_SCROLLED_WINDOW(
+            state->discover.discover_grid_scroll),
         grid);
-    gtk_box_append(GTK_BOX(page), scroll);
+    gtk_widget_set_visible(
+        state->discover.discover_grid_scroll,
+        false);
+    gtk_box_append(
+        GTK_BOX(page),
+        state->discover.discover_grid_scroll);
 
     GtkWidget *page_scroll =
         gtk_scrolled_window_new();

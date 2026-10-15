@@ -303,9 +303,8 @@ void ThemeController::apply()
         << "color: " << text << "; border-bottom: 1px solid " << border
         << "; padding: 0 10px; }"
         << ".titlebar-brand { padding: 2px 4px; }"
-        << ".titlebar-brand-icon { background: " << card
-        << "; border: 1px solid " << border
-        << "; border-radius: " << metrics->card_radius << "px; padding: 7px; }"
+        << ".titlebar-brand-icon { background: transparent; border: 1px solid transparent; "
+        << "border-radius: " << metrics->card_radius << "px; padding: 7px; }"
         << ".titlebar-logo { min-width: 48px; min-height: 32px; }"
         << ".titlebar-logo-fallback { color: " << neutral << "; }"
         << ".titlebar-title { font-family: \"" << typography->ui_family
@@ -344,31 +343,30 @@ void ThemeController::apply()
          * GtkListBoxRow defaults.  Older Mint/GTK themes can otherwise paint a
          * selected row near-black even while Software is using the day palette.
          */
-        << ".nav-list row.nav-row:selected { background-color: " << select_bg
-        << "; color: " << select_fg << "; border-color: " << neutral
-        << "; box-shadow: none; }"
+        << ".nav-list row.nav-row:selected { background-color: " << surface
+        << "; color: " << text << "; border-color: transparent; "
+        << "border-left: 2px solid " << neutral << "; box-shadow: none; }"
         << ".nav-icon-well { min-width: 38px; min-height: 38px; "
-        << "background: " << surface << "; border: 1px solid " << border
-        << "; border-radius: " << metrics->control_radius
+        << "background: transparent; border: 1px solid transparent; "
+        << "border-radius: " << metrics->control_radius
         << "px; padding: 5px; }"
         << ".nav-label { font-size: 14px; font-weight: "
         << typography->ui_bold_weight << "; color: " << text << "; }"
         << ".nav-subtitle { font-size: 11px; color: " << summary << "; }"
-        << ".nav-list row.nav-row:selected .nav-label, "
-        << ".nav-list row.nav-row:selected .nav-subtitle { color: "
-        << select_fg << "; }"
+        << ".nav-list row.nav-row:selected .nav-label { color: " << text << "; }"
+        << ".nav-list row.nav-row:selected .nav-subtitle { color: " << summary << "; }"
         << ".nav-row image { opacity: 1; color: " << neutral << "; }"
-        << ".nav-list row.nav-row:selected image { color: " << select_fg << "; }"
+        << ".nav-list row.nav-row:selected image { color: " << neutral << "; }"
         << ".nav-badge { min-width: 24px; min-height: 24px; padding: 0 7px; "
         << "border-radius: 999px; background: " << fault << "; color: "
         << accent_fg << "; font-size: 10px; font-weight: "
         << typography->ui_bold_weight << "; box-shadow: none; }"
         << "button.sidebar-settings { margin-top: 8px; padding: 10px 12px; "
-        << "background: " << card << "; border: 1px solid " << border
-        << "; border-radius: " << metrics->card_radius
+        << "background: transparent; border: 1px solid transparent; "
+        << "border-radius: " << metrics->card_radius
         << "px; box-shadow: none; }"
-        << "button.sidebar-settings:hover { background: " << card_hover
-        << "; border-color: " << neutral << "; }"
+        << "button.sidebar-settings:hover { background: " << surface_hover
+        << "; border-color: transparent; }"
         << ".settings-icon-well { min-width: 42px; min-height: 42px; "
         << "background: transparent; border-radius: "
         << metrics->control_radius << "px; }"
@@ -385,7 +383,7 @@ void ThemeController::apply()
         << ".appearance-title { font-size: 12px; font-weight: "
         << typography->ui_bold_weight << "; color: " << text << "; }"
 
-        << ".content { padding: 16px; background: "
+        << ".content { padding: 22px 26px 30px 26px; background: "
         << background << "; }"
         << ".page-scroller { background: " << background << "; }"
         << ".page-scroller scrollbar { min-width: 10px; }"
@@ -442,7 +440,8 @@ void ThemeController::apply()
         << ".page-repositories .kicker { color: " << operation << "; }"
         << ".page-repair .kicker { color: " << fault << "; }"
 
-        << ".package-list, listview, scrolledwindow { background: " << card << "; }"
+        << ".package-list, listview { background: " << card << "; }"
+        << ".discover-catalogue-scroller { background: transparent; border: 0; }"
         << ".package-list { border: 1px solid " << status_border
         << "; border-radius: " << metrics->control_radius << "px; }"
         << ".package-row { padding: 10px 12px; }"
@@ -454,14 +453,13 @@ void ThemeController::apply()
         << "listview row:selected label, listview row:selected image { color: "
         << select_fg << "; }"
 
-        << ".discover-welcome { min-height: 166px; background: #07102d; "
-        << "border: 1px solid #4f63c9; border-radius: 18px; "
-        << "box-shadow: 0 12px 30px rgba(0,0,0,0.20); }"
-        << ".welcome-artwork { background: #07102d; opacity: 1; }"
-        << ".welcome-artwork-veil { "
-        << "background-image: linear-gradient(90deg, "
-        << "rgba(7,16,45,0.92) 0%, rgba(7,16,45,0.76) 34%, "
-        << "rgba(7,16,45,0.30) 58%, rgba(7,16,45,0.06) 100%); }"
+        << ".discover-welcome { min-height: 166px; background: #101318; "
+        << "border: 1px solid " << status_border << "; border-radius: 18px; "
+        << "box-shadow: 0 10px 26px rgba(0,0,0,0.16); }"
+        << ".welcome-artwork { background: #101318; opacity: 0.72; }"
+        << ".welcome-artwork-veil { background-image: linear-gradient(90deg, "
+        << "rgba(12,15,20,0.96) 0%, rgba(12,15,20,0.82) 36%, "
+        << "rgba(12,15,20,0.40) 64%, rgba(12,15,20,0.10) 100%); }"
         << ".welcome-copy { padding: 0; }"
         << ".welcome-kicker { color: #c8d5f4; font-size: 10px; font-weight: "
         << typography->ui_bold_weight << "; letter-spacing: 0.08em; }"
@@ -472,13 +470,13 @@ void ThemeController::apply()
         << typography->ui_regular_weight << "; }"
         << ".welcome-artwork-error { min-height: 166px; background: #07102d; }"
         << ".discover-dashboard { margin-top: 1px; margin-bottom: 1px; }"
-        << "button.dashboard-card { min-height: 88px; padding: 12px 14px; "
-        << "background: " << card << "; border: 1px solid " << border << "; border-radius: "
+        << "button.dashboard-card { min-height: 88px; padding: 13px 15px; "
+        << "background: " << card << "; border: 1px solid transparent; border-radius: "
         << metrics->card_radius << "px; box-shadow: none; }"
         << "button.dashboard-card:hover { background: " << card_hover << "; }"
         << ".dashboard-icon-well { min-width: 48px; min-height: 48px; "
         << "border-radius: " << metrics->small_radius << "px; background: "
-        << panel << "; border: 1px solid " << status_border << "; }"
+        << surface << "; border: 1px solid transparent; }"
         << ".dashboard-card-title { font-size: 11px; font-weight: "
         << typography->ui_bold_weight << "; color: " << text << "; }"
         << ".dashboard-card-value { font-family: \"" << typography->ui_family
@@ -486,38 +484,33 @@ void ThemeController::apply()
         << "; color: " << heading << "; }"
         << ".dashboard-card-note { font-size: 9px; color: " << summary << "; }"
         << ".dashboard-chevron { font-size: 22px; color: " << detail_label << "; }"
-        << ".dashboard-updates { border-color: " << warning_border << "; }"
-        << ".dashboard-updates .dashboard-icon-well { background: " << warning
-        << "; border-color: " << warning << "; }"
-        << ".dashboard-updates .dashboard-icon-well image { color: " << accent_fg << "; }"
-        << ".dashboard-health { border-color: " << success_border << "; }"
-        << ".dashboard-health .dashboard-icon-well { background: " << success
-        << "; border-color: " << success << "; }"
-        << ".dashboard-health .dashboard-icon-well image { color: " << accent_fg << "; }"
-        << ".dashboard-repositories { border-color: " << info << "; }"
-        << ".dashboard-repositories .dashboard-icon-well { background: " << info
-        << "; border-color: " << info << "; }"
-        << ".dashboard-repositories .dashboard-icon-well image { color: " << accent_fg << "; }"
+        << ".dashboard-updates, .dashboard-health, .dashboard-repositories { border-color: transparent; }"
+        << ".dashboard-updates .dashboard-icon-well, .dashboard-health .dashboard-icon-well, "
+        << ".dashboard-repositories .dashboard-icon-well { background: " << surface
+        << "; border-color: transparent; }"
+        << ".dashboard-updates .dashboard-icon-well image { color: " << warning << "; }"
+        << ".dashboard-health .dashboard-icon-well image { color: " << success << "; }"
+        << ".dashboard-repositories .dashboard-icon-well image { color: " << info << "; }"
         << ".discover-main-dashboard { margin-top: 1px; }"
         << ".featured-panel { min-width: 0; }"
-        << ".discover-panel { padding: 13px 14px; background: " << card
-        << "; border: 1px solid " << border << "; border-radius: " << metrics->card_radius
+        << ".discover-panel { padding: 14px 2px; background: transparent; "
+        << "border: 1px solid transparent; border-radius: " << metrics->card_radius
         << "px; box-shadow: none; }"
-        << ".featured-panel { min-height: 286px; border-color: " << info << "; }"
+        << ".featured-panel { min-height: 286px; border-color: transparent; }"
         << ".panel-title { font-family: \"" << typography->ui_family
         << "\"; font-size: 16px; font-weight: " << typography->ui_bold_weight
         << "; color: " << heading << "; }"
         << ".panel-subtitle { font-size: 10px; color: " << summary << "; }"
         << ".featured-header-icon { color: " << warning << "; }"
         << "flowbox .featured-card { margin: 0; }"
-        << ".featured-card { padding: 10px; background: " << panel
-        << "; border: 1px solid " << border << "; border-radius: "
-        << metrics->control_radius << "px; }"
+        << ".featured-card { padding: 12px; background: " << card
+        << "; border: 1px solid transparent; border-radius: "
+        << metrics->control_radius << "px; box-shadow: 0 5px 16px rgba(0,0,0,0.10); }"
         << ".featured-card:hover { background: " << card_hover
-        << "; border-color: " << info << "; }"
+        << "; border-color: transparent; }"
         << ".featured-card-art { min-height: 82px; padding: 0; "
-        << "background: #08152f; border-radius: " << metrics->small_radius
-        << "px; border: 1px solid " << status_border << "; }"
+        << "background: #121820; border-radius: " << metrics->small_radius
+        << "px; border: 1px solid transparent; }"
         << ".featured-card-raster { opacity: 0.82; }"
         << ".featured-card-art-shade { background: rgba(4,11,29,0.18); }"
         << ".featured-card-name { font-size: 13px; font-weight: "
@@ -529,39 +522,35 @@ void ThemeController::apply()
         << "button.featured-secondary { background: " << surface
         << "; border-color: " << border << "; }"
         << ".updates-preview-panel { border-color: " << warning_border << "; }"
-        << ".preview-row { padding: 7px 8px; background: " << panel
-        << "; border: 1px solid " << border << "; border-radius: "
-        << metrics->small_radius << "px; }"
+        << ".preview-row { padding: 8px 3px; background: transparent; "
+        << "border: 1px solid transparent; border-radius: 0; }"
         << ".preview-icon-well { min-width: 34px; min-height: 34px; "
         << "border-radius: 999px; background: " << surface
-        << "; border: 1px solid " << status_border << "; }"
+        << "; border: 1px solid transparent; }"
         << ".preview-info image { color: " << info << "; }"
         << ".preview-good image { color: " << success << "; }"
         << ".preview-warning image { color: " << warning << "; }"
         << ".preview-row-title { font-size: 11px; font-weight: "
         << typography->ui_bold_weight << "; color: " << text << "; }"
         << ".preview-row-note { font-size: 9px; color: " << summary << "; }"
-        << "button.health-banner { min-height: 70px; padding: 12px 15px; "
-        << "background-image: linear-gradient(100deg, #c55a39, #7e2ecb, #1e5aa8); "
-        << "border: 1px solid #d15a9a; border-radius: " << metrics->card_radius
-        << "px; box-shadow: 0 6px 18px rgba(30,0,55,0.28); }"
-        << "button.health-banner:hover { background-image: linear-gradient(100deg, "
-        << "#d56b48, #9140d8, #2a6bbb); }"
-        << ".health-banner-icon { min-width: 44px; min-height: 44px; "
-        << "background: #2bd276; border-radius: " << metrics->small_radius
-        << "px; border: 1px solid rgba(255,255,255,0.22); }"
-        << ".health-banner-icon image { color: #ffffff; }"
+        << "button.health-banner { min-height: 66px; padding: 11px 14px; "
+        << "background: " << card << "; border: 1px solid " << status_border
+        << "; border-radius: " << metrics->card_radius << "px; box-shadow: none; }"
+        << "button.health-banner:hover { background: " << card_hover << "; }"
+        << ".health-banner-icon { min-width: 42px; min-height: 42px; "
+        << "background: " << surface << "; border-radius: " << metrics->small_radius
+        << "px; border: 1px solid transparent; }"
+        << ".health-banner-icon image { color: " << success << "; }"
         << ".health-banner-title { font-size: 14px; font-weight: "
-        << typography->ui_bold_weight << "; color: #ffffff; }"
-        << ".health-banner-copy { font-size: 10px; color: rgba(255,255,255,0.84); }"
+        << typography->ui_bold_weight << "; color: " << heading << "; }"
+        << ".health-banner-copy { font-size: 10px; color: " << summary << "; }"
         << ".health-banner-action { font-size: 11px; font-weight: "
-        << typography->ui_bold_weight << "; color: #ffffff; }"
-
-        << ".discover-controls { padding: 11px 13px; border: 1px solid "
-        << status_border << "; border-radius: " << metrics->control_radius
-        << "px; background-image: linear-gradient(90deg, " << surface
-        << ", " << card << "); }"
-        << ".discover-controls entry, .discover-controls dropdown { min-height: 36px; }"
+        << typography->ui_bold_weight << "; color: " << detail_label << "; }"
+        << ".discover-controls { padding: 4px 0; border: 1px solid transparent; "
+        << "border-radius: " << metrics->control_radius << "px; background: transparent; }"
+        << ".discover-controls entry, .discover-controls dropdown { min-height: 38px; "
+        << "background: " << input << "; border: 1px solid " << status_border
+        << "; border-radius: " << metrics->control_radius << "px; }"
         << ".discover-status { font-size: 11px; color: " << summary << "; }"
         << ".catalogue-section-heading { margin-top: 2px; padding: 2px 3px; }"
         << ".catalogue-section-icon { color: " << info << "; }"
@@ -569,12 +558,11 @@ void ThemeController::apply()
         << "\"; font-size: 18px; font-weight: " << typography->ui_bold_weight
         << "; color: " << heading << "; }"
         << ".catalogue-section-note { font-size: 10px; color: " << summary << "; }"
-        << ".discover-card { padding: 16px; background-image: linear-gradient(145deg, "
-        << card << ", " << panel << "); border: 1px solid " << border
-        << "; border-radius: " << metrics->card_radius
-        << "px; box-shadow: 0 7px 20px rgba(0,0,0,0.16); }"
-        << ".discover-card:hover { background-image: linear-gradient(145deg, "
-        << card_hover << ", " << surface << "); border-color: " << info << "; }"
+        << ".discover-card { padding: 17px; background: " << card
+        << "; border: 1px solid " << status_border
+        << "; border-radius: " << metrics->card_radius << "px; box-shadow: none; }"
+        << ".discover-card:hover { background: " << card_hover
+        << "; border-color: " << neutral << "; }"
         << ".discover-icon-well { background: " << surface
         << "; border: 1px solid " << status_border << "; border-radius: "
         << metrics->control_radius << "px; }"
@@ -584,16 +572,15 @@ void ThemeController::apply()
         << "; color: " << heading << "; }"
         << ".discover-meta { font-size: 10px; font-weight: "
         << typography->ui_bold_weight << "; color: " << kicker << "; }"
-        << ".discover-source-chip { font-size: 10px; color: " << info
-        << "; padding: 2px 7px; border-radius: 999px; border: 1px solid "
-        << info << "; }"
+        << ".discover-source-chip { font-size: 10px; color: " << summary
+        << "; padding: 2px 7px; border-radius: 999px; border: 1px solid transparent; "
+        << "background: " << surface << "; }"
         << ".discover-description { font-size: 12px; color: " << note << "; }"
         << ".category-shortcuts { padding: 2px 0 4px 0; }"
         << "button.category-shortcut { min-height: 36px; padding: 0 12px; "
-        << "background: " << card << "; border: 1px solid " << border
-        << "; border-radius: 999px; }"
-        << "button.category-shortcut:hover { background: " << card_hover
-        << "; border-color: " << info << "; }"
+        << "background: transparent; border: 1px solid transparent; border-radius: 999px; }"
+        << "button.category-shortcut:hover { background: " << surface_hover
+        << "; border-color: transparent; }"
         << "button.category-shortcut image { color: " << info << "; }"
         << ".category-shortcut-label { font-size: 11px; font-weight: "
         << typography->ui_bold_weight << "; color: " << text << "; }"
@@ -790,9 +777,9 @@ void ThemeController::apply()
         << warning << "; background: " << surface << "; color: "
         << warning_muted << "; font-size: 11px; }"
 
-        << ".statusbar { padding: 8px 12px; border-top: 1px solid "
+        << ".statusbar { padding: 4px 10px; border-top: 1px solid "
         << connection_border << "; background: " << connection << "; }"
-        << ".statusbar-text { font-size: 11px; color: " << summary << "; }"
+        << ".statusbar-text { font-size: 10px; color: " << summary << "; opacity: 0.58; }"
 
         << "button { min-height: 30px; padding: 0 12px; background: "
         << button_bg << "; border: 1px solid " << border
@@ -801,8 +788,8 @@ void ThemeController::apply()
         << "button, button label, button image { color: " << button_fg << "; }"
         << "button:hover { background: " << operation_hover << "; }"
         << "button:hover, button:hover label, button:hover image { color: " << text << "; }"
-        << "button.suggested-action { background-image: linear-gradient(90deg, "
-        << operation << ", " << info << "); border-color: " << operation << "; }"
+        << "button.suggested-action { background: " << operation
+        << "; border-color: " << operation << "; box-shadow: none; }"
         << "button.suggested-action, button.suggested-action label, "
         << "button.suggested-action image { color: " << accent_fg << "; }"
         << "button.suggested-action:hover { background: " << accent_hover

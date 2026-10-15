@@ -1,3 +1,14 @@
+infiltrator-software (0.3.98) unstable; urgency=high
+
+  * Refine Discover into a calmer, content-led premium composition with
+    restrained navigation, cards, controls and system-health presentation.
+  * Keep curated software visible during catalogue loading and suppress the
+    empty fixed-height catalogue viewport until real results are available.
+  * Reduce decorative gradients, outlines and developer-status visual weight
+    while preserving keyboard, transaction and catalogue behaviour.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Thu, 15 Oct 2026 18:05:00 +1100
+
 infiltrator-software (0.3.97) unstable; urgency=high
 
   * Preserve APT same-version source precedence when configured source positions

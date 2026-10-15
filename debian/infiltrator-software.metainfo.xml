@@ -25,6 +25,11 @@
   <url type="homepage">https://github.com/Infiltrator-Projects/Software</url>
 
   <releases>
+    <release version="0.3.98" date="2026-10-15">
+      <description>
+        <p>Refines Discover with a restrained premium visual hierarchy, calmer navigation and controls, purposeful loading behaviour, and a less technical status presentation without changing software-management semantics.</p>
+      </description>
+    </release>
     <release version="0.3.97" date="2026-10-15">
       <description>
         <p>Preserves configured repository order when equal-priority, equal-version package candidates come from source positions with multiple digits, with focused regression coverage for APT-compatible source precedence.</p>

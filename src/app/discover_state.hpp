@@ -23,6 +23,7 @@ struct DiscoverPageState {
     GtkWidget *discover_source{};
     GtkWidget *discover_state{};
     GtkWidget *discover_featured_flow{};
+    GtkWidget *discover_grid_scroll{};
     GtkWidget *discover_update_preview{};
     GtkWidget *discover_repository_preview{};
     GtkWidget *discover_activity_preview{};
