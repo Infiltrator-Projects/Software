@@ -99,7 +99,7 @@ source_policy_path = Path("data/net.ssmith.infiltrator.software.policy")
 update_policy_xml = update_policy_path.read_text()
 
 # One release identity, everywhere users and package tooling observe it.
-assert f"**Current source version:** {version}<br>" in readme
+assert "[`VERSION`](VERSION)" in readme
 assert changelog.startswith(f"infiltrator-software ({version}) ")
 assert metainfo_releases
 assert metainfo_releases[0].get("version") == version
