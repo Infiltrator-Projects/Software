@@ -41,8 +41,8 @@
 #include <unistd.h>
 #include <vector>
 
-#ifndef INFILTRATOR_SOFTWARE_VERSION
-#define INFILTRATOR_SOFTWARE_VERSION "0.0.0"
+#ifndef SOFTWARE_VERSION
+#define SOFTWARE_VERSION "0.0.0"
 #endif
 
 namespace infiltrator::software::app {
@@ -3183,7 +3183,7 @@ void start_discover_install_operation(
 
     std::vector<std::string> arguments{
         "pkexec",
-        "/usr/libexec/infiltrator-software-update-helper",
+        "/usr/libexec/software-update-helper",
         "apply-plan"};
     arguments.reserve(specs.size() + 3U);
     arguments.insert(arguments.end(), specs.begin(), specs.end());

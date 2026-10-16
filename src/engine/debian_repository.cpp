@@ -746,7 +746,7 @@ bool create_temporary_file(
     gchar *name = nullptr;
     GError *gerror = nullptr;
     const int fd = g_file_open_tmp(
-        "infiltrator-software-repository-XXXXXX",
+        "software-repository-XXXXXX",
         &name,
         &gerror);
     if (fd < 0) {

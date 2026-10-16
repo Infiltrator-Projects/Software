@@ -8,8 +8,8 @@
 #include <string>
 #include <utility>
 
-#ifndef INFILTRATOR_SOFTWARE_VERSION
-#define INFILTRATOR_SOFTWARE_VERSION "0.0.0"
+#ifndef SOFTWARE_VERSION
+#define SOFTWARE_VERSION "0.0.0"
 #endif
 
 namespace infiltrator::software {
@@ -29,7 +29,7 @@ struct RepositoryTaskData {
 std::string mint_mirror_status()
 {
     return sources::mint_mirror_status(
-        "Infiltrator-Software/" INFILTRATOR_SOFTWARE_VERSION);
+        "Infiltrator-Software/" SOFTWARE_VERSION);
 }
 
 void repositories_worker(

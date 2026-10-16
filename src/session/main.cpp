@@ -31,7 +31,7 @@ std::filesystem::path session_stamp_path(
         return {};
     }
     return std::filesystem::path(state) /
-        "infiltrator-software" /
+        "software" /
         name;
 }
 

@@ -70,39 +70,39 @@ expect_field_token Recommends flatpak
 dpkg-deb --fsys-tarfile "$package" | tar -tf - > package-files.txt
 
 for path in \
-    usr/bin/infiltrator-software \
-    usr/bin/infiltrator-software-tray \
-    usr/bin/infiltrator-software-session-updater \
-    usr/bin/infiltrator-software-cli \
-    usr/bin/infiltrator-software-release-upgrade \
-    usr/libexec/infiltrator-software-auto-updater \
-    usr/libexec/infiltrator-software-maintenance \
-    usr/libexec/infiltrator-software-helper \
-    usr/libexec/infiltrator-software-update-helper \
-    usr/libexec/infiltrator-software-engine \
-    usr/lib/systemd/system/infiltrator-software-auto-update.service \
-    usr/lib/systemd/system/infiltrator-software-auto-update.timer \
-    usr/lib/systemd/system/infiltrator-software-maintenance.service \
-    usr/lib/systemd/system/infiltrator-software-maintenance.timer \
-    usr/share/dbus-1/services/net.ssmith.infiltrator.software.Engine.service \
-    usr/share/dbus-1/interfaces/net.ssmith.infiltrator.software.Engine.xml \
-    usr/share/polkit-1/actions/net.ssmith.infiltrator.software.policy \
-    usr/share/polkit-1/actions/net.ssmith.infiltrator.software.updates.policy \
-    etc/xdg/autostart/infiltrator-software-session-updater.desktop \
-    etc/xdg/autostart/infiltrator-software-tray.desktop \
-    usr/share/icons/hicolor/scalable/status/infiltrator-software-up-to-date-symbolic.svg \
-    usr/share/icons/hicolor/scalable/status/infiltrator-software-updates-available-symbolic.svg \
-    usr/share/icons/hicolor/scalable/status/infiltrator-software-checking-symbolic.svg \
-    usr/share/icons/hicolor/scalable/status/infiltrator-software-installing-symbolic.svg \
-    usr/share/icons/hicolor/scalable/status/infiltrator-software-error-symbolic.svg \
-    usr/share/applications/net.ssmith.infiltrator.software.desktop \
-    usr/share/icons/hicolor/scalable/apps/net.ssmith.infiltrator.software.svg \
-    usr/share/icons/hicolor/scalable/apps/infiltrator-software.svg \
+    usr/bin/software \
+    usr/bin/software-tray \
+    usr/bin/software-session-updater \
+    usr/bin/software-cli \
+    usr/bin/software-release-upgrade \
+    usr/libexec/software-auto-updater \
+    usr/libexec/software-maintenance \
+    usr/libexec/software-helper \
+    usr/libexec/software-update-helper \
+    usr/libexec/software-engine \
+    usr/lib/systemd/system/software-auto-update.service \
+    usr/lib/systemd/system/software-auto-update.timer \
+    usr/lib/systemd/system/software-maintenance.service \
+    usr/lib/systemd/system/software-maintenance.timer \
+    usr/share/dbus-1/services/net.ssmith.software.Engine.service \
+    usr/share/dbus-1/interfaces/net.ssmith.software.Engine.xml \
+    usr/share/polkit-1/actions/net.ssmith.software.policy \
+    usr/share/polkit-1/actions/net.ssmith.software.updates.policy \
+    etc/xdg/autostart/software-session-updater.desktop \
+    etc/xdg/autostart/software-tray.desktop \
+    usr/share/icons/hicolor/scalable/status/software-up-to-date-symbolic.svg \
+    usr/share/icons/hicolor/scalable/status/software-updates-available-symbolic.svg \
+    usr/share/icons/hicolor/scalable/status/software-checking-symbolic.svg \
+    usr/share/icons/hicolor/scalable/status/software-installing-symbolic.svg \
+    usr/share/icons/hicolor/scalable/status/software-error-symbolic.svg \
+    usr/share/applications/net.ssmith.software.desktop \
+    usr/share/icons/hicolor/scalable/apps/net.ssmith.software.svg \
+    usr/share/icons/hicolor/scalable/apps/software.svg \
     usr/share/app-install/icons/software.svg \
-    usr/share/metainfo/infiltrator-software.metainfo.xml \
-    usr/share/fonts/truetype/infiltrator-software/mb_corpo_a_cond_regular.ttf \
-    usr/share/fonts/truetype/infiltrator-software/mb_corpo_s_bold.ttf \
-    usr/share/fonts/truetype/infiltrator-software/mb_corpo_s_regular.ttf; do
+    usr/share/metainfo/software.metainfo.xml \
+    usr/share/fonts/truetype/software/mb_corpo_a_cond_regular.ttf \
+    usr/share/fonts/truetype/software/mb_corpo_s_bold.ttf \
+    usr/share/fonts/truetype/software/mb_corpo_s_regular.ttf; do
     expect_file "$path"
 done
 
@@ -114,18 +114,18 @@ root="$(mktemp -d)"
 trap 'rm -rf "$root" package-files.txt' EXIT
 dpkg-deb -x "$package" "$root"
 
-desktop="$root/usr/share/applications/net.ssmith.infiltrator.software.desktop"
-grep -Fqx 'StartupWMClass=net.ssmith.infiltrator.software' "$desktop" ||
+desktop="$root/usr/share/applications/net.ssmith.software.desktop"
+grep -Fqx 'StartupWMClass=net.ssmith.software' "$desktop" ||
     fail "Installed desktop file has the wrong StartupWMClass."
-grep -Fqx 'Icon=net.ssmith.infiltrator.software' "$desktop" ||
+grep -Fqx 'Icon=net.ssmith.software' "$desktop" ||
     fail "Installed desktop file has the wrong icon name."
 
 # Behaviour belongs to the installed artefact, not a source/build-tree shape.
 # Exercising the packaged CLI catches packaging and executable regressions with
 # the same check and remains valid if implementation files are reorganised.
-"$root/usr/bin/infiltrator-software-cli" --version | grep -Fqx "$version" ||
+"$root/usr/bin/software-cli" --version | grep -Fqx "$version" ||
     fail "Packaged CLI version does not match VERSION."
-"$root/usr/bin/infiltrator-software-cli" --help | grep -Fq 'upgrade' ||
+"$root/usr/bin/software-cli" --help | grep -Fq 'upgrade' ||
     fail "Packaged CLI help no longer exposes the upgrade command."
 
 echo "Verified Debian package contract: $package"

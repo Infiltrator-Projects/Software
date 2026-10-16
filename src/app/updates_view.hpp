@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-#ifndef INFILTRATOR_SOFTWARE_UPDATES_VIEW_HPP
-#define INFILTRATOR_SOFTWARE_UPDATES_VIEW_HPP
+#ifndef SOFTWARE_UPDATES_VIEW_HPP
+#define SOFTWARE_UPDATES_VIEW_HPP
 
 #include "app/view_intents.hpp"
 

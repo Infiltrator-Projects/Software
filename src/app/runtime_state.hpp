@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-#ifndef INFILTRATOR_SOFTWARE_RUNTIME_STATE_HPP
-#define INFILTRATOR_SOFTWARE_RUNTIME_STATE_HPP
+#ifndef SOFTWARE_RUNTIME_STATE_HPP
+#define SOFTWARE_RUNTIME_STATE_HPP
 
 #include <filesystem>
 #include <string_view>

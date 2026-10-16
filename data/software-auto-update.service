@@ -5,4 +5,4 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
-ExecStart=/usr/libexec/infiltrator-software-auto-updater
+ExecStart=/usr/libexec/software-auto-updater

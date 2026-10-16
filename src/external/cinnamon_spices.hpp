@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-#ifndef INFILTRATOR_SOFTWARE_CINNAMON_SPICES_HPP
-#define INFILTRATOR_SOFTWARE_CINNAMON_SPICES_HPP
+#ifndef SOFTWARE_CINNAMON_SPICES_HPP
+#define SOFTWARE_CINNAMON_SPICES_HPP
 
 #include "external/external_updates.hpp"
 

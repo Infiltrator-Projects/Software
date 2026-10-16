@@ -39,7 +39,7 @@ int main()
     "name": "Calculator",
     "category": "Productivity",
     "description": "Calculator description",
-    "package": "infiltrator-calculator",
+    "package": "calculator",
     "version": "1.2.3",
     "architecture": "amd64",
     "maintainer": "Shannon Smith",
@@ -63,7 +63,7 @@ int main()
     assert(error.empty());
     assert(records.size() == 1U);
     assert(records[0].id == "calculator");
-    assert(records[0].package_name == "infiltrator-calculator");
+    assert(records[0].package_name == "calculator");
     assert(records[0].name == "Calculator");
     assert(records[0].category == "Productivity");
     assert(records[0].available_version == "1.2.3");

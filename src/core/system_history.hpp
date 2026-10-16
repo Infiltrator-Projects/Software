@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-#ifndef INFILTRATOR_SOFTWARE_SYSTEM_HISTORY_HPP
-#define INFILTRATOR_SOFTWARE_SYSTEM_HISTORY_HPP
+#ifndef SOFTWARE_SYSTEM_HISTORY_HPP
+#define SOFTWARE_SYSTEM_HISTORY_HPP
 
 #include "core/transaction_history.hpp"
 

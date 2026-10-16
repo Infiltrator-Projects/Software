@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-#ifndef INFILTRATOR_SOFTWARE_APT_SOURCE_FORMAT_HPP
-#define INFILTRATOR_SOFTWARE_APT_SOURCE_FORMAT_HPP
+#ifndef SOFTWARE_APT_SOURCE_FORMAT_HPP
+#define SOFTWARE_APT_SOURCE_FORMAT_HPP
 
 #include <cstddef>
 #include <map>

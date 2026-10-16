@@ -17,12 +17,12 @@
 #include <utility>
 #include <vector>
 
-#ifndef INFILTRATOR_SOFTWARE_VERSION
-#define INFILTRATOR_SOFTWARE_VERSION "0.0.0"
+#ifndef SOFTWARE_VERSION
+#define SOFTWARE_VERSION "0.0.0"
 #endif
 
-#ifndef INFILTRATOR_SOFTWARE_BUILD_PROFILE
-#define INFILTRATOR_SOFTWARE_BUILD_PROFILE "cmake"
+#ifndef SOFTWARE_BUILD_PROFILE
+#define SOFTWARE_BUILD_PROFILE "cmake"
 #endif
 
 namespace infiltrator::software::app {
@@ -131,7 +131,7 @@ std::vector<std::string> automation_preferences_arguments(
 {
     std::vector<std::string> arguments{
         "pkexec",
-        "/usr/libexec/infiltrator-software-update-helper",
+        "/usr/libexec/software-update-helper",
         "configure-automation",
         std::string("auto-update-packages=") +
             (preferences.auto_update_packages ? "true" : "false"),
@@ -801,7 +801,7 @@ void about_clicked(GtkButton *, gpointer user_data)
     }
 
     GtkWidget *dialog = gtk_about_dialog_new();
-    const char *profile = INFILTRATOR_SOFTWARE_BUILD_PROFILE;
+    const char *profile = SOFTWARE_BUILD_PROFILE;
     char comments[512];
     std::snprintf(
         comments, sizeof(comments),
@@ -811,10 +811,10 @@ void about_clicked(GtkButton *, gpointer user_data)
     gtk_about_dialog_set_program_name(
         GTK_ABOUT_DIALOG(dialog), "Software");
     gtk_about_dialog_set_logo_icon_name(
-        GTK_ABOUT_DIALOG(dialog), "net.ssmith.infiltrator.software");
-    gtk_window_set_icon_name(GTK_WINDOW(dialog), "net.ssmith.infiltrator.software");
+        GTK_ABOUT_DIALOG(dialog), "net.ssmith.software");
+    gtk_window_set_icon_name(GTK_WINDOW(dialog), "net.ssmith.software");
     gtk_about_dialog_set_version(
-        GTK_ABOUT_DIALOG(dialog), INFILTRATOR_SOFTWARE_VERSION);
+        GTK_ABOUT_DIALOG(dialog), SOFTWARE_VERSION);
     gtk_about_dialog_set_comments(GTK_ABOUT_DIALOG(dialog), comments);
     gtk_about_dialog_set_website(
         GTK_ABOUT_DIALOG(dialog),

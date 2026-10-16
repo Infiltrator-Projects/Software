@@ -203,7 +203,7 @@ bool configured_architectures(
     architectures.emplace_back(native_architecture);
 
     const char *override_value =
-        std::getenv("INFILTRATOR_SOFTWARE_FOREIGN_ARCHITECTURES");
+        std::getenv("SOFTWARE_FOREIGN_ARCHITECTURES");
     if (override_value != nullptr) {
         if (!append_foreign_architectures(
                 override_value,
@@ -418,7 +418,7 @@ bool DebianReconciler::reconcile(
 std::string default_repository_cache_path()
 {
     const char *override_path =
-        std::getenv("INFILTRATOR_SOFTWARE_REPOSITORY_CACHE");
+        std::getenv("SOFTWARE_REPOSITORY_CACHE");
     if (override_path != nullptr && *override_path != '\0') return override_path;
 
     const char *xdg_cache = std::getenv("XDG_CACHE_HOME");
@@ -434,7 +434,7 @@ std::string default_repository_cache_path()
     }
 
     return (std::filesystem::temp_directory_path() /
-        ("infiltrator-software-" + std::to_string(getuid())) /
+        ("software-" + std::to_string(getuid())) /
         "repositories").string();
 }
 

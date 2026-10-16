@@ -53,7 +53,7 @@ engine_client_hpp = text("src/client/engine_client.hpp")
 engine_service = text("src/service/main.cpp")
 engine_core = text("src/engine/engine_service_core.cpp")
 engine_introspection_template = text("src/service/engine_introspection.hpp.in")
-engine_interface = text("data/net.ssmith.infiltrator.software.Engine.xml")
+engine_interface = text("data/net.ssmith.software.Engine.xml")
 transaction = text("src/engine/debian_transaction.cpp")
 dependency = text("src/engine/debian_dependency.cpp")
 candidate = text("src/engine/debian_candidate.cpp")
@@ -92,10 +92,10 @@ version = text("VERSION").strip()
 readme = text("README.md")
 changelog = text("debian/changelog")
 
-metainfo_root = ET.parse("debian/infiltrator-software.metainfo.xml").getroot()
+metainfo_root = ET.parse("debian/software.metainfo.xml").getroot()
 metainfo_releases = metainfo_root.findall("./releases/release")
-update_policy_path = Path("data/net.ssmith.infiltrator.software.updates.policy")
-source_policy_path = Path("data/net.ssmith.infiltrator.software.policy")
+update_policy_path = Path("data/net.ssmith.software.updates.policy")
+source_policy_path = Path("data/net.ssmith.software.policy")
 update_policy_xml = update_policy_path.read_text()
 
 # One release identity, everywhere users and package tooling observe it.
@@ -203,9 +203,9 @@ for target in (
 ):
     assert f"add_library({target} STATIC" in cmake
 assert "software-sources" not in cmake
-assert "software-source-inventory" in target_links(cmake, "infiltrator-software")
-assert "software-source-mutation" not in target_links(cmake, "infiltrator-software")
-assert "software-source-mutation" in target_links(cmake, "infiltrator-software-helper")
+assert "software-source-inventory" in target_links(cmake, "software")
+assert "software-source-mutation" not in target_links(cmake, "software")
+assert "software-source-mutation" in target_links(cmake, "software-helper")
 assert re.search(
     r"target_link_libraries\s*\(\s*software-engine\s+PRIVATE\s+software-source-format\s*\)",
     cmake,
@@ -362,7 +362,7 @@ assert '"--purge-removals"' in helper
 assert '"--purge-removals"' in maintenance
 assert '"apt-get", "-s", "autoremove", "--purge"' in maintenance
 assert '"LC_ALL", "C"' in maintenance
-assert '"/usr/libexec/infiltrator-software-update-helper"' in maintenance
+assert '"/usr/libexec/software-update-helper"' in maintenance
 
 # Client/service compatibility and caller identity checks fail closed. The
 # installed interface XML is also the sole D-Bus schema authority: the service
@@ -400,7 +400,7 @@ product_sources = "\n".join(
     if "src/infiltratr-common/" not in path.as_posix()
 )
 assert product_sources.count(
-    '"/etc/infiltrator-software/automatic-updates.conf"') == 1
+    '"/etc/software/automatic-updates.conf"') == 1
 
 # Privileged source mutation remains narrow and always administrator-authorized.
 assert "set_apt_list_entry_enabled" in source_mutation

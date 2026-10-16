@@ -46,7 +46,7 @@ int main()
         "Version: 2.0-1\n"
         "Installed-Size: 4\n"
         "\n"
-        "Package: infiltrator-calendar\n"
+        "Package: calendar\n"
         "Status: install ok installed\n"
         "Architecture: amd64\n"
         "Version: 1.0.45+nativepgo1\n"
@@ -81,7 +81,7 @@ int main()
     assert(packages[1].held);
     assert(packages[1].installed_size_bytes == 0U);
 
-    assert(packages[2].id == "infiltrator-calendar");
+    assert(packages[2].id == "calendar");
     assert(packages[2].architecture == "amd64");
     assert(packages[2].installed_version == "1.0.45+nativepgo1");
     assert(packages[2].state == InstallState::installed);

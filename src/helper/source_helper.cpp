@@ -185,7 +185,7 @@ bool write_atomic(
     }
 
     std::string temporary =
-        (directory / ".infiltrator-software-source-XXXXXX").string();
+        (directory / ".software-source-XXXXXX").string();
     std::string mutable_name = temporary;
     mutable_name.push_back('\0');
 
@@ -451,7 +451,7 @@ int add_apt_source(
 
     const std::filesystem::path destination =
         std::filesystem::path("/etc/apt/sources.list.d") /
-        ("infiltrator-software-" +
+        ("software-" +
          normalise_name(name_text) + ".sources");
 
     std::string content;
@@ -494,7 +494,7 @@ int main(int argc, char **argv)
     if (geteuid() != 0) {
         std::fprintf(
             stderr,
-            "infiltrator-software-helper must run as root.\n");
+            "software-helper must run as root.\n");
         return 1;
     }
 
@@ -512,9 +512,9 @@ int main(int argc, char **argv)
 
     std::fprintf(
         stderr,
-        "Usage: infiltrator-software-helper "
+        "Usage: software-helper "
         "add-apt-source NAME HTTPS_URI SUITE COMPONENTS SIGNED_BY\n"
-        "   or: infiltrator-software-helper "
+        "   or: software-helper "
         "set-apt-source-enabled FILE ENTRY_INDEX yes|no EXPECTED_URI EXPECTED_SUITES\n");
     return 64;
 }

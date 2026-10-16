@@ -89,7 +89,7 @@ struct TrayState {
 };
 
 constexpr const char *kInstalledTrayPath =
-    "/usr/bin/infiltrator-software-tray";
+    "/usr/bin/software-tray";
 constexpr std::string_view kDeletedSuffix = " (deleted)";
 
 bool take_replace_argument(int &argc, char **argv)
@@ -118,7 +118,7 @@ bool tray_executable_name(std::string name)
             kDeletedSuffix) == 0) {
         name.resize(name.size() - kDeletedSuffix.size());
     }
-    return name == "infiltrator-software-tray";
+    return name == "software-tray";
 }
 
 bool same_user_tray_process(const pid_t pid)
@@ -230,7 +230,7 @@ int acquire_single_instance_lock(const bool replace_existing)
     }
 
     const std::filesystem::path directory =
-        std::filesystem::path(runtime) / "infiltrator-software";
+        std::filesystem::path(runtime) / "software";
     std::error_code ec;
     std::filesystem::create_directories(directory, ec);
     if (ec) {
@@ -289,7 +289,7 @@ std::filesystem::path state_file()
         return {};
     }
     return std::filesystem::path(runtime) /
-           "infiltrator-software" / "update-state";
+           "software" / "update-state";
 }
 
 std::string read_override()
@@ -460,7 +460,7 @@ void send_update_notification(
         "{sv}",
         "desktop-entry",
         g_variant_new_string(
-            "net.ssmith.infiltrator.software"));
+            "net.ssmith.software"));
 
     g_dbus_connection_call(
         connection,
@@ -472,7 +472,7 @@ void send_update_notification(
             "(susss^as@a{sv}i)",
             "Software",
             0U,
-            "infiltrator-software-updates-available-symbolic",
+            "software-updates-available-symbolic",
             summary.c_str(),
             body.c_str(),
             actions,
@@ -533,7 +533,7 @@ void render(TrayState *state)
     const std::string &override = state->override_state;
     if (override == "installing") {
         xapp_status_icon_set_icon_name(
-            state->icon, "infiltrator-software-installing-symbolic");
+            state->icon, "software-installing-symbolic");
         xapp_status_icon_set_tooltip_text(
             state->icon, "Installing software updates");
         xapp_status_icon_set_visible(state->icon, TRUE);
@@ -541,7 +541,7 @@ void render(TrayState *state)
     }
     if (override == "checking") {
         xapp_status_icon_set_icon_name(
-            state->icon, "infiltrator-software-checking-symbolic");
+            state->icon, "software-checking-symbolic");
         xapp_status_icon_set_tooltip_text(
             state->icon, "Checking for software updates");
         xapp_status_icon_set_visible(state->icon, TRUE);
@@ -553,7 +553,7 @@ void render(TrayState *state)
                 ? override.substr(6U)
                 : std::string("Software update failed");
         xapp_status_icon_set_icon_name(
-            state->icon, "infiltrator-software-error-symbolic");
+            state->icon, "software-error-symbolic");
         xapp_status_icon_set_tooltip_text(
             state->icon, message.c_str());
         xapp_status_icon_set_visible(state->icon, TRUE);
@@ -562,18 +562,18 @@ void render(TrayState *state)
 
     if (state->checking) {
         xapp_status_icon_set_icon_name(
-            state->icon, "infiltrator-software-checking-symbolic");
+            state->icon, "software-checking-symbolic");
         xapp_status_icon_set_tooltip_text(
             state->icon, "Checking for software updates");
     } else if (!state->last_error.empty()) {
         xapp_status_icon_set_icon_name(
-            state->icon, "infiltrator-software-error-symbolic");
+            state->icon, "software-error-symbolic");
         xapp_status_icon_set_tooltip_text(
             state->icon, state->last_error.c_str());
     } else if (state->update_count > 0U) {
         xapp_status_icon_set_icon_name(
             state->icon,
-            "infiltrator-software-updates-available-symbolic");
+            "software-updates-available-symbolic");
         const std::string tooltip =
             std::to_string(state->update_count) +
             (state->update_count == 1U
@@ -583,7 +583,7 @@ void render(TrayState *state)
             state->icon, tooltip.c_str());
     } else {
         xapp_status_icon_set_icon_name(
-            state->icon, "infiltrator-software-up-to-date-symbolic");
+            state->icon, "software-up-to-date-symbolic");
         xapp_status_icon_set_tooltip_text(
             state->icon, "Your system is up to date");
     }
@@ -812,8 +812,8 @@ void subscribe_engine(TrayState *state)
     state->state_signal_id =
         g_dbus_connection_signal_subscribe(
             state->engine_connection,
-            "net.ssmith.infiltrator.software.Engine",
-            "net.ssmith.infiltrator.software.Engine",
+            "net.ssmith.software.Engine",
+            "net.ssmith.software.Engine",
             "StateChanged",
             "/net/ssmith/infiltrator/software/Engine",
             nullptr,
@@ -824,8 +824,8 @@ void subscribe_engine(TrayState *state)
     state->health_signal_id =
         g_dbus_connection_signal_subscribe(
             state->engine_connection,
-            "net.ssmith.infiltrator.software.Engine",
-            "net.ssmith.infiltrator.software.Engine",
+            "net.ssmith.software.Engine",
+            "net.ssmith.software.Engine",
             "HealthChanged",
             "/net/ssmith/infiltrator/software/Engine",
             nullptr,
@@ -908,7 +908,7 @@ void replace_running_tray_if_needed(TrayState *state)
      */
     (void)execl(
         kInstalledTrayPath,
-        "infiltrator-software-tray",
+        "software-tray",
         "--replace",
         static_cast<char *>(nullptr));
     state->replacement_exec_failed = true;
@@ -1039,7 +1039,7 @@ void open_software(TrayState *state)
     state->opening_software = true;
     GError *error = nullptr;
     if (!g_spawn_command_line_async(
-            "infiltrator-software --updates", &error)) {
+            "software --updates", &error)) {
         state->opening_software = false;
         if (error != nullptr) {
             g_warning("Unable to launch Software: %s", error->message);
@@ -1105,7 +1105,7 @@ int main(int argc, char **argv)
     state.started_us = g_get_monotonic_time();
     (void)refresh_runtime_inputs(&state, true);
     state.icon =
-        xapp_status_icon_new_with_name("infiltrator-software-updater");
+        xapp_status_icon_new_with_name("software-updater");
     if (state.icon == nullptr) {
         return 1;
     }

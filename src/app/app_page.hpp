@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-#ifndef INFILTRATOR_SOFTWARE_APP_PAGE_HPP
-#define INFILTRATOR_SOFTWARE_APP_PAGE_HPP
+#ifndef SOFTWARE_APP_PAGE_HPP
+#define SOFTWARE_APP_PAGE_HPP
 
 namespace infiltrator::software::app {
 

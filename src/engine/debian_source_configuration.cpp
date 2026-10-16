@@ -435,9 +435,9 @@ DebianSourceConfiguration::read(std::string &error)
      * running system first. The override is explicit and process-local.
      */
     const char *override_file =
-        std::getenv("INFILTRATOR_SOFTWARE_SOURCES_FILE");
+        std::getenv("SOFTWARE_SOURCES_FILE");
     const char *override_origin =
-        std::getenv("INFILTRATOR_SOFTWARE_SOURCES_ORIGIN");
+        std::getenv("SOFTWARE_SOURCES_ORIGIN");
     if (override_file != nullptr &&
         *override_file != '\0') {
         const std::filesystem::path path{

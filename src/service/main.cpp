@@ -25,11 +25,11 @@ using infiltrator::software::TransactionRequest;
 using infiltrator::software::service::kEngineIntrospectionXml;
 
 constexpr const char *kBusName =
-    "net.ssmith.infiltrator.software.Engine";
+    "net.ssmith.software.Engine";
 constexpr const char *kObjectPath =
     "/net/ssmith/infiltrator/software/Engine";
 constexpr const char *kInterfaceName =
-    "net.ssmith.infiltrator.software.Engine";
+    "net.ssmith.software.Engine";
 constexpr guint kApiVersion = 5U;
 constexpr std::size_t kMaximumPlanPackages = 4096U;
 
@@ -63,7 +63,7 @@ GVariant *status_variant(const EngineServiceStatus &status)
         g_variant_new_uint32(kApiVersion));
     g_variant_builder_add(
         &builder, "{sv}", "engine-version",
-        g_variant_new_string(INFILTRATOR_SOFTWARE_VERSION));
+        g_variant_new_string(SOFTWARE_VERSION));
     g_variant_builder_add(
         &builder, "{sv}", "generation",
         g_variant_new_uint64(status.generation));
@@ -520,7 +520,7 @@ void refresh_complete(
         } else {
             g_dbus_method_invocation_return_dbus_error(
                 invocation,
-                "net.ssmith.infiltrator.software.Engine.Error.RefreshFailed",
+                "net.ssmith.software.Engine.Error.RefreshFailed",
                 error.empty()
                     ? "Repository refresh failed."
                     : error.c_str());
@@ -741,7 +741,7 @@ void handle_method_call(
     if (state == nullptr) {
         return_engine_error(
             invocation,
-            "net.ssmith.infiltrator.software.Engine.Error.Internal",
+            "net.ssmith.software.Engine.Error.Internal",
             "Engine service state is unavailable.");
         return;
     }
@@ -766,7 +766,7 @@ void handle_method_call(
         if (status.generation == 0U) {
             return_engine_error(
                 invocation,
-                "net.ssmith.infiltrator.software.Engine.Error.NoState",
+                "net.ssmith.software.Engine.Error.NoState",
                 status.detail);
             return;
         }
@@ -788,7 +788,7 @@ void handle_method_call(
         if (status.generation == 0U) {
             return_engine_error(
                 invocation,
-                "net.ssmith.infiltrator.software.Engine.Error.NoState",
+                "net.ssmith.software.Engine.Error.NoState",
                 status.detail);
             return;
         }
@@ -803,7 +803,7 @@ void handle_method_call(
                 selected)) {
             return_engine_error(
                 invocation,
-                "net.ssmith.infiltrator.software.Engine.Error.InvalidRequest",
+                "net.ssmith.software.Engine.Error.InvalidRequest",
                 "Unsupported Linux kernel type.");
             return;
         }
@@ -832,7 +832,7 @@ void handle_method_call(
         if (state->refresh_active) {
             return_engine_error(
                 invocation,
-                "net.ssmith.infiltrator.software.Engine.Error.Busy",
+                "net.ssmith.software.Engine.Error.Busy",
                 "A repository refresh is already in progress.");
             return;
         }
@@ -840,7 +840,7 @@ void handle_method_call(
         if (!refresh_installed_and_signal(state, refresh_error)) {
             return_engine_error(
                 invocation,
-                "net.ssmith.infiltrator.software.Engine.Error.RefreshFailed",
+                "net.ssmith.software.Engine.Error.RefreshFailed",
                 refresh_error);
             return;
         }
@@ -866,7 +866,7 @@ void handle_method_call(
         if (state->refresh_active) {
             return_engine_error(
                 invocation,
-                "net.ssmith.infiltrator.software.Engine.Error.Busy",
+                "net.ssmith.software.Engine.Error.Busy",
                 "The engine cannot quit while a repository refresh is in progress.");
             return;
         }
@@ -916,7 +916,7 @@ void handle_method_call(
             }
             return_engine_error(
                 invocation,
-                "net.ssmith.infiltrator.software.Engine.Error.InvalidRequest",
+                "net.ssmith.software.Engine.Error.InvalidRequest",
                 "Unknown transaction action.");
             return;
         }
@@ -937,7 +937,7 @@ void handle_method_call(
                         kMaximumPlanPackages) {
                         return_engine_error(
                             invocation,
-                            "net.ssmith.infiltrator.software.Engine.Error.InvalidRequest",
+                            "net.ssmith.software.Engine.Error.InvalidRequest",
                             "Transaction contains too many package identities.");
                         return false;
                     }
@@ -950,7 +950,7 @@ void handle_method_call(
                         identity.size() > 512U) {
                         return_engine_error(
                             invocation,
-                            "net.ssmith.infiltrator.software.Engine.Error.InvalidRequest",
+                            "net.ssmith.software.Engine.Error.InvalidRequest",
                             "Transaction contains an invalid package identity.");
                         return false;
                     }
@@ -983,7 +983,7 @@ void handle_method_call(
         if (!plan.has_value()) {
             return_engine_error(
                 invocation,
-                "net.ssmith.infiltrator.software.Engine.Error.PlanFailed",
+                "net.ssmith.software.Engine.Error.PlanFailed",
                 error);
             return;
         }
@@ -998,7 +998,7 @@ void handle_method_call(
 
     return_engine_error(
         invocation,
-        "net.ssmith.infiltrator.software.Engine.Error.UnknownMethod",
+        "net.ssmith.software.Engine.Error.UnknownMethod",
         "Unknown engine method.");
 }
 

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-#ifndef INFILTRATOR_SOFTWARE_DEBIAN_CONTROL_HPP
-#define INFILTRATOR_SOFTWARE_DEBIAN_CONTROL_HPP
+#ifndef SOFTWARE_DEBIAN_CONTROL_HPP
+#define SOFTWARE_DEBIAN_CONTROL_HPP
 
 #include <functional>
 #include <map>

@@ -84,7 +84,7 @@ public:
         }
 
         std::string pattern =
-            (parent / "infiltrator-software-release-XXXXXX").string();
+            (parent / "software-release-XXXXXX").string();
         std::vector<char> writable(pattern.begin(), pattern.end());
         writable.push_back('\0');
         char *created = mkdtemp(writable.data());
@@ -134,7 +134,7 @@ public:
     bool acquire(std::string &error)
     {
         fd_ = open(
-            "/run/lock/infiltrator-software-release-upgrade.lock",
+            "/run/lock/software-release-upgrade.lock",
             O_RDWR | O_CREAT | O_CLOEXEC,
             0600);
         if (fd_ < 0) {
@@ -530,15 +530,15 @@ bool build_plan(const ReleaseInfo &release,TransactionPlan &combined,std::string
     const std::string cache=(root/"repositories").string();
     ScopedEnvironment environment;
     if (!environment.set(
-            "INFILTRATOR_SOFTWARE_STATE_DB", db, error) ||
+            "SOFTWARE_STATE_DB", db, error) ||
         !environment.set(
-            "INFILTRATOR_SOFTWARE_REPOSITORY_CACHE", cache, error) ||
+            "SOFTWARE_REPOSITORY_CACHE", cache, error) ||
         !environment.set(
-            "INFILTRATOR_SOFTWARE_SOURCES_FILE",
+            "SOFTWARE_SOURCES_FILE",
             release.repositories.string(),
             error) ||
         !environment.set(
-            "INFILTRATOR_SOFTWARE_SOURCES_ORIGIN",
+            "SOFTWARE_SOURCES_ORIGIN",
             "/etc/apt/sources.list.d/official-package-repositories.list",
             error)) {
         return false;
@@ -1239,11 +1239,11 @@ bool recover_pending_release(std::string &error)
         ScopedEnvironment recovery_environment;
         std::string recovery_environment_error;
         if (!recovery_environment.set(
-                "INFILTRATOR_SOFTWARE_SOURCES_FILE",
+                "SOFTWARE_SOURCES_FILE",
                 "/etc/apt/sources.list.d/official-package-repositories.list",
                 recovery_environment_error) ||
             !recovery_environment.set(
-                "INFILTRATOR_SOFTWARE_SOURCES_ORIGIN",
+                "SOFTWARE_SOURCES_ORIGIN",
                 "/etc/apt/sources.list.d/official-package-repositories.list",
                 recovery_environment_error)) {
             error =
@@ -1254,7 +1254,7 @@ bool recover_pending_release(std::string &error)
         }
 
         std::vector<std::string> command{
-            "/usr/libexec/infiltrator-software-update-helper",
+            "/usr/libexec/software-update-helper",
             "apply-plan"};
         command.insert(
             command.end(),
@@ -1405,7 +1405,7 @@ bool ensure_release_recovered_for_plan(
     return run_command(
         {
             "pkexec",
-            "/usr/bin/infiltrator-software-release-upgrade",
+            "/usr/bin/software-release-upgrade",
             "recover"
         },
         error);
@@ -1535,11 +1535,11 @@ int apply_inhibited_command(int argc,char **argv)
 
     ScopedEnvironment apply_environment;
     if (!apply_environment.set(
-            "INFILTRATOR_SOFTWARE_SOURCES_FILE",
+            "SOFTWARE_SOURCES_FILE",
             publication.destination.string(),
             error) ||
         !apply_environment.set(
-            "INFILTRATOR_SOFTWARE_SOURCES_ORIGIN",
+            "SOFTWARE_SOURCES_ORIGIN",
             publication.destination.string(),
             error)) {
         std::cerr
@@ -1549,7 +1549,7 @@ int apply_inhibited_command(int argc,char **argv)
     }
 
     std::vector<std::string> command={
-        "/usr/libexec/infiltrator-software-update-helper",
+        "/usr/libexec/software-update-helper",
         "apply-plan"};
     command.insert(command.end(),approved.begin(),approved.end());
     if (!run_command(std::move(command),error)) {
@@ -1640,7 +1640,7 @@ int apply_command(int argc, char **argv)
         "--who=Software",
         "--why=Upgrading Linux Mint release",
         "--mode=block",
-        "/usr/bin/infiltrator-software-release-upgrade",
+        "/usr/bin/software-release-upgrade",
         "apply-inhibited"};
     for (int index = 2; index < argc; ++index) {
         command.emplace_back(argv[index]);
@@ -1675,7 +1675,7 @@ int main(int argc,char **argv)
     if (argc>=3 && std::string_view(argv[1])=="apply-inhibited")
         return apply_inhibited_command(argc,argv);
     std::cerr
-        << "Usage: infiltrator-software-release-upgrade "
+        << "Usage: software-release-upgrade "
            "plan | recover | apply SPEC...\n";
     return 64;
 }

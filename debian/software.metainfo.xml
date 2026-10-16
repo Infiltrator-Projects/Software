@@ -12,11 +12,11 @@
     <p>The Linux implementation merges verified Infiltrator catalogue records, host AppStream applications and configured Flatpak metadata while presenting Discover, Installed, Updates, System, Repositories, History and Repair in one application.</p>
   </description>
 
-  <launchable type="desktop-id">net.ssmith.infiltrator.software.desktop</launchable>
+  <launchable type="desktop-id">net.ssmith.software.desktop</launchable>
   <provides>
-    <binary>infiltrator-software</binary>
+    <binary>software</binary>
   </provides>
-  <icon type="stock">net.ssmith.infiltrator.software</icon>
+  <icon type="stock">net.ssmith.software</icon>
 
   <categories>
     <category>System</category>
@@ -25,6 +25,7 @@
   <url type="homepage">https://github.com/Infiltrator-Projects/Software</url>
 
   <releases>
+    <release version="0.3.102" date="2026-10-17"><description><p>Use canonical names throughout the alpha application and package.</p></description></release>
     <release version="0.3.101" date="2026-10-17">
       <description><p>Align product and package names while preserving upgrades from previous package identities.</p></description>
     </release>

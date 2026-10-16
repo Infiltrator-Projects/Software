@@ -6,7 +6,7 @@
   <vendor>Infiltrator Projects</vendor>
   <vendor_url>https://github.com/Infiltrator-Projects/Software</vendor_url>
 
-  <action id="net.ssmith.infiltrator.software.manage-updates">
+  <action id="net.ssmith.software.manage-updates">
     <description>Install, update or remove system software</description>
     <message>Authentication is required to install, update or remove system software.</message>
     <defaults>
@@ -19,9 +19,9 @@
       <allow_inactive>auth_admin</allow_inactive>
       <allow_active>auth_admin</allow_active>
     </defaults>
-    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/infiltrator-software-update-helper</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/software-update-helper</annotate>
   </action>
-  <action id="net.ssmith.infiltrator.software.release-upgrade">
+  <action id="net.ssmith.software.release-upgrade">
     <description>Upgrade Linux Mint to the reviewed target release</description>
     <message>Authentication is required to upgrade the operating-system release.</message>
     <defaults>
@@ -29,6 +29,6 @@
       <allow_inactive>auth_admin</allow_inactive>
       <allow_active>auth_admin</allow_active>
     </defaults>
-    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/infiltrator-software-release-upgrade</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/software-release-upgrade</annotate>
   </action>
 </policyconfig>

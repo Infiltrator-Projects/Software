@@ -17,7 +17,7 @@ std::filesystem::path software_update_runtime_state_path()
         return {};
     }
     return std::filesystem::path(runtime) /
-           "infiltrator-software" / "update-state";
+           "software" / "update-state";
 }
 
 void set_software_update_runtime_state(const std::string_view value)

@@ -210,7 +210,7 @@ std::string user_transaction_history_path()
     if (xdg != nullptr && *xdg != '\0') {
         return (
             std::filesystem::path(xdg) /
-            "infiltrator-software" /
+            "software" /
             "history.sqlite3").string();
     }
 
@@ -220,7 +220,7 @@ std::string user_transaction_history_path()
         return (
             std::filesystem::path(home) /
             ".local/share" /
-            "infiltrator-software" /
+            "software" /
             "history.sqlite3").string();
     }
     return {};

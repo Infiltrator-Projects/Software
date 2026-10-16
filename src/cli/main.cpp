@@ -34,14 +34,14 @@ void usage()
 {
     std::cout
         << "Usage:\n"
-        << "  infiltrator-software-cli list [--security-only] [--kernel-only] [--ignore PATTERN]\n"
-        << "  infiltrator-software-cli refresh\n"
-        << "  infiltrator-software-cli upgrade [--security-only] [--kernel-only] [--dry-run]\n"
+        << "  software-cli list [--security-only] [--kernel-only] [--ignore PATTERN]\n"
+        << "  software-cli refresh\n"
+        << "  software-cli upgrade [--security-only] [--kernel-only] [--dry-run]\n"
         << "      [--ignore PATTERN] [--refresh-cache] [--yes] [--keep-configuration|--replace-configuration]\n"
         << "      [--install-recommends]\n"
-        << "  infiltrator-software-cli ignore list\n"
-        << "  infiltrator-software-cli ignore add PATTERN\n"
-        << "  infiltrator-software-cli ignore remove PATTERN\n";
+        << "  software-cli ignore list\n"
+        << "  software-cli ignore add PATTERN\n"
+        << "  software-cli ignore remove PATTERN\n";
 }
 
 bool parse_options(int argc, char **argv, int start, Options &options, std::string &error)
@@ -140,7 +140,7 @@ bool execute_plan(const TransactionPlan &plan, const Options &o, std::string &er
 {
     std::vector<std::string> args{
         "pkexec",
-        "/usr/libexec/infiltrator-software-update-helper",
+        "/usr/libexec/software-update-helper",
         "apply-plan"
     };
     if (o.keep_configuration) args.emplace_back("--force-confold");
@@ -203,7 +203,7 @@ int main(int argc,char **argv)
     if (argc<2) { usage(); return 64; }
     if (std::string_view(argv[1])=="--version" ||
         std::string_view(argv[1])=="-v") {
-        std::cout << INFILTRATOR_SOFTWARE_VERSION << "\n";
+        std::cout << SOFTWARE_VERSION << "\n";
         return 0;
     }
     if (std::string_view(argv[1])=="--help" ||

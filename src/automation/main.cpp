@@ -238,15 +238,15 @@ int main()
 {
     using namespace infiltrator::software;
     if (geteuid()!=0) {
-        g_printerr("infiltrator-software-auto-updater must run as root.\n");
+        g_printerr("software-auto-updater must run as root.\n");
         return 1;
     }
     if (!std::filesystem::exists(kSystemSoftwarePreferencesPath)) return 0;
 
-    (void)setenv("INFILTRATOR_SOFTWARE_PREFERENCES_PATH",kSystemSoftwarePreferencesPath,1);
-    (void)setenv("INFILTRATOR_SOFTWARE_STATE_DB",
+    (void)setenv("SOFTWARE_PREFERENCES_PATH",kSystemSoftwarePreferencesPath,1);
+    (void)setenv("SOFTWARE_STATE_DB",
         "/var/lib/infiltrator/software/automatic-packages.db",1);
-    (void)setenv("INFILTRATOR_SOFTWARE_REPOSITORY_CACHE",
+    (void)setenv("SOFTWARE_REPOSITORY_CACHE",
         "/var/cache/infiltrator/software/repositories",1);
 
     SoftwarePreferences prefs;
@@ -326,7 +326,7 @@ int main()
     g_free(inhibit);
     command={"systemd-inhibit","--what=shutdown:sleep",
         "--who=Software","--why=Installing automatic software updates",
-        "--mode=block","/usr/libexec/infiltrator-software-update-helper","apply-plan"};
+        "--mode=block","/usr/libexec/software-update-helper","apply-plan"};
     if (prefs.keep_configuration) command.push_back("--force-confold");
 
     std::vector<std::string> specs;

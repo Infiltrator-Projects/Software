@@ -17,11 +17,11 @@ namespace infiltrator::software {
 namespace {
 
 constexpr const char *kBusName =
-    "net.ssmith.infiltrator.software.Engine";
+    "net.ssmith.software.Engine";
 constexpr const char *kObjectPath =
     "/net/ssmith/infiltrator/software/Engine";
 constexpr const char *kInterfaceName =
-    "net.ssmith.infiltrator.software.Engine";
+    "net.ssmith.software.Engine";
 constexpr int kInventoryCallTimeoutMs = 750;
 /*
  * Kernel inventory is computed from the cached package snapshot rather than
@@ -41,7 +41,7 @@ constexpr int kPlanCallTimeoutMs = 2 * 60 * 1000;
 constexpr int kRefreshCallTimeoutMs = 30 * 60 * 1000;
 constexpr guint32 kRequiredApiVersion = 5U;
 constexpr const char *kRequiredEngineVersion =
-    INFILTRATOR_SOFTWARE_VERSION;
+    SOFTWARE_VERSION;
 constexpr guint kEngineRestartAttempts = 200U;
 constexpr gulong kEngineRestartDelayUs = 50000U;
 

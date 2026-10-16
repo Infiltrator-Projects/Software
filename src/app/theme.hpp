@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-#ifndef INFILTRATOR_SOFTWARE_THEME_HPP
-#define INFILTRATOR_SOFTWARE_THEME_HPP
+#ifndef SOFTWARE_THEME_HPP
+#define SOFTWARE_THEME_HPP
 
 #include <gtk/gtk.h>
 #include <infiltratr/design.h>

@@ -13,7 +13,7 @@ int main()
 
     const std::filesystem::path path =
         std::filesystem::temp_directory_path() /
-        "infiltrator-software-history-test.sqlite3";
+        "software-history-test.sqlite3";
     std::error_code ec;
     std::filesystem::remove(path, ec);
 

@@ -34,8 +34,8 @@
 #include <unistd.h>
 #include <vector>
 
-#ifndef INFILTRATOR_SOFTWARE_VERSION
-#define INFILTRATOR_SOFTWARE_VERSION "0.0.0"
+#ifndef SOFTWARE_VERSION
+#define SOFTWARE_VERSION "0.0.0"
 #endif
 
 namespace infiltrator::software::app {
@@ -77,12 +77,12 @@ std::filesystem::path update_runtime_state_path()
         return {};
     }
     return std::filesystem::path(runtime) /
-           "infiltrator-software" / "update-state";
+           "software" / "update-state";
 }
 
 std::filesystem::path privileged_update_progress_path()
 {
-    return std::filesystem::path("/run/infiltrator-software") /
+    return std::filesystem::path("/run/software") /
            ("update-" +
             std::to_string(
                 static_cast<unsigned long long>(getuid())) +
@@ -660,7 +660,7 @@ bool fetch_changelog_url(
         curl, CURLOPT_TIMEOUT, 15L);
     curl_easy_setopt(
         curl, CURLOPT_USERAGENT,
-        "Infiltrator-Software/" INFILTRATOR_SOFTWARE_VERSION);
+        "Infiltrator-Software/" SOFTWARE_VERSION);
     curl_easy_setopt(
         curl, CURLOPT_WRITEFUNCTION,
         changelog_write);
@@ -2399,7 +2399,7 @@ void updates_complete(
                     package.package_name.empty()
                         ? std::string_view(package.id)
                         : std::string_view(package.package_name);
-                return (name == "software" || name == "infiltrator-software");
+                return name == "software";
             });
     if (self_update) {
         state->updates.inventory.update_records.erase(
@@ -2411,7 +2411,7 @@ void updates_complete(
                         package.package_name.empty()
                             ? std::string_view(package.id)
                             : std::string_view(package.package_name);
-                    return (name != "software" && name != "infiltrator-software");
+                    return name != "software";
                 }),
             state->updates.inventory.update_records.end());
         result->external_refreshed = true;
@@ -2635,8 +2635,8 @@ void updates_complete(
                  * instance and exit. exec() gives a deterministic hand-off.
                  */
                 (void)execl(
-                    "/usr/bin/infiltrator-software",
-                    "infiltrator-software",
+                    "/usr/bin/software",
+                    "software",
                     "--updates",
                     static_cast<char *>(nullptr));
                 g_warning(
@@ -2816,10 +2816,9 @@ void update_process_complete(
                         [](const TransactionItem &item) {
                             const std::string_view id(
                                 item.package_id);
-                            return id == "software" || id.rfind("software:", 0U) == 0U ||
-                                   id == "infiltrator-software" ||
+                            return id == "software" ||
                                    id.rfind(
-                                       "infiltrator-software:",
+                                       "software:",
                                        0U) == 0U;
                         });
             }
@@ -3006,7 +3005,7 @@ void begin_apply_updates(WindowState *state)
 
     std::vector<std::string> arguments{
         "pkexec",
-        "/usr/libexec/infiltrator-software-update-helper",
+        "/usr/libexec/software-update-helper",
         "apply-plan",
         "--progress-token=" +
             state->updates.transaction.updates_progress_token};

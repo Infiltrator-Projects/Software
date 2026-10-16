@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-#ifndef INFILTRATOR_SOFTWARE_PAGE_SUPPORT_HPP
-#define INFILTRATOR_SOFTWARE_PAGE_SUPPORT_HPP
+#ifndef SOFTWARE_PAGE_SUPPORT_HPP
+#define SOFTWARE_PAGE_SUPPORT_HPP
 
 #include "core/model.hpp"
 #include <gtk/gtk.h>

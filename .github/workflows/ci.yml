@@ -109,7 +109,7 @@ jobs:
         run: |
           set -euo pipefail
           dbus-run-session -- bash -euo pipefail -c '
-            ./build-deb/infiltrator-software-engine >engine.out 2>engine.err &
+            ./build-deb/software-engine >engine.out 2>engine.err &
             pid=$!
             cleanup() {
               kill "$pid" 2>/dev/null || true
@@ -119,9 +119,9 @@ jobs:
 
             for attempt in $(seq 1 40); do
               if gdbus call --session \
-                  --dest net.ssmith.infiltrator.software.Engine \
+                  --dest net.ssmith.software.Engine \
                   --object-path /net/ssmith/infiltrator/software/Engine \
-                  --method net.ssmith.infiltrator.software.Engine.GetStatus \
+                  --method net.ssmith.software.Engine.GetStatus \
                   >engine.status 2>engine.call.err; then
                 cat engine.status
                 exit 0
@@ -148,7 +148,7 @@ jobs:
         run: |
           set -uo pipefail
           set +e
-          timeout 20s xvfb-run -a ./build-deb/infiltrator-software >launch.out 2>launch.err
+          timeout 20s xvfb-run -a ./build-deb/software >launch.out 2>launch.err
           status=$?
           set -e
           echo "launch exit status: $status"
@@ -168,11 +168,11 @@ jobs:
             -ex "set pagination off" \
             -ex run \
             -ex "thread apply all bt full" \
-            --args ./build-deb/infiltrator-software || true
+            --args ./build-deb/software || true
           exit "$status"
 
       - name: Validate AppStream metadata
-        run: appstreamcli validate debian/infiltrator-software.metainfo.xml
+        run: appstreamcli validate debian/software.metainfo.xml
 
       - name: Complete verified release bundle
         if: steps.identity.outputs.release == 'true'

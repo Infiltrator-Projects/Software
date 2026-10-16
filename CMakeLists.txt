@@ -7,7 +7,7 @@ if(NOT SOFTWARE_VERSION MATCHES "^[0-9]+\\.[0-9]+\\.[0-9]+$")
     message(FATAL_ERROR "VERSION must contain major.minor.patch")
 endif()
 
-project(InfiltratorSoftware VERSION "${SOFTWARE_VERSION}" LANGUAGES C CXX)
+project(Software VERSION "${SOFTWARE_VERSION}" LANGUAGES C CXX)
 include(CTest)
 
 set(SOFTWARE_BUILD_PROFILE "cmake" CACHE STRING
@@ -224,7 +224,7 @@ target_link_libraries(software-client
     PUBLIC software-core
     PRIVATE PkgConfig::GIO)
 target_compile_definitions(software-client PRIVATE
-    INFILTRATOR_SOFTWARE_VERSION="${PROJECT_VERSION}")
+    SOFTWARE_VERSION="${PROJECT_VERSION}")
 
 add_library(software-catalogue STATIC
     src/catalogue/repository_catalogue.cpp
@@ -279,21 +279,21 @@ add_library(software-apt-plan-guard STATIC
 target_include_directories(software-apt-plan-guard PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/src")
 
-add_executable(infiltrator-software-helper
+add_executable(software-helper
     src/helper/source_helper.cpp)
-target_link_libraries(infiltrator-software-helper PRIVATE
+target_link_libraries(software-helper PRIVATE
     software-source-mutation)
 
-add_executable(infiltrator-software-update-helper
+add_executable(software-update-helper
     src/helper/update_helper.cpp)
-target_link_libraries(infiltrator-software-update-helper PRIVATE
+target_link_libraries(software-update-helper PRIVATE
     software-apt-plan-guard software-engine PkgConfig::GLIB)
 
 # The installed D-Bus interface XML is the protocol-schema authority. Embed
 # that exact file into the service at configure time so the standalone binary
 # remains self-contained without maintaining a second hand-written copy.
 file(READ
-    "${CMAKE_CURRENT_SOURCE_DIR}/data/net.ssmith.infiltrator.software.Engine.xml"
+    "${CMAKE_CURRENT_SOURCE_DIR}/data/net.ssmith.software.Engine.xml"
     SOFTWARE_ENGINE_INTERFACE_XML)
 file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/generated")
 configure_file(
@@ -301,49 +301,49 @@ configure_file(
     "${CMAKE_CURRENT_BINARY_DIR}/generated/engine_introspection.hpp"
     @ONLY)
 
-add_executable(infiltrator-software-engine
+add_executable(software-engine
     src/service/main.cpp)
-target_include_directories(infiltrator-software-engine PRIVATE
+target_include_directories(software-engine PRIVATE
     "${CMAKE_CURRENT_BINARY_DIR}/generated")
-target_link_libraries(infiltrator-software-engine PRIVATE
+target_link_libraries(software-engine PRIVATE
     software-engine PkgConfig::GIO)
-target_compile_definitions(infiltrator-software-engine PRIVATE
-    INFILTRATOR_SOFTWARE_VERSION="${PROJECT_VERSION}")
+target_compile_definitions(software-engine PRIVATE
+    SOFTWARE_VERSION="${PROJECT_VERSION}")
 
-add_executable(infiltrator-software-tray
+add_executable(software-tray
     src/tray/main.cpp)
-target_link_libraries(infiltrator-software-tray PRIVATE
+target_link_libraries(software-tray PRIVATE
     software-client software-history software-external
     PkgConfig::GTK3 PkgConfig::XAPP)
 
-add_executable(infiltrator-software-session-updater
+add_executable(software-session-updater
     src/session/main.cpp)
-target_link_libraries(infiltrator-software-session-updater PRIVATE
+target_link_libraries(software-session-updater PRIVATE
     software-core software-external PkgConfig::GLIB)
 
-add_executable(infiltrator-software-cli
+add_executable(software-cli
     src/cli/main.cpp)
-target_link_libraries(infiltrator-software-cli PRIVATE
+target_link_libraries(software-cli PRIVATE
     software-core software-history software-client PkgConfig::GLIB)
-target_compile_definitions(infiltrator-software-cli PRIVATE
-    INFILTRATOR_SOFTWARE_VERSION="${PROJECT_VERSION}")
+target_compile_definitions(software-cli PRIVATE
+    SOFTWARE_VERSION="${PROJECT_VERSION}")
 
-add_executable(infiltrator-software-auto-updater
+add_executable(software-auto-updater
     src/automation/main.cpp)
-target_link_libraries(infiltrator-software-auto-updater PRIVATE
+target_link_libraries(software-auto-updater PRIVATE
     software-core software-history software-engine PkgConfig::GLIB)
 
-add_executable(infiltrator-software-maintenance
+add_executable(software-maintenance
     src/automation/maintenance.cpp)
-target_link_libraries(infiltrator-software-maintenance PRIVATE
+target_link_libraries(software-maintenance PRIVATE
     software-core software-history software-engine PkgConfig::GLIB)
 
-add_executable(infiltrator-software-release-upgrade
+add_executable(software-release-upgrade
     src/release/main.cpp)
-target_link_libraries(infiltrator-software-release-upgrade PRIVATE
+target_link_libraries(software-release-upgrade PRIVATE
     software-core software-engine PkgConfig::GLIB)
 
-add_executable(infiltrator-software
+add_executable(software
     src/app/main.cpp
     src/app/discover_view.cpp
     src/app/updates_view.cpp
@@ -371,55 +371,55 @@ add_executable(infiltrator-software
     src/app/theme.cpp
     src/app/ui_components.cpp)
 
-target_link_libraries(infiltrator-software PRIVATE
+target_link_libraries(software PRIVATE
     software-core software-history software-client
     software-catalogue software-source-inventory software-external
     InfiltratrCommon::Common PkgConfig::GTK4 PkgConfig::CURL)
 
-target_compile_definitions(infiltrator-software PRIVATE
-    INFILTRATOR_SOFTWARE_VERSION="${PROJECT_VERSION}"
-    INFILTRATOR_SOFTWARE_BUILD_PROFILE="${SOFTWARE_BUILD_PROFILE}")
+target_compile_definitions(software PRIVATE
+    SOFTWARE_VERSION="${PROJECT_VERSION}"
+    SOFTWARE_BUILD_PROFILE="${SOFTWARE_BUILD_PROFILE}")
 
 install(TARGETS
-    infiltrator-software
-    infiltrator-software-tray
-    infiltrator-software-session-updater
-    infiltrator-software-cli
-    infiltrator-software-release-upgrade
+    software
+    software-tray
+    software-session-updater
+    software-cli
+    software-release-upgrade
     RUNTIME DESTINATION bin)
 install(TARGETS
-    infiltrator-software-helper
-    infiltrator-software-update-helper
-    infiltrator-software-engine
-    infiltrator-software-auto-updater
-    infiltrator-software-maintenance
+    software-helper
+    software-update-helper
+    software-engine
+    software-auto-updater
+    software-maintenance
     RUNTIME DESTINATION libexec)
 install(FILES
-    data/net.ssmith.infiltrator.software.Engine.service
+    data/net.ssmith.software.Engine.service
     DESTINATION share/dbus-1/services)
 install(FILES
-    data/net.ssmith.infiltrator.software.Engine.xml
+    data/net.ssmith.software.Engine.xml
     DESTINATION share/dbus-1/interfaces)
 install(FILES
-    data/net.ssmith.infiltrator.software.policy
-    data/net.ssmith.infiltrator.software.updates.policy
+    data/net.ssmith.software.policy
+    data/net.ssmith.software.updates.policy
     DESTINATION share/polkit-1/actions)
 install(FILES
-    data/infiltrator-software-auto-update.service
-    data/infiltrator-software-auto-update.timer
-    data/infiltrator-software-maintenance.service
-    data/infiltrator-software-maintenance.timer
+    data/software-auto-update.service
+    data/software-auto-update.timer
+    data/software-maintenance.service
+    data/software-maintenance.timer
     DESTINATION lib/systemd/system)
 install(FILES
-    data/status/infiltrator-software-up-to-date-symbolic.svg
-    data/status/infiltrator-software-updates-available-symbolic.svg
-    data/status/infiltrator-software-checking-symbolic.svg
-    data/status/infiltrator-software-installing-symbolic.svg
-    data/status/infiltrator-software-error-symbolic.svg
+    data/status/software-up-to-date-symbolic.svg
+    data/status/software-updates-available-symbolic.svg
+    data/status/software-checking-symbolic.svg
+    data/status/software-installing-symbolic.svg
+    data/status/software-error-symbolic.svg
     DESTINATION share/icons/hicolor/scalable/status)
 install(FILES ${SOFTWARE_FONT_FILES}
-    DESTINATION share/fonts/truetype/infiltrator-software)
-install(FILES LICENSE DESTINATION share/doc/infiltrator-software)
+    DESTINATION share/fonts/truetype/software)
+install(FILES LICENSE DESTINATION share/doc/software)
 
 if(BUILD_TESTING)
     add_subdirectory(tests)

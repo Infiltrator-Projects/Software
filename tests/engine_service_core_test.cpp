@@ -15,7 +15,7 @@ std::filesystem::path make_temp_directory()
 {
     std::string pattern =
         (std::filesystem::temp_directory_path() /
-         "infiltrator-software-engine-core-XXXXXX").string();
+         "software-engine-core-XXXXXX").string();
     std::vector<char> writable(pattern.begin(), pattern.end());
     writable.push_back('\0');
     char *created = mkdtemp(writable.data());

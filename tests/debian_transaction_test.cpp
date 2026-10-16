@@ -388,7 +388,7 @@ int main()
 
     DebianPackageVersion software_replacement =
         available(
-            "infiltrator-software",
+            "software",
             "0.3.53",
             50U,
             500U);
@@ -402,7 +402,7 @@ int main()
 
     TransactionRequest replacement_request;
     replacement_request.action = TransactionAction::upgrade;
-    replacement_request.package_ids = {"infiltrator-software"};
+    replacement_request.package_ids = {"software"};
 
     error.clear();
     const auto replacement_plan =
@@ -410,7 +410,7 @@ int main()
             replacement_request,
             {
                 installed(
-                    "infiltrator-software",
+                    "software",
                     "0.3.49",
                     400U),
                 installed("mintupdate", "7.1.4", 200U),
@@ -427,7 +427,7 @@ int main()
     const TransactionItem *software_item =
         find_item(
             *replacement_plan,
-            "infiltrator-software");
+            "software");
     const TransactionItem *mintupdate_item =
         find_item(*replacement_plan, "mintupdate");
     assert(software_item != nullptr);
@@ -599,7 +599,8 @@ int main()
         std::string::npos);
 
     // Renaming the package must preserve the planner's self-update guard.
-    for (const std::string name : {"software", "infiltrator-software"}) {
+    {
+        const std::string name = "software";
         TransactionRequest self_update;
         self_update.action = TransactionAction::install;
         self_update.package_ids = {name};

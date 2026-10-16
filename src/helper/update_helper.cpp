@@ -446,7 +446,7 @@ std::string privileged_progress_path()
             return {};
         }
     }
-    return std::string("/run/infiltrator-software/update-") +
+    return std::string("/run/software/update-") +
            uid + ".state";
 }
 
@@ -475,7 +475,7 @@ void write_progress(
         return;
     }
 
-    if (mkdir("/run/infiltrator-software", 0755) != 0 &&
+    if (mkdir("/run/software", 0755) != 0 &&
         errno != EEXIST) {
         return;
     }
@@ -896,7 +896,7 @@ bool make_transaction_archive_directory(
 {
     error.clear();
     std::string pattern =
-        "/var/cache/apt/archives/infiltrator-software-XXXXXX";
+        "/var/cache/apt/archives/software-XXXXXX";
     std::vector<char> writable(pattern.begin(), pattern.end());
     writable.push_back('\0');
     char *created = mkdtemp(writable.data());
@@ -942,7 +942,7 @@ bool verify_reviewed_repository_state(
     }
 
     std::string pattern =
-        "/tmp/infiltrator-software-source-check-XXXXXX";
+        "/tmp/software-source-check-XXXXXX";
     std::vector<char> writable(
         pattern.begin(), pattern.end());
     writable.push_back('\0');
@@ -1039,7 +1039,7 @@ int main(int argc, char **argv)
     if (geteuid() != 0) {
         std::fprintf(
             stderr,
-            "infiltrator-software-update-helper must run as root.\n");
+            "software-update-helper must run as root.\n");
         return 1;
     }
 
@@ -1457,7 +1457,7 @@ int main(int argc, char **argv)
 
     std::fprintf(
         stderr,
-        "Usage: infiltrator-software-update-helper "
+        "Usage: software-update-helper "
         "apply-plan [--progress-token=TOKEN] [--force-confold|--force-confnew] "
         "[--purge-removals] [remove:]PACKAGE=VERSION... | repair-configure | "
         "configure-automation key=value...\n");

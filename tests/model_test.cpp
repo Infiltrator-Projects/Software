@@ -10,7 +10,7 @@ int main()
     PackageRecord package;
     assert(!valid_identity(package));
 
-    package.id = "infiltrator-calculator";
+    package.id = "calculator";
     package.name = "Calculator";
     package.channel = Channel::stable;
     package.kind = PackageKind::application;
@@ -37,7 +37,7 @@ int main()
     assert(is_system_component(driver));
 
     PackageRecord ordinary;
-    ordinary.id = "infiltrator-calendar";
+    ordinary.id = "calendar";
     ordinary.name = ordinary.id;
     ordinary.package_name = ordinary.id;
     classify_package_role(ordinary);

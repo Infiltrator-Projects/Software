@@ -1,17 +1,23 @@
+software (0.3.102) unstable; urgency=medium
+
+  * Use canonical alpha names throughout; remove package aliases and migrations.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Sat, 17 Oct 2026 10:24:00 +1100
+
 software (0.3.101) unstable; urgency=medium
 
   * Align product, package and published artifact names; preserve legacy upgrades.
 
  -- Shannon Smith <infiltratr@yandex.com>  Sat, 17 Oct 2026 10:00:00 +1100
 
-infiltrator-software (0.3.100) unstable; urgency=medium
+software (0.3.100) unstable; urgency=medium
 
   * Move the governing engineering philosophy into docs/PHILOSOPHY.md and
     update maintained documentation references and discovery.
 
  -- Infiltrator Projects <noreply@github.com>  Fri, 16 Oct 2026 04:50:00 +0000
 
-infiltrator-software (0.3.99) unstable; urgency=medium
+software (0.3.99) unstable; urgency=medium
 
   * Add the maintained validation entry point for source, privilege boundaries,
     package qualification, service smoke and immutable publication.
@@ -20,7 +26,7 @@ infiltrator-software (0.3.99) unstable; urgency=medium
 
  -- Infiltrator Projects <noreply@github.com>  Fri, 16 Oct 2026 01:30:00 +0000
 
-infiltrator-software (0.3.98) unstable; urgency=high
+software (0.3.98) unstable; urgency=high
 
   * Refine Discover into a calmer, content-led premium composition with
     restrained navigation, cards, controls and system-health presentation.
@@ -31,7 +37,7 @@ infiltrator-software (0.3.98) unstable; urgency=high
 
  -- Shannon Smith <infiltratr@yandex.com>  Thu, 15 Oct 2026 18:05:00 +1100
 
-infiltrator-software (0.3.97) unstable; urgency=high
+software (0.3.97) unstable; urgency=high
 
   * Preserve APT same-version source precedence when configured source positions
     reach multiple digits; numeric source positions now order 2 before 10
@@ -41,7 +47,7 @@ infiltrator-software (0.3.97) unstable; urgency=high
 
  -- Shannon Smith <infiltratr@yandex.com>  Thu, 15 Oct 2026 16:20:00 +1100
 
-infiltrator-software (0.3.96) unstable; urgency=high
+software (0.3.96) unstable; urgency=high
 
   * Replace the read-only apt-config subprocess and duplicate phased-update
     parser with one native APT configuration authority that follows APT_CONFIG,
@@ -57,7 +63,7 @@ infiltrator-software (0.3.96) unstable; urgency=high
 
  -- Shannon Smith <infiltratr@yandex.com>  Thu, 15 Oct 2026 15:23:00 +1100
 
-infiltrator-software (0.3.95) unstable; urgency=high
+software (0.3.95) unstable; urgency=high
 
   * Route pure-removal final-state validation through the canonical dependency
     resolver, eliminating a weaker duplicate interpreter whose Multi-Arch rules
@@ -85,7 +91,7 @@ infiltrator-software (0.3.95) unstable; urgency=high
 
  -- Shannon Smith <infiltratr@yandex.com>  Wed, 14 Oct 2026 08:24:00 +1100
 
-infiltrator-software (0.3.94) unstable; urgency=high
+software (0.3.94) unstable; urgency=high
 
   * Reconcile maintained architecture, package-engine, state and performance
     documentation with the implemented engine-only Installed-state ownership;
@@ -98,7 +104,7 @@ infiltrator-software (0.3.94) unstable; urgency=high
 
  -- Shannon Smith <infiltratr@yandex.com>  Tue, 13 Oct 2026 21:45:00 +1100
 
-infiltrator-software (0.3.93) unstable; urgency=high
+software (0.3.93) unstable; urgency=high
 
   * Restore deliberate coexistence with Linux Mint Update Manager by removing
     Provides, Replaces and Conflicts metadata for mintupdate, so installing or
@@ -111,7 +117,7 @@ infiltrator-software (0.3.93) unstable; urgency=high
 
  -- Shannon Smith <infiltratr@yandex.com>  Tue, 13 Oct 2026 18:10:00 +1100
 
-infiltrator-software (0.3.92) unstable; urgency=high
+software (0.3.92) unstable; urgency=high
 
   * Unify editable deb822 APT-source parsing so repository inventory and
     enable/disable mutation agree on continuation fields, comments and stanza
@@ -139,7 +145,7 @@ infiltrator-software (0.3.92) unstable; urgency=high
 
  -- Shannon Smith <infiltratr@yandex.com>  Tue, 13 Oct 2026 14:30:00 +1000
 
-infiltrator-software (0.3.91) unstable; urgency=high
+software (0.3.91) unstable; urgency=high
 
   * Consolidate Debian control parsing and common ASCII text handling so package
     state, repository metadata and policy/configuration readers cannot drift.
@@ -155,7 +161,7 @@ infiltrator-software (0.3.91) unstable; urgency=high
 
  -- Shannon Smith <infiltratr@yandex.com>  Tue, 13 Oct 2026 13:14:00 +1100
 
-infiltrator-software (0.3.90) unstable; urgency=high
+software (0.3.90) unstable; urgency=high
 
   * Build release source archives from tracked Git objects plus the exact Common
     gitlink instead of copying the working tree, preventing generated or

@@ -2,8 +2,8 @@
 Type=Application
 Name=Software Update Indicator
 Comment=Show software update status in the desktop panel
-Exec=infiltrator-software-tray
-Icon=infiltrator-software
+Exec=software-tray
+Icon=software
 Terminal=false
 OnlyShowIn=X-Cinnamon;Cinnamon;MATE;XFCE;
 X-GNOME-Autostart-enabled=true

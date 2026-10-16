@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-#ifndef INFILTRATOR_SOFTWARE_SYSTEM_DATA_HPP
-#define INFILTRATOR_SOFTWARE_SYSTEM_DATA_HPP
+#ifndef SOFTWARE_SYSTEM_DATA_HPP
+#define SOFTWARE_SYSTEM_DATA_HPP
 
 #include "core/model.hpp"
 

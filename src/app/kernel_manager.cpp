@@ -1116,7 +1116,7 @@ void start_apply(
 
     std::vector<std::string> arguments{
         "pkexec",
-        "/usr/libexec/infiltrator-software-update-helper",
+        "/usr/libexec/software-update-helper",
         "apply-plan"};
     arguments.insert(
         arguments.end(),

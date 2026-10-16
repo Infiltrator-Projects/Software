@@ -2530,7 +2530,7 @@ bool apply_native_cinnamon_updates_selected(
 
         gchar *temporary =
             g_dir_make_tmp(
-                "infiltrator-software-spice-XXXXXX",
+                "software-spice-XXXXXX",
                 nullptr);
         if (temporary == nullptr) {
             error = "Unable to create a temporary Cinnamon Spice directory.";

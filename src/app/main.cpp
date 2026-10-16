@@ -14,8 +14,8 @@
 #include <string>
 #include <string_view>
 
-#ifndef INFILTRATOR_SOFTWARE_VERSION
-#define INFILTRATOR_SOFTWARE_VERSION "0.0.0"
+#ifndef SOFTWARE_VERSION
+#define SOFTWARE_VERSION "0.0.0"
 #endif
 
 namespace infiltrator::software::app {
@@ -162,7 +162,7 @@ GtkWidget *shell_make_header_bar(WindowState *state)
     } else {
         GtkWidget *brand_icon =
             infiltrator::software::make_icon(
-                "net.ssmith.infiltrator.software", 28);
+                "net.ssmith.software", 28);
         gtk_widget_add_css_class(brand_icon, "titlebar-logo-fallback");
         gtk_box_append(GTK_BOX(brand_icon_wrap), brand_icon);
     }
@@ -248,7 +248,7 @@ GtkWidget *shell_make_status_bar()
     gtk_box_append(GTK_BOX(bar), common_label);
 
     const std::string version =
-        std::string("Version ") + INFILTRATOR_SOFTWARE_VERSION;
+        std::string("Version ") + SOFTWARE_VERSION;
     gtk_box_append(
         GTK_BOX(bar),
         infiltrator::software::make_label(
@@ -269,7 +269,7 @@ void shell_ensure_update_indicator()
 {
     std::string error;
     GSubprocess *process = start_subprocess(
-        {"infiltrator-software-tray"},
+        {"software-tray"},
         G_SUBPROCESS_FLAGS_NONE,
         error);
     if (process == nullptr) {
@@ -338,7 +338,7 @@ void shell_activate(GtkApplication *application, gpointer)
     GtkWidget *window = gtk_application_window_new(application);
     gtk_window_set_title(GTK_WINDOW(window), "Software");
     gtk_window_set_icon_name(
-        GTK_WINDOW(window), "net.ssmith.infiltrator.software");
+        GTK_WINDOW(window), "net.ssmith.software");
     gtk_window_set_default_size(GTK_WINDOW(window), 1440, 860);
     gtk_window_set_resizable(GTK_WINDOW(window), true);
 
@@ -452,7 +452,7 @@ int shell_command_line(
 int main(int argc, char **argv)
 {
     GtkApplication *application = gtk_application_new(
-        "net.ssmith.infiltrator.software",
+        "net.ssmith.software",
         G_APPLICATION_HANDLES_COMMAND_LINE);
 
     static const GOptionEntry options[] = {

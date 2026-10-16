@@ -252,7 +252,7 @@ int main()
     assert(!unsafe_conflict_removal.complete());
 
     DebianPackageVersion replacement =
-        package("infiltrator-software", "0.3.53");
+        package("software", "0.3.53");
     replacement.provides = "mintupdate";
     replacement.conflicts = "mintupdate";
     replacement.replaces = "mintupdate";

@@ -9,9 +9,6 @@ Homepage: https://github.com/Infiltrator-Projects/Software
 
 Package: software
 Architecture: any
-Provides: infiltrator-software (= ${binary:Version})
-Breaks: infiltrator-software (<< ${binary:Version})
-Replaces: infiltrator-software (<< ${binary:Version})
 Depends: ${shlibs:Depends}, ${misc:Depends}, apt, gettext, gpgv, pkexec
 Recommends: flatpak, timeshift
 Description: unified Infiltrator software manager and updater

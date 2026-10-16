@@ -274,7 +274,7 @@ int main()
 {
     if (geteuid() != 0) {
         g_printerr(
-            "infiltrator-software-maintenance must run as root.\n");
+            "software-maintenance must run as root.\n");
         return 1;
     }
 
@@ -292,15 +292,15 @@ int main()
     }
 
     (void)setenv(
-        "INFILTRATOR_SOFTWARE_PREFERENCES_PATH",
+        "SOFTWARE_PREFERENCES_PATH",
         kSystemSoftwarePreferencesPath,
         1);
     (void)setenv(
-        "INFILTRATOR_SOFTWARE_STATE_DB",
+        "SOFTWARE_STATE_DB",
         "/var/lib/infiltrator/software/maintenance-packages.db",
         1);
     (void)setenv(
-        "INFILTRATOR_SOFTWARE_REPOSITORY_CACHE",
+        "SOFTWARE_REPOSITORY_CACHE",
         "/var/cache/infiltrator/software/repositories",
         1);
 
@@ -395,7 +395,7 @@ int main()
         "--who=Software",
         "--why=Removing obsolete kernels and dependencies",
         "--mode=block",
-        "/usr/libexec/infiltrator-software-update-helper",
+        "/usr/libexec/software-update-helper",
         "apply-plan",
         "--purge-removals"};
     for (const SimulatedRemoval &removal : removals) {

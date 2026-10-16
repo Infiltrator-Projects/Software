@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-#ifndef INFILTRATOR_SOFTWARE_WINDOW_STATE_HPP
-#define INFILTRATOR_SOFTWARE_WINDOW_STATE_HPP
+#ifndef SOFTWARE_WINDOW_STATE_HPP
+#define SOFTWARE_WINDOW_STATE_HPP
 
 #include "app/discover_state.hpp"
 #include "app/history_controller.hpp"

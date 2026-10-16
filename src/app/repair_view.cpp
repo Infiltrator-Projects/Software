@@ -20,8 +20,8 @@
 #include <utility>
 #include <vector>
 
-#ifndef INFILTRATOR_SOFTWARE_VERSION
-#define INFILTRATOR_SOFTWARE_VERSION "0.0.0"
+#ifndef SOFTWARE_VERSION
+#define SOFTWARE_VERSION "0.0.0"
 #endif
 
 namespace infiltrator::software::app {
@@ -517,7 +517,7 @@ void repair_configure_clicked(
 
     const std::vector<std::string> arguments{
         "pkexec",
-        "/usr/libexec/infiltrator-software-update-helper",
+        "/usr/libexec/software-update-helper",
         "repair-configure"};
     std::string start_error;
     GSubprocess *process = start_subprocess(
@@ -627,7 +627,7 @@ void repair_log_clicked(
 
     std::ostringstream log;
     log << "Software "
-        << INFILTRATOR_SOFTWARE_VERSION
+        << SOFTWARE_VERSION
         << "\n\n";
 
     const std::filesystem::path runtime =

@@ -14,7 +14,7 @@ std::filesystem::path make_temp_directory()
 {
     std::string pattern =
         (std::filesystem::temp_directory_path() /
-         "infiltrator-software-catalogue-store-XXXXXX").string();
+         "software-catalogue-store-XXXXXX").string();
     std::vector<char> writable(
         pattern.begin(),
         pattern.end());
@@ -44,7 +44,7 @@ int main()
     record.id = "calculator";
     record.name = "Calculator";
     record.package_name =
-        "infiltrator-calculator";
+        "calculator";
     record.publisher = "Shannon Smith";
     record.category = "Productivity";
     record.architecture = "amd64";

@@ -438,7 +438,7 @@ void release_upgrade_plan_worker(
     SubprocessResult process;
     std::string process_error;
     const bool communicated = run_subprocess_sync(
-        {"/usr/bin/infiltrator-software-release-upgrade", "plan"},
+        {"/usr/bin/software-release-upgrade", "plan"},
         process,
         process_error);
 
@@ -649,7 +649,7 @@ void release_upgrade_confirm_response(
 
     std::vector<std::string> arguments{
         "pkexec",
-        "/usr/bin/infiltrator-software-release-upgrade",
+        "/usr/bin/software-release-upgrade",
         "apply"
     };
     arguments.insert(

@@ -179,7 +179,7 @@ void add_source_submit(GtkButton *, gpointer user_data)
         }
         arguments = {
             "pkexec",
-            "/usr/libexec/infiltrator-software-helper",
+            "/usr/libexec/software-helper",
             "add-apt-source",
             name,
             url,
@@ -548,7 +548,7 @@ void source_toggle_clicked(
         }
         arguments = {
             "pkexec",
-            "/usr/libexec/infiltrator-software-helper",
+            "/usr/libexec/software-helper",
             "set-apt-source-enabled",
             context->source.backing_file,
             std::to_string(context->source.entry_index),

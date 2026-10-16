@@ -1,4 +1,4 @@
-debian/net.ssmith.infiltrator.software.desktop usr/share/applications
-debian/infiltrator-software.metainfo.xml usr/share/metainfo
-data/infiltrator-software-tray.desktop etc/xdg/autostart
-data/infiltrator-software-session-updater.desktop etc/xdg/autostart
+debian/net.ssmith.software.desktop usr/share/applications
+debian/software.metainfo.xml usr/share/metainfo
+data/software-tray.desktop etc/xdg/autostart
+data/software-session-updater.desktop etc/xdg/autostart

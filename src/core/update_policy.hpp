@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-#ifndef INFILTRATOR_SOFTWARE_UPDATE_POLICY_HPP
-#define INFILTRATOR_SOFTWARE_UPDATE_POLICY_HPP
+#ifndef SOFTWARE_UPDATE_POLICY_HPP
+#define SOFTWARE_UPDATE_POLICY_HPP
 
 #include "core/model.hpp"
 
@@ -11,7 +11,7 @@
 namespace infiltrator::software {
 
 inline constexpr char kSystemSoftwarePreferencesPath[] =
-    "/etc/infiltrator-software/automatic-updates.conf";
+    "/etc/software/automatic-updates.conf";
 
 struct SoftwarePreferences {
     bool refresh_schedule_enabled{true};

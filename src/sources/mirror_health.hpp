@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-#ifndef INFILTRATOR_SOFTWARE_MIRROR_HEALTH_HPP
-#define INFILTRATOR_SOFTWARE_MIRROR_HEALTH_HPP
+#ifndef SOFTWARE_MIRROR_HEALTH_HPP
+#define SOFTWARE_MIRROR_HEALTH_HPP
 
 #include <curl/curl.h>
 

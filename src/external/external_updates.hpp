@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-#ifndef INFILTRATOR_SOFTWARE_EXTERNAL_UPDATES_HPP
-#define INFILTRATOR_SOFTWARE_EXTERNAL_UPDATES_HPP
+#ifndef SOFTWARE_EXTERNAL_UPDATES_HPP
+#define SOFTWARE_EXTERNAL_UPDATES_HPP
 
 #include <cstdint>
 #include <functional>

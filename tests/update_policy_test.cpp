@@ -37,7 +37,7 @@ int main()
              static_cast<unsigned long long>(getpid())) +
          ".conf");
     setenv(
-        "INFILTRATOR_SOFTWARE_PREFERENCES_PATH",
+        "SOFTWARE_PREFERENCES_PATH",
         temporary.c_str(),
         1);
 
@@ -67,6 +67,6 @@ int main()
     assert(!reboot_required(reboot.string()));
 
     std::filesystem::remove(temporary);
-    unsetenv("INFILTRATOR_SOFTWARE_PREFERENCES_PATH");
+    unsetenv("SOFTWARE_PREFERENCES_PATH");
     return 0;
 }

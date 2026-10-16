@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-#ifndef INFILTRATOR_SOFTWARE_UPDATE_TRACKER_HPP
-#define INFILTRATOR_SOFTWARE_UPDATE_TRACKER_HPP
+#ifndef SOFTWARE_UPDATE_TRACKER_HPP
+#define SOFTWARE_UPDATE_TRACKER_HPP
 
 #include "core/model.hpp"
 #include "core/update_policy.hpp"

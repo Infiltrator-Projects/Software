@@ -2,7 +2,7 @@
 Type=Application
 Name=Software Session Updates
 Comment=Apply enabled Flatpak and Cinnamon Spice automatic updates
-Exec=infiltrator-software-session-updater
+Exec=software-session-updater
 OnlyShowIn=X-Cinnamon;
 X-GNOME-Autostart-Delay=45
 NoDisplay=true

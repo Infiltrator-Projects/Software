@@ -8,4 +8,4 @@ Type=oneshot
 CPUQuota=50%
 CPUWeight=20
 IOWeight=20
-ExecStart=/usr/libexec/infiltrator-software-maintenance
+ExecStart=/usr/libexec/software-maintenance

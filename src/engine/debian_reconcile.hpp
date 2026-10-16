@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-#ifndef INFILTRATOR_SOFTWARE_DEBIAN_RECONCILE_HPP
-#define INFILTRATOR_SOFTWARE_DEBIAN_RECONCILE_HPP
+#ifndef SOFTWARE_DEBIAN_RECONCILE_HPP
+#define SOFTWARE_DEBIAN_RECONCILE_HPP
 
 #include "engine/package_state_store.hpp"
 

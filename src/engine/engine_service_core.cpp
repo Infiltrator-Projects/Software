@@ -355,7 +355,7 @@ std::optional<TransactionPlan> EngineServiceCore::plan(
 std::string default_package_state_path()
 {
     const char *override_path =
-        std::getenv("INFILTRATOR_SOFTWARE_STATE_DB");
+        std::getenv("SOFTWARE_STATE_DB");
     if (override_path != nullptr &&
         *override_path != '\0') {
         return override_path;
@@ -381,7 +381,7 @@ std::string default_package_state_path()
 
     return (
         std::filesystem::temp_directory_path() /
-        ("infiltrator-software-" + std::to_string(getuid())) /
+        ("software-" + std::to_string(getuid())) /
         "packages.db").string();
 }
 

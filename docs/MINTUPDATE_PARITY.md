@@ -64,7 +64,7 @@ implementation.
 | Welcome/onboarding screen | Not required as a separate screen; Discover performs onboarding | Equivalent |
 | Configurable visible table columns | Not applicable to Software's card/group UI | Equivalent |
 | Hide window after updates / tray visibility preferences | Implemented and shared by the main UI/tray | Required for behavioural parity |
-| CLI list and upgrade operations | Implemented by `infiltrator-software-cli` | Required for automation parity |
+| CLI list and upgrade operations | Implemented by `software-cli` | Required for automation parity |
 | CLI security-only / kernel-only filters | Implemented | Required |
 | CLI ignore list / system blacklist | Implemented, including persistent user rules and system automatic-update ignore rules | Required |
 | CLI refresh-cache and dry-run/simulation | Implemented through native refresh/planning with non-mutating dry-run | Required |

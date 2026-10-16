@@ -91,7 +91,7 @@ std::string read_first_line(const std::filesystem::path &path)
 std::string software_preferences_path()
 {
     const char *override_path =
-        std::getenv("INFILTRATOR_SOFTWARE_PREFERENCES_PATH");
+        std::getenv("SOFTWARE_PREFERENCES_PATH");
     if (override_path != nullptr && *override_path != '\0') {
         return override_path;
     }
@@ -99,7 +99,7 @@ std::string software_preferences_path()
     if (xdg != nullptr && *xdg != '\0') {
         return (
             std::filesystem::path(xdg) /
-            "infiltrator-software" /
+            "software" /
             "preferences.conf").string();
     }
     const char *home = std::getenv("HOME");
@@ -107,7 +107,7 @@ std::string software_preferences_path()
         return (
             std::filesystem::path(home) /
             ".config" /
-            "infiltrator-software" /
+            "software" /
             "preferences.conf").string();
     }
     return {};

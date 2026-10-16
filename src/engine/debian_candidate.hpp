@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-#ifndef INFILTRATOR_SOFTWARE_DEBIAN_CANDIDATE_HPP
-#define INFILTRATOR_SOFTWARE_DEBIAN_CANDIDATE_HPP
+#ifndef SOFTWARE_DEBIAN_CANDIDATE_HPP
+#define SOFTWARE_DEBIAN_CANDIDATE_HPP
 
 #include "core/model.hpp"
 #include "engine/debian_package_index.hpp"

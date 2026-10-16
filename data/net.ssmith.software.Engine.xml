@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 <node>
-  <interface name="net.ssmith.infiltrator.software.Engine">
+  <interface name="net.ssmith.software.Engine">
     <method name="GetStatus">
       <arg name="status" type="a{sv}" direction="out"/>
     </method>

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-#ifndef INFILTRATOR_SOFTWARE_PAGE_REGISTRY_HPP
-#define INFILTRATOR_SOFTWARE_PAGE_REGISTRY_HPP
+#ifndef SOFTWARE_PAGE_REGISTRY_HPP
+#define SOFTWARE_PAGE_REGISTRY_HPP
 
 #include "app/app_page.hpp"
 
