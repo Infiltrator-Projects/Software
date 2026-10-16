@@ -4,7 +4,7 @@
 
 Traditional Linux software presentation can derive identity from Debian control fields, desktop files, AppStream, repository catalogues, icon themes and local caches. When those disagree, the user can see missing icons, duplicate names, stale descriptions or a catalogue entry that does not match the installed application.
 
-Infiltrator Software treats that as an identity-integrity problem.
+Software treats that as an identity-integrity problem.
 
 ## Canonical record
 

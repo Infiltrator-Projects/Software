@@ -2,7 +2,7 @@
 
 # Architecture
 
-Infiltrator Software is one graphical product with separated internal responsibilities. The historic split between a software catalogue and an update manager is not reproduced as a product boundary.
+Software is one graphical product with separated internal responsibilities. The historic split between a software catalogue and an update manager is not reproduced as a product boundary.
 
 This document defines the target architecture beginning with the 0.4 line. The 0.3 implementation still contains a constrained APT-backed compatibility boundary for final system mutation; ordinary inventory, refresh and planning are native.
 

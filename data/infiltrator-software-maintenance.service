@@ -1,5 +1,5 @@
 [Unit]
-Description=Infiltrator Software weekly obsolete-kernel and dependency maintenance
+Description=Software weekly obsolete-kernel and dependency maintenance
 After=network-online.target
 Wants=network-online.target
 

@@ -1637,7 +1637,7 @@ int apply_command(int argc, char **argv)
     std::vector<std::string> command{
         "systemd-inhibit",
         "--what=shutdown:sleep",
-        "--who=Infiltrator Software",
+        "--who=Software",
         "--why=Upgrading Linux Mint release",
         "--mode=block",
         "/usr/bin/infiltrator-software-release-upgrade",

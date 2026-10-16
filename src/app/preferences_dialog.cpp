@@ -809,7 +809,7 @@ void about_clicked(GtkButton *, gpointer user_data)
         infiltratr_build_profile_label(profile));
 
     gtk_about_dialog_set_program_name(
-        GTK_ABOUT_DIALOG(dialog), "Infiltrator Software");
+        GTK_ABOUT_DIALOG(dialog), "Software");
     gtk_about_dialog_set_logo_icon_name(
         GTK_ABOUT_DIALOG(dialog), "net.ssmith.infiltrator.software");
     gtk_window_set_icon_name(GTK_WINDOW(dialog), "net.ssmith.infiltrator.software");
@@ -826,7 +826,7 @@ void about_clicked(GtkButton *, gpointer user_data)
         GTK_ABOUT_DIALOG(dialog), GTK_LICENSE_CUSTOM);
     gtk_about_dialog_set_license(
         GTK_ABOUT_DIALOG(dialog),
-        "Infiltrator Software is free software licensed under the GNU General "
+        "Software is free software licensed under the GNU General "
         "Public License version 3 or, at your option, any later version "
         "(GPL-3.0-or-later).\n\n"
         "See LICENSE in the source package for the complete licence text.");

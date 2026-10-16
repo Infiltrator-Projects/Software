@@ -1,3 +1,9 @@
+software (0.3.101) unstable; urgency=medium
+
+  * Align product, package and published artifact names; preserve legacy upgrades.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Sat, 17 Oct 2026 10:00:00 +1100
+
 infiltrator-software (0.3.100) unstable; urgency=medium
 
   * Move the governing engineering philosophy into docs/PHILOSOPHY.md and

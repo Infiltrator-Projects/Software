@@ -1,6 +1,6 @@
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 
-# Infiltrator Software design documents
+# Software design documents
 
 These documents define the maintained product contracts that implementation work must preserve.
 

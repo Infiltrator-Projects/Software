@@ -202,7 +202,7 @@ bool ThemeController::write_preferences(
     return controller != nullptr &&
            std::fprintf(
                stream,
-               "# Infiltrator Software graphical preferences\n"
+               "# Software graphical preferences\n"
                "theme_mode=%s\n",
                mode_value(controller->mode_)) >= 0 &&
            std::ferror(stream) == 0;

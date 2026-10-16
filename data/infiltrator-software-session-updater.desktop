@@ -1,6 +1,6 @@
 [Desktop Entry]
 Type=Application
-Name=Infiltrator Software Session Updates
+Name=Software Session Updates
 Comment=Apply enabled Flatpak and Cinnamon Spice automatic updates
 Exec=infiltrator-software-session-updater
 OnlyShowIn=X-Cinnamon;

@@ -100,7 +100,7 @@ update_policy_xml = update_policy_path.read_text()
 
 # One release identity, everywhere users and package tooling observe it.
 assert "[`VERSION`](VERSION)" in readme
-assert changelog.startswith(f"infiltrator-software ({version}) ")
+assert changelog.startswith(f"software ({version}) ")
 assert metainfo_releases
 assert metainfo_releases[0].get("version") == version
 for marker in ("Warning: truncated output", "tokens truncated", "Total output lines:"):

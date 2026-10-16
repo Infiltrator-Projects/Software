@@ -626,7 +626,7 @@ void repair_log_clicked(
         650);
 
     std::ostringstream log;
-    log << "Infiltrator Software "
+    log << "Software "
         << INFILTRATOR_SOFTWARE_VERSION
         << "\n\n";
 

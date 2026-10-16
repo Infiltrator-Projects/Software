@@ -312,7 +312,7 @@ bool system_critical(
         name == "systemd" ||
         name == "libc6" ||
         name == "linux-base" ||
-        name == "infiltrator-software" ||
+        (name == "software" || name == "infiltrator-software") ||
         name.rfind("linux-image", 0U) == 0U ||
         name.rfind("linux-modules", 0U) == 0U;
 }
@@ -340,7 +340,7 @@ bool installed_system_critical(const PackageRecord &package)
         name == "systemd" ||
         name == "libc6" ||
         name == "linux-base" ||
-        name == "infiltrator-software" ||
+        (name == "software" || name == "infiltrator-software") ||
         name.rfind("linux-image", 0U) == 0U ||
         name.rfind("linux-modules", 0U) == 0U;
 }

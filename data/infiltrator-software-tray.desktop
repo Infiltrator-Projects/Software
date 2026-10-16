@@ -1,6 +1,6 @@
 [Desktop Entry]
 Type=Application
-Name=Infiltrator Software Update Indicator
+Name=Software Update Indicator
 Comment=Show software update status in the desktop panel
 Exec=infiltrator-software-tray
 Icon=infiltrator-software

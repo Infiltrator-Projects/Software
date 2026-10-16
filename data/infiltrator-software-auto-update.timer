@@ -1,5 +1,5 @@
 [Unit]
-Description=Check Infiltrator Software automatic package updates
+Description=Check Software automatic package updates
 
 [Timer]
 OnBootSec=10min

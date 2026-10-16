@@ -89,7 +89,7 @@ reviewed removal and validate dependency satisfaction through an appropriate
 Provides relationship. That resolver behaviour remains valid for packages that
 actually declare those relationships.
 
-Infiltrator Software itself must not claim those relationships with Linux Mint
+Software itself must not claim those relationships with Linux Mint
 Update Manager. From Software 0.3.93 onward the Debian package deliberately has
 no `Provides: mintupdate`, `Replaces: mintupdate` or `Conflicts: mintupdate`
 metadata. Software and Mint Update Manager are therefore intentionally

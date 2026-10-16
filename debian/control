@@ -1,4 +1,4 @@
-Source: infiltrator-software
+Source: software
 Section: admin
 Priority: optional
 Maintainer: Shannon Smith <infiltratr@yandex.com>
@@ -7,12 +7,15 @@ Standards-Version: 4.7.0
 Rules-Requires-Root: no
 Homepage: https://github.com/Infiltrator-Projects/Software
 
-Package: infiltrator-software
+Package: software
 Architecture: any
+Provides: infiltrator-software (= ${binary:Version})
+Breaks: infiltrator-software (<< ${binary:Version})
+Replaces: infiltrator-software (<< ${binary:Version})
 Depends: ${shlibs:Depends}, ${misc:Depends}, apt, gettext, gpgv, pkexec
 Recommends: flatpak, timeshift
 Description: unified Infiltrator software manager and updater
- Infiltrator Software provides one graphical surface for software discovery,
+ Software provides one graphical surface for software discovery,
  installed applications, updates, system components, repositories, history
  and repair. The native Debian engine owns package selection, dependency resolution and
  reviewed plans; APT remains a constrained privileged executor for verified

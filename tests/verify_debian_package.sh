@@ -51,7 +51,7 @@ expect_file() {
 [[ -f "$package" ]] || fail "Debian package not found: $package"
 [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail "Invalid VERSION: $version"
 
-expect_field_exact Package infiltrator-software
+expect_field_exact Package software
 expect_field_exact Version "$version"
 architecture="$(field Architecture)"
 [[ "$architecture" =~ ^[A-Za-z0-9][A-Za-z0-9-]*$ ]] ||
@@ -98,7 +98,7 @@ for path in \
     usr/share/applications/net.ssmith.infiltrator.software.desktop \
     usr/share/icons/hicolor/scalable/apps/net.ssmith.infiltrator.software.svg \
     usr/share/icons/hicolor/scalable/apps/infiltrator-software.svg \
-    usr/share/app-install/icons/infiltrator-software.svg \
+    usr/share/app-install/icons/software.svg \
     usr/share/metainfo/infiltrator-software.metainfo.xml \
     usr/share/fonts/truetype/infiltrator-software/mb_corpo_a_cond_regular.ttf \
     usr/share/fonts/truetype/infiltrator-software/mb_corpo_s_bold.ttf \

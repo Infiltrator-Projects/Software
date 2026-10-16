@@ -1,5 +1,5 @@
 [Unit]
-Description=Infiltrator Software weekly automatic maintenance
+Description=Software weekly automatic maintenance
 
 [Timer]
 OnCalendar=weekly

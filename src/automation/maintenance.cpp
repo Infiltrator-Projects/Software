@@ -392,7 +392,7 @@ int main()
     std::vector<std::string> command{
         "systemd-inhibit",
         "--what=shutdown:sleep",
-        "--who=Infiltrator Software",
+        "--who=Software",
         "--why=Removing obsolete kernels and dependencies",
         "--mode=block",
         "/usr/libexec/infiltrator-software-update-helper",

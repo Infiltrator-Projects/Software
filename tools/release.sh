@@ -74,7 +74,7 @@ built_package() {
     local parent
     local -a packages
     parent="$(dirname "$REPO_ROOT")"
-    packages=("$parent"/infiltrator-software_"${version}"_*.deb)
+    packages=("$parent"/software_"${version}"_*.deb)
     if [[ ${#packages[@]} -ne 1 || ! -f "${packages[0]}" ]]; then
         die "Expected exactly one built Debian package for Software ${version}."
     fi
@@ -234,7 +234,7 @@ verify_bundle() {
         sha256sum -c SHA256SUMS.txt
     )
 
-    [[ "$(dpkg-deb -f "$package" Package)" == "infiltrator-software" ]] || \
+    [[ "$(dpkg-deb -f "$package" Package)" == "software" ]] || \
         die "Release Debian package identity is incorrect."
     [[ "$(dpkg-deb -f "$package" Version)" == "$version" ]] || \
         die "Release Debian package version is incorrect."

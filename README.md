@@ -1,16 +1,16 @@
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 
-# Infiltrator Software
+# Software
 
 **Project copyright:** © 1993-2026 Shannon Smith
 
-Infiltrator Software is the software-management application for the Infiltrator project family. It presents software discovery, installation, removal, updates, system components, repositories, release channels, history and repair as one coherent graphical product.
+Software is the software-management application for the Infiltrator project family. It presents software discovery, installation, removal, updates, system components, repositories, release channels, history and repair as one coherent graphical product.
 
 **Current source version:** authoritative in [`VERSION`](VERSION)<br>
-**Language:** C++17 application/core with native GTK4 Linux shell; C11 Common foundation  
-**Shared foundation:** exact Infiltratr Common gitlink; Common's own `VERSION` file is authoritative<br>
-**Current package compatibility:** Debian repositories and .deb packages; Flatpak and AppStream catalogue integration  
-**0.4 direction:** native Infiltrator Debian-compatibility engine for inventory, refresh and resolution; constrained compatibility execution for final .deb mutation  
+**Language:** C++17 application/core with native GTK4 Linux shell; C11 Common foundation
+**Shared foundation:** exact Libraries gitlink; Common's own `VERSION` file is authoritative<br>
+**Current package compatibility:** Debian repositories and .deb packages; Flatpak and AppStream catalogue integration
+**0.4 direction:** native Infiltrator Debian-compatibility engine for inventory, refresh and resolution; constrained compatibility execution for final .deb mutation
 **Licence:** GPL-3.0-or-later
 
 ## Product principles
@@ -34,7 +34,7 @@ The native Infiltrator package engine reads Debian repository metadata directly,
 
 ## Linux Mint Update Manager parity and coexistence
 
-Software 0.3.52 completed the source-level capability-parity audit against `linuxmint/mintupdate` commit `a6a9f5767905b8fc94923d0b4ca0538a93309a90` (7.1.5 line). The native C++ Cinnamon backend discovers and updates applets, desklets, extensions, themes and Nemo actions, supports exact per-item selection, reports transfer/item activity, records external updates in Software history, and includes Flatpak/Cinnamon/Nemo state in the tray. The native Debian resolver can model packages that genuinely `Conflict` with and `Replace` installed packages as explicit reviewed removals, but Infiltrator Software itself is not a Debian package replacement for Linux Mint Update Manager. From Software 0.3.93 onward the package deliberately does not `Provide`, `Replace` or `Conflict` with `mintupdate`, so both applications can remain installed side by side. `docs/MINTUPDATE_PARITY.md` is the audited capability matrix.
+Software 0.3.52 completed the source-level capability-parity audit against `linuxmint/mintupdate` commit `a6a9f5767905b8fc94923d0b4ca0538a93309a90` (7.1.5 line). The native C++ Cinnamon backend discovers and updates applets, desklets, extensions, themes and Nemo actions, supports exact per-item selection, reports transfer/item activity, records external updates in Software history, and includes Flatpak/Cinnamon/Nemo state in the tray. The native Debian resolver can model packages that genuinely `Conflict` with and `Replace` installed packages as explicit reviewed removals, but Software itself is not a Debian package replacement for Linux Mint Update Manager. From Software 0.3.93 onward the package deliberately does not `Provide`, `Replace` or `Conflict` with `mintupdate`, so both applications can remain installed side by side. `docs/MINTUPDATE_PARITY.md` is the audited capability matrix.
 
 A real distribution point-release upgrade remains an installed-host qualification exercise because CI cannot safely perform a destructive upgrade of the user's machine; that is a validation limitation, not a missing release-upgrade code path.
 
@@ -126,7 +126,7 @@ See [Transactions](docs/TRANSACTIONS.md).
 
 ## Appearance
 
-Software consumes the appearance contract from the pinned Infiltratr Common gitlink. Follow OS, Day and Night modes share project-family typography, semantic colours and structural metrics.
+Software consumes the appearance contract from the pinned Libraries gitlink. Follow OS, Day and Night modes share project-family typography, semantic colours and structural metrics.
 
 Discover is visual and spacious. Installed and Updates are denser working views. System separates critical components clearly. Repositories behaves like a source/settings surface. History is chronological. Repair presents health first and problems only when they exist.
 
@@ -171,7 +171,7 @@ main is the working branch. Development remains main-only. Published release ide
 
 Copyright © 1993-2026 Shannon Smith.
 
-Infiltrator Software is licensed under the GNU General Public License version 3 or, at your option, any later version (GPL-3.0-or-later).
+Software is licensed under the GNU General Public License version 3 or, at your option, any later version (GPL-3.0-or-later).
 
 
 ## Update Manager capability parity

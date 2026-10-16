@@ -8,7 +8,7 @@
   <project_license>GPL-3.0-or-later</project_license>
 
   <description>
-    <p>Infiltrator Software provides one coherent surface for discovering, installing, updating and repairing software while keeping package-system mechanics behind explicit engine, service and privileged-execution boundaries.</p>
+    <p>Software provides one coherent surface for discovering, installing, updating and repairing software while keeping package-system mechanics behind explicit engine, service and privileged-execution boundaries.</p>
     <p>The Linux implementation merges verified Infiltrator catalogue records, host AppStream applications and configured Flatpak metadata while presenting Discover, Installed, Updates, System, Repositories, History and Repair in one application.</p>
   </description>
 
@@ -25,6 +25,9 @@
   <url type="homepage">https://github.com/Infiltrator-Projects/Software</url>
 
   <releases>
+    <release version="0.3.101" date="2026-10-17">
+      <description><p>Align product and package names while preserving upgrades from previous package identities.</p></description>
+    </release>
     <release version="0.3.100" date="2026-10-16">
       <description><p>Keep engineering philosophy and maintained documentation together under docs.</p></description>
     </release>

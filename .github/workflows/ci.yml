@@ -97,7 +97,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          packages=(../infiltrator-software_"${{ steps.identity.outputs.version }}"_*.deb)
+          packages=(../software_"${{ steps.identity.outputs.version }}"_*.deb)
           if [[ ${#packages[@]} -ne 1 || ! -f "${packages[0]}" ]]; then
             echo "::error::Expected exactly one built Debian package for Software ${{ steps.identity.outputs.version }}."
             exit 1

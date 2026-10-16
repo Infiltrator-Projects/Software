@@ -598,5 +598,20 @@ int main()
         error.find("cannot explicitly remove") !=
         std::string::npos);
 
+    // Renaming the package must preserve the planner's self-update guard.
+    for (const std::string name : {"software", "infiltrator-software"}) {
+        TransactionRequest self_update;
+        self_update.action = TransactionAction::install;
+        self_update.package_ids = {name};
+        error.clear();
+        const auto self_plan = DebianTransactionPlanner::plan(
+            self_update, {installed(name, "1.0", 100U)},
+            {available(name, "2.0", 20U, 100U)}, "amd64", 20U,
+            "snapshot-naming", policy, error);
+        assert(self_plan.has_value());
+        const auto *self_item = find_item(*self_plan, name);
+        assert(self_item != nullptr && self_item->system_critical);
+    }
+
     return 0;
 }

@@ -229,7 +229,7 @@ bool create_snapshot(std::string &error)
     }
     g_free(path);
     return run_command(
-        {"timeshift","--create","--comments","Infiltrator Software automatic update","--tags","D"},
+        {"timeshift","--create","--comments","Software automatic update","--tags","D"},
         error);
 }
 }
@@ -325,7 +325,7 @@ int main()
     }
     g_free(inhibit);
     command={"systemd-inhibit","--what=shutdown:sleep",
-        "--who=Infiltrator Software","--why=Installing automatic software updates",
+        "--who=Software","--why=Installing automatic software updates",
         "--mode=block","/usr/libexec/infiltrator-software-update-helper","apply-plan"};
     if (prefs.keep_configuration) command.push_back("--force-confold");
 

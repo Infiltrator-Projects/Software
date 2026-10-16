@@ -2399,7 +2399,7 @@ void updates_complete(
                     package.package_name.empty()
                         ? std::string_view(package.id)
                         : std::string_view(package.package_name);
-                return name == "infiltrator-software";
+                return (name == "software" || name == "infiltrator-software");
             });
     if (self_update) {
         state->updates.inventory.update_records.erase(
@@ -2411,7 +2411,7 @@ void updates_complete(
                         package.package_name.empty()
                             ? std::string_view(package.id)
                             : std::string_view(package.package_name);
-                    return name != "infiltrator-software";
+                    return (name != "software" && name != "infiltrator-software");
                 }),
             state->updates.inventory.update_records.end());
         result->external_refreshed = true;
@@ -2816,7 +2816,8 @@ void update_process_complete(
                         [](const TransactionItem &item) {
                             const std::string_view id(
                                 item.package_id);
-                            return id == "infiltrator-software" ||
+                            return id == "software" || id.rfind("software:", 0U) == 0U ||
+                                   id == "infiltrator-software" ||
                                    id.rfind(
                                        "infiltrator-software:",
                                        0U) == 0U;
@@ -3146,7 +3147,7 @@ bool create_snapshot_before_update(
         "timeshift",
         "--create",
         "--comments",
-        "Infiltrator Software system update",
+        "Software system update",
         "--tags",
         "D"};
     std::string start_error;

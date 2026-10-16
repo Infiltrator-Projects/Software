@@ -134,7 +134,7 @@ int configure_automation(const int argc, char **argv)
     }
 
     std::string content =
-        "# Managed by Infiltrator Software\n";
+        "# Managed by Software\n";
     for (const std::string &value : values) {
         content += value;
         content += '\n';
