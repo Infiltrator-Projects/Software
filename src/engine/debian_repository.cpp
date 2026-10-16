@@ -317,7 +317,7 @@ bool download(
     curl_easy_setopt(handle, CURLOPT_NOSIGNAL, 1L);
     curl_easy_setopt(handle, CURLOPT_CONNECTTIMEOUT, 15L);
     curl_easy_setopt(handle, CURLOPT_TIMEOUT, 120L);
-    curl_easy_setopt(handle, CURLOPT_USERAGENT, "Infiltrator-Software/0.4");
+    curl_easy_setopt(handle, CURLOPT_USERAGENT, "Software/0.4");
     curl_easy_setopt(handle, CURLOPT_ERRORBUFFER, curl_error.data());
     DownloadBuffer buffer{
         &content,

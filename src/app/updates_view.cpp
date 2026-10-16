@@ -660,7 +660,7 @@ bool fetch_changelog_url(
         curl, CURLOPT_TIMEOUT, 15L);
     curl_easy_setopt(
         curl, CURLOPT_USERAGENT,
-        "Infiltrator-Software/" SOFTWARE_VERSION);
+        "Software/" SOFTWARE_VERSION);
     curl_easy_setopt(
         curl, CURLOPT_WRITEFUNCTION,
         changelog_write);

@@ -29,7 +29,7 @@ struct RepositoryTaskData {
 std::string mint_mirror_status()
 {
     return sources::mint_mirror_status(
-        "Infiltrator-Software/" SOFTWARE_VERSION);
+        "Software/" SOFTWARE_VERSION);
 }
 
 void repositories_worker(

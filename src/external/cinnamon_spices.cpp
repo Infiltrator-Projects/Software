@@ -160,7 +160,7 @@ bool fetch_text(
     curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1L);
     curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 15L);
     curl_easy_setopt(curl, CURLOPT_TIMEOUT, 30L);
-    curl_easy_setopt(curl, CURLOPT_USERAGENT, "Infiltrator-Software/1");
+    curl_easy_setopt(curl, CURLOPT_USERAGENT, "Software/1");
     TextDownloadBuffer buffer{
         &text,
         kMaxMetadataBytes,
@@ -977,7 +977,7 @@ bool download_archive(
     curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1L);
     curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 15L);
     curl_easy_setopt(curl, CURLOPT_TIMEOUT, 120L);
-    curl_easy_setopt(curl, CURLOPT_USERAGENT, "Infiltrator-Software/1");
+    curl_easy_setopt(curl, CURLOPT_USERAGENT, "Software/1");
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_download);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &context);
     curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);

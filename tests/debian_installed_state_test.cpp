@@ -77,14 +77,14 @@ int main()
     assert(packages[0].protected_package);
     assert(packages[0].state == InstallState::installed);
 
-    assert(packages[1].id == "held-package");
-    assert(packages[1].held);
-    assert(packages[1].installed_size_bytes == 0U);
+    assert(packages[2].id == "held-package");
+    assert(packages[2].held);
+    assert(packages[2].installed_size_bytes == 0U);
 
-    assert(packages[2].id == "calendar");
-    assert(packages[2].architecture == "amd64");
-    assert(packages[2].installed_version == "1.0.45+nativepgo1");
-    assert(packages[2].state == InstallState::installed);
+    assert(packages[1].id == "calendar");
+    assert(packages[1].architecture == "amd64");
+    assert(packages[1].installed_version == "1.0.45+nativepgo1");
+    assert(packages[1].state == InstallState::installed);
 
     assert(packages[3].id == "libmulti:i386");
     assert(packages[3].architecture == "i386");

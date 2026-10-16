@@ -431,7 +431,7 @@ bool RepositoryCatalogue::download(
     curl_easy_setopt(handle, CURLOPT_URL, url_text.c_str());
     curl_easy_setopt(handle, CURLOPT_WRITEFUNCTION, curl_write);
     curl_easy_setopt(handle, CURLOPT_WRITEDATA, &buffer);
-    curl_easy_setopt(handle, CURLOPT_USERAGENT, "Infiltrator-Software/0.2");
+    curl_easy_setopt(handle, CURLOPT_USERAGENT, "Software/0.2");
     curl_easy_setopt(handle, CURLOPT_CONNECTTIMEOUT, 8L);
     curl_easy_setopt(handle, CURLOPT_TIMEOUT, 30L);
     curl_easy_setopt(handle, CURLOPT_FAILONERROR, 1L);
