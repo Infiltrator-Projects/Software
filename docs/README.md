@@ -4,6 +4,7 @@
 
 These documents define the maintained product contracts that implementation work must preserve.
 
+- [Engineering philosophy](PHILOSOPHY.md) — governing engineering and documentation standard.
 - [Architecture](ARCHITECTURE.md) — ownership, layers, privilege and dependency boundaries.
 - [Package Engine](PACKAGE_ENGINE.md) — native Debian/.deb compatibility without APT command-line programs as package-state authorities.
 - [State](STATE.md) — authoritative versus derived package state, generations and shared engine ownership.
