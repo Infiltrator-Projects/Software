@@ -1,3 +1,10 @@
+infiltrator-software (0.3.100) unstable; urgency=medium
+
+  * Move the governing engineering philosophy into docs/PHILOSOPHY.md and
+    update maintained documentation references and discovery.
+
+ -- Infiltrator Projects <noreply@github.com>  Fri, 16 Oct 2026 04:50:00 +0000
+
 infiltrator-software (0.3.99) unstable; urgency=medium
 
   * Add the maintained validation entry point for source, privilege boundaries,

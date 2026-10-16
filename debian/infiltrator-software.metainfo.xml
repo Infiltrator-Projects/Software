@@ -25,6 +25,9 @@
   <url type="homepage">https://github.com/Infiltrator-Projects/Software</url>
 
   <releases>
+    <release version="0.3.100" date="2026-10-16">
+      <description><p>Keep engineering philosophy and maintained documentation together under docs.</p></description>
+    </release>
     <release version="0.3.99" date="2026-10-16">
       <description><p>Document current build, engine-boundary and package qualification contracts.</p></description>
     </release>
