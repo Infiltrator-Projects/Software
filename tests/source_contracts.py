@@ -207,7 +207,7 @@ assert "software-source-inventory" in target_links(cmake, "software")
 assert "software-source-mutation" not in target_links(cmake, "software")
 assert "software-source-mutation" in target_links(cmake, "software-helper")
 assert re.search(
-    r"target_link_libraries\s*\(\s*software-engine\s+PRIVATE\s+software-source-format\s*\)",
+    r"target_link_libraries\s*\(\s*software-engine-core\s+PRIVATE\s+software-source-format\s*\)",
     cmake,
 )
 assert includes(source_inventory, "sources/apt_source_format.hpp")

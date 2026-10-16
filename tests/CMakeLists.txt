@@ -37,39 +37,39 @@ add_software_test(software-update-policy-test
 add_software_test(software-update-tracker-test
     update_tracker_test.cpp software-core)
 add_software_test(software-debian-control-test
-    debian_control_test.cpp software-engine)
+    debian_control_test.cpp software-engine-core)
 add_software_test(software-debian-installed-test
-    debian_installed_state_test.cpp software-engine)
+    debian_installed_state_test.cpp software-engine-core)
 add_software_test(software-debian-index-test
-    debian_package_index_test.cpp software-engine)
+    debian_package_index_test.cpp software-engine-core)
 add_software_test(software-debian-version-test
-    debian_version_test.cpp software-engine)
+    debian_version_test.cpp software-engine-core)
 add_software_test(software-debian-candidate-test
-    debian_candidate_test.cpp software-engine)
+    debian_candidate_test.cpp software-engine-core)
 add_software_test(software-debian-apt-configuration-test
-    debian_apt_configuration_test.cpp software-engine)
+    debian_apt_configuration_test.cpp software-engine-core)
 add_software_test(software-debian-phased-updates-test
-    debian_phased_updates_test.cpp software-engine)
+    debian_phased_updates_test.cpp software-engine-core)
 add_software_test(software-debian-preferences-test
-    debian_preferences_test.cpp software-engine)
+    debian_preferences_test.cpp software-engine-core)
 add_software_test(software-package-policy-test
-    package_policy_test.cpp software-engine)
+    package_policy_test.cpp software-engine-core)
 add_software_test(software-debian-dependency-test
-    debian_dependency_test.cpp software-engine)
+    debian_dependency_test.cpp software-engine-core)
 add_software_test(software-debian-repository-test
-    debian_repository_test.cpp software-engine)
+    debian_repository_test.cpp software-engine-core)
 add_software_test(software-debian-source-configuration-test
-    debian_source_configuration_test.cpp software-engine)
+    debian_source_configuration_test.cpp software-engine-core)
 add_software_test(software-package-state-test
-    package_state_store_test.cpp software-engine)
+    package_state_store_test.cpp software-engine-core)
 add_software_test(software-debian-transaction-test
-    debian_transaction_test.cpp software-engine)
+    debian_transaction_test.cpp software-engine-core)
 add_software_test(software-debian-removal-multiarch-test
-    debian_removal_multiarch_test.cpp software-engine)
+    debian_removal_multiarch_test.cpp software-engine-core)
 add_software_test(software-kernel-inventory-test
-    kernel_inventory_test.cpp software-engine)
+    kernel_inventory_test.cpp software-engine-core)
 add_software_test(software-engine-service-core-test
-    engine_service_core_test.cpp software-engine)
+    engine_service_core_test.cpp software-engine-core)
 add_software_test(software-apt-plan-guard-test
     apt_plan_guard_test.cpp software-apt-plan-guard)
 add_software_test(software-catalogue-test

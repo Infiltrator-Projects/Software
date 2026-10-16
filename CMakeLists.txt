@@ -181,7 +181,7 @@ add_library(software-core STATIC
     src/core/update_tracker.cpp)
 target_include_directories(software-core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
 
-add_library(software-engine STATIC
+add_library(software-engine-core STATIC
     src/engine/debian_control.cpp
     src/engine/debian_installed_state.cpp
     src/engine/debian_package_index.cpp
@@ -199,9 +199,9 @@ add_library(software-engine STATIC
     src/engine/debian_transaction.cpp
     src/engine/kernel_inventory.cpp
     src/engine/engine_service_core.cpp)
-target_include_directories(software-engine PUBLIC
+target_include_directories(software-engine-core PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/src")
-target_link_libraries(software-engine
+target_link_libraries(software-engine-core
     PUBLIC software-core
     PRIVATE InfiltratrCommon::Common
             PkgConfig::CURL PkgConfig::GLIB PkgConfig::ZLIB PkgConfig::LZMA
@@ -248,7 +248,7 @@ target_include_directories(software-source-format PUBLIC
 # Native reconciliation consumes the same deb822 syntax authority as source
 # inventory/mutation. Trust-sensitive fields must not be reparsed by a second
 # engine-local implementation.
-target_link_libraries(software-engine PRIVATE software-source-format)
+target_link_libraries(software-engine-core PRIVATE software-source-format)
 
 add_library(software-source-inventory STATIC
     src/sources/source_inventory.cpp)
@@ -287,7 +287,7 @@ target_link_libraries(software-helper PRIVATE
 add_executable(software-update-helper
     src/helper/update_helper.cpp)
 target_link_libraries(software-update-helper PRIVATE
-    software-apt-plan-guard software-engine PkgConfig::GLIB)
+    software-apt-plan-guard software-engine-core PkgConfig::GLIB)
 
 # The installed D-Bus interface XML is the protocol-schema authority. Embed
 # that exact file into the service at configure time so the standalone binary
@@ -306,7 +306,7 @@ add_executable(software-engine
 target_include_directories(software-engine PRIVATE
     "${CMAKE_CURRENT_BINARY_DIR}/generated")
 target_link_libraries(software-engine PRIVATE
-    software-engine PkgConfig::GIO)
+    software-engine-core PkgConfig::GIO)
 target_compile_definitions(software-engine PRIVATE
     SOFTWARE_VERSION="${PROJECT_VERSION}")
 
@@ -331,17 +331,17 @@ target_compile_definitions(software-cli PRIVATE
 add_executable(software-auto-updater
     src/automation/main.cpp)
 target_link_libraries(software-auto-updater PRIVATE
-    software-core software-history software-engine PkgConfig::GLIB)
+    software-core software-history software-engine-core PkgConfig::GLIB)
 
 add_executable(software-maintenance
     src/automation/maintenance.cpp)
 target_link_libraries(software-maintenance PRIVATE
-    software-core software-history software-engine PkgConfig::GLIB)
+    software-core software-history software-engine-core PkgConfig::GLIB)
 
 add_executable(software-release-upgrade
     src/release/main.cpp)
 target_link_libraries(software-release-upgrade PRIVATE
-    software-core software-engine PkgConfig::GLIB)
+    software-core software-engine-core PkgConfig::GLIB)
 
 add_executable(software
     src/app/main.cpp
