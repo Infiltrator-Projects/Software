@@ -177,3 +177,5 @@ Infiltrator Software is licensed under the GNU General Public License version 3 
 ## Update Manager capability parity
 
 See `docs/MINTUPDATE_PARITY.md` for the Linux Mint Update Manager capability audit. Package coexistence is intentional; Software does not claim the `mintupdate` package identity.
+
+[Validation](docs/VALIDATION.md) is the maintained test and package qualification entry point. [Architecture](docs/ARCHITECTURE.md) and [Philosophy](PHILOSOPHY.md) define ownership and the engineering standard.

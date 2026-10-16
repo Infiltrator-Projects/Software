@@ -25,6 +25,9 @@
   <url type="homepage">https://github.com/Infiltrator-Projects/Software</url>
 
   <releases>
+    <release version="0.3.99" date="2026-10-16">
+      <description><p>Document current build, engine-boundary and package qualification contracts.</p></description>
+    </release>
     <release version="0.3.98" date="2026-10-15">
       <description>
         <p>Refines Discover with a restrained premium visual hierarchy, calmer navigation and controls, purposeful loading behaviour, and a less technical status presentation without changing software-management semantics.</p>

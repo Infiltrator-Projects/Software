@@ -16,3 +16,5 @@ These documents define the maintained product contracts that implementation work
 - [Mint Update Parity](MINTUPDATE_PARITY.md) — audited replacement-capability matrix and host-validation status.
 - [Release](RELEASE.md) — verification, exact artifact qualification, GitHub publication and branch-state contract.
 - [Roadmap](ROADMAP.md) — migration from the 0.3 APT-backed implementation to the native engine and later capabilities.
+
+- [Validation](VALIDATION.md) — canonical build/test commands, privilege-boundary evidence and qualification scope.

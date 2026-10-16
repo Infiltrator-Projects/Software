@@ -1,3 +1,12 @@
+infiltrator-software (0.3.99) unstable; urgency=medium
+
+  * Add the maintained validation entry point for source, privilege boundaries,
+    package qualification, service smoke and immutable publication.
+  * Preserve the native engine as package-state authority and document the
+    existing Release assertion contract without duplicating execution policy.
+
+ -- Infiltrator Projects <noreply@github.com>  Fri, 16 Oct 2026 01:30:00 +0000
+
 infiltrator-software (0.3.98) unstable; urgency=high
 
   * Refine Discover into a calmer, content-led premium composition with
