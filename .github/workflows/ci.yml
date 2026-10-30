@@ -69,7 +69,12 @@ jobs:
           "$RUNNER_TEMP/software-hardening-contracts"
 
       - name: Verify documentation contracts
-        run: python3 tests/documentation_contracts.py
+        shell: bash
+        run: |
+          set -euo pipefail
+          c++ -std=c++17 -O2 -Wall -Wextra -Wpedantic -Werror \
+            tests/documentation_contracts.cpp -o "$RUNNER_TEMP/software-documentation-contracts"
+          "$RUNNER_TEMP/software-documentation-contracts"
 
       - name: Build and test Debian package
         shell: bash
