@@ -1,3 +1,11 @@
+software (0.3.103) unstable; urgency=medium
+
+  * Convert forensic hardening and maintained-documentation contracts to native
+    C++17 test executables, retaining the existing checks and release ownership.
+  * Remove their Python interpreter dependency from release qualification.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Fri, 30 Oct 2026 21:32:00 +1100
+
 software (0.3.102) unstable; urgency=medium
 
   * Use canonical alpha names throughout; remove package aliases and migrations.
