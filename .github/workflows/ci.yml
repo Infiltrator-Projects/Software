@@ -61,7 +61,12 @@ jobs:
         run: python3 tests/source_contracts.py
 
       - name: Verify forensic hardening contracts
-        run: python3 tests/hardening_contracts.py
+        shell: bash
+        run: |
+          set -euo pipefail
+          c++ -std=c++17 -O2 -Wall -Wextra -Wpedantic -Werror \
+            tests/hardening_contracts.cpp -o "$RUNNER_TEMP/software-hardening-contracts"
+          "$RUNNER_TEMP/software-hardening-contracts"
 
       - name: Verify documentation contracts
         run: python3 tests/documentation_contracts.py
