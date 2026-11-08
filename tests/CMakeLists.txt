@@ -82,3 +82,8 @@ add_software_test(software-apt-source-format-test
     apt_source_format_test.cpp software-source-inventory software-source-mutation)
 add_software_test(software-external-updates-test
     external_updates_test.cpp software-external)
+
+# Architecture/release contracts are native C++ and also run under ordinary CTest.
+add_software_test(software-source-contracts-test source_contracts.cpp)
+set_tests_properties(software-source-contracts-test PROPERTIES
+    WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}")

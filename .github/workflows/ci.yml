@@ -57,8 +57,13 @@ jobs:
           "${{ steps.identity.outputs.version }}"
           "$GITHUB_SHA" "$RUNNER_TEMP"
 
-      - name: Verify architecture and authorization contracts
-        run: python3 tests/source_contracts.py
+      - name: Verify native architecture and authorization contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          c++ -std=c++17 -O2 -Wall -Wextra -Wpedantic -Werror \
+            tests/source_contracts.cpp -o "$RUNNER_TEMP/software-source-contracts"
+          "$RUNNER_TEMP/software-source-contracts"
 
       - name: Verify forensic hardening contracts
         shell: bash
