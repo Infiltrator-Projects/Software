@@ -259,9 +259,14 @@ int main() {
     // validate that today's installed executables omit Python dependencies.
     for(const auto* dir: {"src","tests","tools","debian","data",".github"}) {
         if(!fs::exists(dir)) continue;
-        for(const auto& entry:fs::recursive_directory_iterator(dir))
+        for(const auto& entry:fs::recursive_directory_iterator(dir)) {
+            // Libraries is an independently versioned pinned Git submodule.
+            // Software does not own its upstream development tooling.
+            const auto path=entry.path().generic_string();
+            if(path.rfind("src/infiltratr-common/",0)==0) continue;
             check(!entry.is_regular_file() || entry.path().extension()!=".py",
-                  "Python source reintroduced: "+entry.path().string());
+                  "Python source reintroduced: "+path);
+        }
     }
     std::cout<<"PASS: native Software C++17 architecture, authorization and release contracts\n";
     return 0;
