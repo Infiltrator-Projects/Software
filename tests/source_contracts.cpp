@@ -88,7 +88,7 @@ int main() {
         {"src/engine/debian_dependency.cpp", {}, {}},
         {"src/engine/debian_candidate.cpp", {"candidate.pin_priority"}, {}},
         {"src/engine/package_policy.cpp", {"DebianPolicyStack"}, {}},
-        {"src/engine/debian_phased_updates.cpp", {"std::minstd_rand","always-include-phased-updates","never-include-phased-updates"}, {}},
+        {"src/engine/debian_phased_updates.cpp", {"std::minstd_rand","Always-Include-Phased-Updates","Never-Include-Phased-Updates"}, {}},
         {"src/engine/debian_preferences.cpp", {"/etc/apt/preferences.d"}, {}},
         {"src/engine/debian_reconcile.cpp", {"\"/var/lib/dpkg/arch\"","phased_updates","host_preferences"}, {"g_spawn_","g_subprocess_","std::system(","popen(","fork(","posix_spawn","execv"}},
         {"src/engine/debian_repository.cpp", {"cached_release_current","verify_payload","read_cached"}, {}},
