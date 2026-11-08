@@ -1,3 +1,11 @@
+software (0.3.104) unstable; urgency=medium
+
+  * Replace the final Python architecture and authorization source contracts
+    with a native C++17 regression test and retain CI and CTest coverage.
+  * Prohibit new Python source files in Software-owned source and tooling.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Sun, 08 Nov 2026 21:39:00 +1100
+
 software (0.3.103) unstable; urgency=medium
 
   * Convert forensic hardening and maintained-documentation contracts to native

@@ -25,6 +25,7 @@
   <url type="homepage">https://github.com/Infiltrator-Projects/Software</url>
 
   <releases>
+    <release version="0.3.104" date="2026-11-08"><description><p>Complete the Software Python-to-C++17 test migration and enforce Python-free source contracts.</p></description></release>
     <release version="0.3.103" date="2026-10-30"><description><p>Replace Python hardening and documentation tests with native C++17 contract validators.</p></description></release>
     <release version="0.3.102" date="2026-10-17"><description><p>Use canonical names throughout the alpha application and package.</p></description></release>
     <release version="0.3.101" date="2026-10-17">
