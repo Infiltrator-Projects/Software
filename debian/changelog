@@ -1,3 +1,11 @@
+software (0.3.105) unstable; urgency=medium
+
+  * Prevent accidental SQLite resource-handle copying and double finalisation.
+  * Report SQLite row-iteration failures directly instead of inspecting stale
+    database connection status.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Tue, 10 Nov 2026 09:45:00 +1100
+
 software (0.3.104) unstable; urgency=medium
 
   * Replace the final Python architecture and authorization source contracts
