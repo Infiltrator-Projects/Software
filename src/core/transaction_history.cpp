@@ -15,6 +15,12 @@ namespace {
 
 class Database final {
 public:
+    Database() = default;
+    Database(const Database &) = delete;
+    Database &operator=(const Database &) = delete;
+    Database(Database &&) = delete;
+    Database &operator=(Database &&) = delete;
+
     ~Database()
     {
         if (handle != nullptr) sqlite3_close(handle);
@@ -25,6 +31,12 @@ public:
 
 class Statement final {
 public:
+    Statement() = default;
+    Statement(const Statement &) = delete;
+    Statement &operator=(const Statement &) = delete;
+    Statement(Statement &&) = delete;
+    Statement &operator=(Statement &&) = delete;
+
     ~Statement()
     {
         if (handle != nullptr) sqlite3_finalize(handle);
@@ -414,7 +426,8 @@ TransactionHistoryStore::load_recent(
         return {};
     }
 
-    while (sqlite3_step(statement.handle) == SQLITE_ROW) {
+    int step_result = sqlite3_step(statement.handle);
+    while (step_result == SQLITE_ROW) {
         TransactionHistoryItem entry;
         entry.transaction_id =
             sqlite3_column_int64(statement.handle, 0);
@@ -439,10 +452,10 @@ TransactionHistoryStore::load_recent(
         entry.system_critical =
             sqlite3_column_int(statement.handle, 11) != 0;
         result.emplace_back(std::move(entry));
+        step_result = sqlite3_step(statement.handle);
     }
 
-    if (sqlite3_errcode(database.handle) != SQLITE_DONE &&
-        sqlite3_errcode(database.handle) != SQLITE_OK) {
+    if (step_result != SQLITE_DONE) {
         error = sqlite_error(database.handle);
         return {};
     }
